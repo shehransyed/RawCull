@@ -18,7 +18,7 @@ import dev.shehran.rawcull.ui.RawCullViewModel
 import dev.shehran.rawcull.ui.theme.RawCullTheme
 
 class MainActivity : ComponentActivity() {
-    private val viewModel: RawCullViewModel by viewModels()
+    private val viewModel: RawCullViewModel by viewModels { RawCullViewModel.Factory }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

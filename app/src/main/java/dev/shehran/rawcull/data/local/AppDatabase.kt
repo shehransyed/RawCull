@@ -7,25 +7,17 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import dev.shehran.rawcull.data.model.RawPhotoItem
 
-@Database(entities = [RawPhotoItem::class], version = 2, exportSchema = false)
+@Database(entities = [RawPhotoItem::class], version = 2, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun rawPhotoDao(): RawPhotoDao
 
     companion object {
-        @Volatile
-        private var INSTANCE: AppDatabase? = null
-
-        fun getDatabase(context: Context): AppDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "rawcull_catalog.db",
-                ).fallbackToDestructiveMigration(dropAllTables = true).build()
-                INSTANCE = instance
-                instance
-            }
-        }
+        /** Room is a disposable cache until v1.0 (XMP is the source of truth), so migrations stay destructive. */
+        fun build(context: Context): AppDatabase = Room.databaseBuilder(
+            context.applicationContext,
+            AppDatabase::class.java,
+            "rawcull_catalog.db",
+        ).fallbackToDestructiveMigration(dropAllTables = true).build()
     }
 }

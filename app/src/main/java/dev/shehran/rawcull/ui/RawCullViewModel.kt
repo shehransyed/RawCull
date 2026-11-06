@@ -1,10 +1,14 @@
 package dev.shehran.rawcull.ui
 
-import android.app.Application
+import android.content.Context
 import android.net.Uri
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
-import dev.shehran.rawcull.data.local.AppDatabase
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import dev.shehran.rawcull.RawCullApp
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullFilterMode
 import dev.shehran.rawcull.data.model.CullStatus
@@ -70,12 +74,10 @@ data class DamUiState(
     val rawAndJpegCount: Int get() = photos.count { it.hasCompanionJpeg }
 }
 
-class RawCullViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository: RawCatalogRepository = run {
-        val db = AppDatabase.getDatabase(application)
-        RawCatalogRepository(application, db.rawPhotoDao())
-    }
-
+class RawCullViewModel(
+    private val appContext: Context,
+    private val repository: RawCatalogRepository,
+) : ViewModel() {
     private val _uiState = MutableStateFlow(DamUiState())
     val uiState: StateFlow<DamUiState> = _uiState.asStateFlow()
 
@@ -434,7 +436,7 @@ class RawCullViewModel(application: Application) : AndroidViewModel(application)
         val photo = _uiState.value.currentPhoto ?: return
         histogramJob = viewModelScope.launch {
             val bitmap = RawPreviewLoader.loadThumbnail(
-                getApplication(),
+                appContext,
                 Uri.parse(photo.fileUri),
                 photo.id,
                 photo.format,
@@ -444,6 +446,15 @@ class RawCullViewModel(application: Application) : AndroidViewModel(application)
             if (bitmap != null) {
                 val hist = HistogramCalculator.compute(bitmap)
                 _uiState.value = _uiState.value.copy(currentHistogram = hist)
+            }
+        }
+    }
+
+    companion object {
+        val Factory: ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                val app = this[APPLICATION_KEY] as RawCullApp
+                RawCullViewModel(app, app.container.catalogRepository)
             }
         }
     }
