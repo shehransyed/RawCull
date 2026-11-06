@@ -43,6 +43,8 @@ import dev.shehran.rawcull.ui.components.ExifInspectorPanel
 import dev.shehran.rawcull.ui.components.FilmstripBar
 import dev.shehran.rawcull.ui.components.GridViewGallery
 import dev.shehran.rawcull.ui.components.HistogramView
+import dev.shehran.rawcull.ui.components.SourceActions
+import dev.shehran.rawcull.ui.components.SourcePicker
 import dev.shehran.rawcull.ui.components.TopDamBar
 import dev.shehran.rawcull.ui.components.ZoomableLoupeView
 
@@ -50,6 +52,7 @@ import dev.shehran.rawcull.ui.components.ZoomableLoupeView
 fun TabletDamScreen(
     uiState: DamUiState,
     viewModel: RawCullViewModel,
+    sourcePicker: SourcePicker,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -61,8 +64,15 @@ fun TabletDamScreen(
         // Top App Bar with filters, folder picker, and export
         TopDamBar(
             uiState = uiState,
-            onSourceFolderPicked = viewModel::onSourceFolderSelected,
-            onLoadSampleShoot = viewModel::loadSampleShoot,
+            sourceActions = SourceActions(
+                onOpenRecent = viewModel::openRecentSource,
+                onOpenCard = sourcePicker.openCard,
+                onPickFolder = sourcePicker.pickFolder,
+                onLoadDemo = viewModel::loadSampleShoot,
+                onRescan = viewModel::rescan,
+                onCloseSource = viewModel::closeSource,
+                onRetry = viewModel::retrySource,
+            ),
             onSetViewMode = viewModel::setViewMode,
             onUpdateFilter = viewModel::updateFilter,
             onOpenExportDialog = viewModel::openExportDialog,

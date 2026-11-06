@@ -52,6 +52,14 @@ enum class DamViewMode {
     COMPARE
 }
 
+/** A recent source plus whether its volume is connected right now. */
+data class RecentSourceUi(
+    val uri: String,
+    val displayName: String,
+    val lastOpenedAt: Long,
+    val isAvailable: Boolean,
+)
+
 data class DamUiState(
     val photos: List<PhotoAsset> = emptyList(),
     val filteredPhotos: List<PhotoAsset> = emptyList(),
@@ -63,6 +71,10 @@ data class DamUiState(
     val sourceFolderName: String = "No source",
     val currentRootUri: String? = null,
     val isSourceAvailable: Boolean = true,
+    val isRestoring: Boolean = true, // True until the launch-time source check has finished
+    val recentSources: List<RecentSourceUi> = emptyList(),
+    val storageEpoch: Int = 0, // Bumped whenever volumes may have changed
+    val snackbarMessage: String? = null,
     val destinationFolderName: String = "Not set",
     val destinationFolderUri: String? = null,
     val isScanning: Boolean = false,
@@ -96,7 +108,8 @@ data class DamUiState(
     val picksCount: Int get() = photos.count { it.cullStatus == CullStatus.PICK }
     val rejectsCount: Int get() = photos.count { it.cullStatus == CullStatus.REJECT }
     val unflaggedCount: Int get() = photos.count { it.cullStatus == CullStatus.UNFLAGGED }
-    val rawAndJpegCount: Int get() = photos.count { it.hasCompanion }
+    val pairedCount: Int get() = photos.count { it.hasCompanion }
+    val isDemoSource: Boolean get() = currentRootUri == DEMO_ROOT_URI
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -114,9 +127,16 @@ class RawCullViewModel(
     private var exportJob: Job? = null
     private var histogramJob: Job? = null
     private var histogramKey: String? = null
+    private var recents: List<RecentSource> = emptyList()
 
     init {
         viewModelScope.launch { restoreSession() }
+        viewModelScope.launch {
+            settings.recentSources.collect {
+                recents = it
+                refreshRecentAvailability()
+            }
+        }
         viewModelScope.launch { scanCoordinator.state.collect(::onScanState) }
 
         viewModelScope.launch {
@@ -262,6 +282,7 @@ class RawCullViewModel(
 
     // --- CULLING ACTIONS ---
     fun togglePick() {
+        if (!canEdit()) return
         val photo = _uiState.value.currentPhoto ?: return
         val newStatus = if (photo.cullStatus == CullStatus.PICK) CullStatus.UNFLAGGED else CullStatus.PICK
         viewModelScope.launch {
@@ -270,6 +291,7 @@ class RawCullViewModel(
     }
 
     fun toggleReject() {
+        if (!canEdit()) return
         val photo = _uiState.value.currentPhoto ?: return
         val newStatus = if (photo.cullStatus == CullStatus.REJECT) CullStatus.UNFLAGGED else CullStatus.REJECT
         viewModelScope.launch {
@@ -278,6 +300,7 @@ class RawCullViewModel(
     }
 
     fun setCullStatus(status: CullStatus) {
+        if (!canEdit()) return
         val photo = _uiState.value.currentPhoto ?: return
         viewModelScope.launch {
             repository.setCullStatus(photo.id, status)
@@ -285,6 +308,7 @@ class RawCullViewModel(
     }
 
     fun setRating(rating: Int) {
+        if (!canEdit()) return
         val photo = _uiState.value.currentPhoto ?: return
         val newRating = if (photo.rating == rating) 0 else rating
         viewModelScope.launch {
@@ -293,6 +317,7 @@ class RawCullViewModel(
     }
 
     fun setColorLabel(label: ColorLabel) {
+        if (!canEdit()) return
         val photo = _uiState.value.currentPhoto ?: return
         val newLabel = if (photo.colorLabel == label) ColorLabel.NONE else label
         viewModelScope.launch {
@@ -301,6 +326,7 @@ class RawCullViewModel(
     }
 
     fun addTagToCurrent(tag: String) {
+        if (!canEdit()) return
         val photo = _uiState.value.currentPhoto ?: return
         val trimmed = tag.trim()
         if (trimmed.isEmpty() || photo.tags.contains(trimmed)) return
@@ -310,6 +336,7 @@ class RawCullViewModel(
     }
 
     fun removeTagFromCurrent(tag: String) {
+        if (!canEdit()) return
         val photo = _uiState.value.currentPhoto ?: return
         viewModelScope.launch {
             repository.updatePhoto(photo.copy(tags = photo.tags - tag))
@@ -323,6 +350,14 @@ class RawCullViewModel(
 
     // --- SOURCE & DESTINATION FOLDERS (SAF & OTG SD CARD) ---
     private suspend fun restoreSession() {
+        try {
+            restoreSavedFolders()
+        } finally {
+            _uiState.update { it.copy(isRestoring = false) }
+        }
+    }
+
+    private suspend fun restoreSavedFolders() {
         val persisted = withContext(Dispatchers.IO) { SafPermissions.persistedUris(appContext) }
         settings.pruneRecents(persisted)
 
@@ -334,11 +369,90 @@ class RawCullViewModel(
 
         val source = settings.lastSource()?.takeIf { it.uri in persisted } ?: return
         val uri = Uri.parse(source.uri)
-        if (withContext(Dispatchers.IO) { SafPermissions.isAvailable(appContext, uri) }) {
+        if (isAvailable(uri)) {
             openSource(uri, source.displayName)
         } else {
             setRoot(source.uri, source.displayName, isAvailable = false)
         }
+    }
+
+    private suspend fun isAvailable(uri: Uri): Boolean =
+        withContext(Dispatchers.IO) { SafPermissions.isAvailable(appContext, uri) }
+
+    private suspend fun refreshRecentAvailability() {
+        val current = recents
+        val rows = current.map {
+            RecentSourceUi(it.uri, it.displayName, it.lastOpenedAt, isAvailable(Uri.parse(it.uri)))
+        }
+        _uiState.update { it.copy(recentSources = rows) }
+    }
+
+    /** Re-checks volumes after a resume or a media broadcast; a scan isn't reading while idle. */
+    fun refreshSources() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(storageEpoch = it.storageEpoch + 1) }
+            refreshRecentAvailability()
+            val state = _uiState.value
+            val root = state.currentRootUri ?: return@launch
+            if (state.isDemoSource || !state.isSourceAvailable) return@launch
+            if (!isAvailable(Uri.parse(root)) && root == _uiState.value.currentRootUri) {
+                scanCoordinator.cancel()
+                _uiState.update { it.copy(isSourceAvailable = false) }
+            }
+        }
+    }
+
+    fun openRecentSource(uriString: String) {
+        val uri = Uri.parse(uriString)
+        viewModelScope.launch {
+            if (isAvailable(uri)) {
+                onSourceFolderSelected(uri)
+            } else {
+                val name = recents.firstOrNull { it.uri == uriString }?.displayName ?: "That source"
+                showMessage("$name isn't connected")
+            }
+        }
+    }
+
+    fun retrySource() {
+        val root = _uiState.value.currentRootUri ?: return
+        viewModelScope.launch {
+            if (isAvailable(Uri.parse(root))) {
+                _uiState.update { it.copy(isSourceAvailable = true) }
+                scanCoordinator.start(root)
+            } else {
+                showMessage("Still not connected")
+            }
+        }
+    }
+
+    fun rescan() {
+        val state = _uiState.value
+        val root = state.currentRootUri ?: return
+        if (state.isDemoSource) return
+        if (state.isSourceAvailable) scanCoordinator.start(root) else retrySource()
+    }
+
+    /** Back to Welcome; the next launch starts there too. */
+    fun closeSource() {
+        scanCoordinator.cancel()
+        setRoot(null, "No source")
+        viewModelScope.launch { settings.clearLastSource() }
+    }
+
+    private fun showMessage(message: String) {
+        _uiState.update { it.copy(snackbarMessage = message) }
+    }
+
+    fun onSnackbarShown() {
+        _uiState.update { it.copy(snackbarMessage = null) }
+    }
+
+    /** With the card gone there's nowhere to write sidecars, so the catalog is read-only. */
+    private fun canEdit(): Boolean {
+        val available = _uiState.value.isSourceAvailable
+        if (!available) showMessage("Card disconnected. Reconnect it to flag or rate photos.")
+        return available
     }
 
     fun onSourceFolderSelected(uri: Uri) {
@@ -364,6 +478,9 @@ class RawCullViewModel(
                 currentRootUri = rootUri,
                 sourceFolderName = folderName,
                 isSourceAvailable = isAvailable,
+                photos = emptyList(),
+                filteredPhotos = emptyList(),
+                currentHistogram = null,
                 selectedPhotoId = null,
                 comparePhotoId = null,
                 filterOptions = FilterOptions(),
@@ -371,6 +488,7 @@ class RawCullViewModel(
                 isMultiSelectMode = false,
             )
         }
+        histogramKey = null
         currentRootUri.value = rootUri
     }
 
@@ -441,6 +559,10 @@ class RawCullViewModel(
 
     // --- BATCH EXPORT ---
     fun openExportDialog() {
+        if (!_uiState.value.isSourceAvailable) {
+            showMessage("Card disconnected. Reconnect it to ingest photos.")
+            return
+        }
         _uiState.value = _uiState.value.copy(showExportDialog = true)
     }
 
@@ -510,6 +632,7 @@ class RawCullViewModel(
     }
 
     fun batchPickSelected() {
+        if (!canEdit()) return
         val ids = _uiState.value.selectedPhotoIds.toList()
         if (ids.isEmpty()) return
         viewModelScope.launch {
@@ -518,6 +641,7 @@ class RawCullViewModel(
     }
 
     fun batchRejectSelected() {
+        if (!canEdit()) return
         val ids = _uiState.value.selectedPhotoIds.toList()
         if (ids.isEmpty()) return
         viewModelScope.launch {
@@ -526,6 +650,7 @@ class RawCullViewModel(
     }
 
     fun batchRateSelected(rating: Int) {
+        if (!canEdit()) return
         val ids = _uiState.value.selectedPhotoIds.toList()
         if (ids.isEmpty()) return
         viewModelScope.launch {
@@ -534,6 +659,7 @@ class RawCullViewModel(
     }
 
     fun batchTagSelected(tag: String) {
+        if (!canEdit()) return
         val ids = _uiState.value.selectedPhotoIds.toList()
         if (ids.isEmpty()) return
         viewModelScope.launch {

@@ -138,6 +138,7 @@ class ScanCoordinator(
             // Providers can surface a dying volume this way; here it can't be a local bug in Room.
             throw IOException("Walk failed", e)
         }
+        val walkMillis = SystemClock.elapsedRealtime() - started
         val grouping = AssetGrouper.group(walk.entries)
         // An empty listing is only believable if the volume is still there.
         if (grouping.assets.isEmpty() && !SafPermissions.isAvailable(appContext, treeUri)) {
@@ -156,7 +157,7 @@ class ScanCoordinator(
         val filesPerSecond = if (elapsed > 0) walk.entries.size * 1000L / elapsed else walk.entries.size.toLong()
         Log.i(
             TAG,
-            "phaseA durationMs=$elapsed files=${walk.entries.size} dirs=${walk.dirsVisited} " +
+            "phaseA durationMs=$elapsed walkMs=$walkMillis files=${walk.entries.size} dirs=${walk.dirsVisited} " +
                 "assets=${grouping.assets.size} orphanSidecars=${grouping.orphanSidecars.size} " +
                 "upserted=${merge.toUpsert.size} deleted=${merge.toDelete.size} filesPerSec=$filesPerSecond",
         )

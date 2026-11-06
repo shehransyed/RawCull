@@ -19,8 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -76,9 +77,12 @@ fun GridViewGallery(
     modifier: Modifier = Modifier,
 ) {
     val gridState = rememberLazyGridState()
-    val selectedIndex = remember(photos, selectedPhotoId) { photos.indexOfFirst { it.id == selectedPhotoId } }
-    LaunchedEffect(selectedPhotoId, selectedIndex) {
-        if (selectedIndex >= 0) gridState.scrollToItem(selectedIndex)
+    val rows = remember(photos) { buildGridRows(photos) }
+    val selectedRow = remember(rows, selectedPhotoId) {
+        rows.indexOfFirst { it is GridRow.Photo && it.photo.id == selectedPhotoId }
+    }
+    LaunchedEffect(selectedPhotoId, selectedRow) {
+        if (selectedRow >= 0) gridState.scrollToItem(selectedRow)
     }
 
     Box(
@@ -93,7 +97,7 @@ fun GridViewGallery(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "No RAW photos match the active filters",
+                    text = "No photos to show",
                     color = Color(0xFF64748B),
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -107,24 +111,40 @@ fun GridViewGallery(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                itemsIndexed(photos, key = { _, item -> item.id }) { index, photo ->
-                    val isCurrent = photo.id == selectedPhotoId
-                    val isChecked = selectedIds.contains(photo.id)
-
-                    GridPhotoCard(
-                        photo = photo,
-                        isCurrent = isCurrent,
-                        isChecked = isChecked,
-                        isMultiSelectMode = isMultiSelectMode,
-                        onClick = {
-                            if (isMultiSelectMode) {
-                                onToggleSelectId(photo.id)
-                            } else {
-                                onSelectIndex(index)
-                            }
-                        },
-                        modifier = Modifier.testTag("grid_card_$index")
-                    )
+                items(
+                    items = rows,
+                    key = { it.key },
+                    span = { row -> GridItemSpan(if (row is GridRow.Header) maxLineSpan else 1) },
+                    contentType = { it::class },
+                ) { row ->
+                    when (row) {
+                        is GridRow.Header -> Text(
+                            text = row.title,
+                            color = Color(0xFF94A3B8),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 6.dp).testTag("grid_folder_header"),
+                        )
+                        is GridRow.Photo -> {
+                            val photo = row.photo
+                            GridPhotoCard(
+                                photo = photo,
+                                isCurrent = photo.id == selectedPhotoId,
+                                isChecked = selectedIds.contains(photo.id),
+                                isMultiSelectMode = isMultiSelectMode,
+                                onClick = {
+                                    if (isMultiSelectMode) {
+                                        onToggleSelectId(photo.id)
+                                    } else {
+                                        onSelectIndex(row.index)
+                                    }
+                                },
+                                modifier = Modifier.testTag("grid_card_${row.index}")
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -351,7 +371,9 @@ private fun GridPhotoCard(
             )
 
             Text(
-                text = "${photo.shutterSpeed ?: ""} • ${photo.aperture ?: ""} • ISO ${photo.iso ?: ""}",
+                text = listOfNotNull(photo.shutterSpeed, photo.aperture, photo.iso?.let { "ISO $it" })
+                    .joinToString(" • ")
+                    .ifEmpty { " " },
                 color = Color(0xFF64748B),
                 fontSize = 10.sp,
                 maxLines = 1,

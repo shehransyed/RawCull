@@ -1,14 +1,12 @@
 package dev.shehran.rawcull.ui.components
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,40 +16,42 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CameraRoll
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.shehran.rawcull.data.model.CullFilterMode
@@ -61,23 +61,29 @@ import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.ui.DamUiState
 import dev.shehran.rawcull.ui.DamViewMode
 
+/** Everything the source dropdown and the disconnected banner can do. */
+data class SourceActions(
+    val onOpenRecent: (String) -> Unit,
+    val onOpenCard: () -> Unit,
+    val onPickFolder: () -> Unit,
+    val onLoadDemo: () -> Unit,
+    val onRescan: () -> Unit,
+    val onCloseSource: () -> Unit,
+    val onRetry: () -> Unit,
+)
+
+private val CompactWidth = 600.dp
+
 @Composable
 fun TopDamBar(
     uiState: DamUiState,
-    onSourceFolderPicked: (Uri) -> Unit,
-    onLoadSampleShoot: () -> Unit,
+    sourceActions: SourceActions,
     onSetViewMode: (DamViewMode) -> Unit,
     onUpdateFilter: ((FilterOptions) -> FilterOptions) -> Unit,
     onOpenExportDialog: () -> Unit,
     onToggleMultiSelect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val folderPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri != null) onSourceFolderPicked(uri)
-    }
-
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -85,15 +91,21 @@ fun TopDamBar(
         color = Color(0xFF0C1016),
         tonalElevation = 4.dp
     ) {
+        BoxWithConstraints {
+        val isCompact = maxWidth < CompactWidth
+        Column {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
             // Row 1: App Brand, Source/OTG Folder info, View modes, and Batch Export
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Brand + Source folder picker
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // Brand + source dropdown; takes the space left over, so it is what ellipsizes
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
                     Box(
                         modifier = Modifier
                             .size(36.dp)
@@ -119,82 +131,50 @@ fun TopDamBar(
                             color = Color.White,
                             letterSpacing = 0.5.sp
                         )
-
-                        // Source Folder button
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .clickable { folderPickerLauncher.launch(null) }
-                                .padding(vertical = 1.dp)
-                                .testTag("source_folder_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Usb,
-                                contentDescription = null,
-                                tint = Color(0xFF38BDF8),
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = uiState.sourceFolderName,
-                                fontSize = 11.sp,
-                                color = Color(0xFF38BDF8),
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    // "Demo Shoot" button
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF1E2632))
-                            .clickable { onLoadSampleShoot() }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                            .testTag("sample_shoot_button")
-                    ) {
-                        Text("Demo Shoot", fontSize = 11.sp, color = Color(0xFF94A3B8))
+                        SourceDropdown(uiState = uiState, actions = sourceActions)
                     }
                 }
 
-                // Center/Right View Mode Switcher & Export Button
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // View Mode Group
+                Surface(
+                    color = Color(0xFF161E28),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    // View Mode Group
-                    Surface(
-                        color = Color(0xFF161E28),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Row(modifier = Modifier.padding(2.dp)) {
-                            ViewModeButton(
-                                icon = Icons.Default.Image,
-                                label = "Loupe",
-                                selected = uiState.viewMode == DamViewMode.LOUPE,
-                                onClick = { onSetViewMode(DamViewMode.LOUPE) },
-                                tag = "view_mode_loupe"
-                            )
-                            ViewModeButton(
-                                icon = Icons.Default.Compare,
-                                label = "Compare",
-                                selected = uiState.viewMode == DamViewMode.COMPARE,
-                                onClick = { onSetViewMode(DamViewMode.COMPARE) },
-                                tag = "view_mode_compare"
-                            )
-                            ViewModeButton(
-                                icon = Icons.Default.GridView,
-                                label = "Grid",
-                                selected = uiState.viewMode == DamViewMode.GRID,
-                                onClick = { onSetViewMode(DamViewMode.GRID) },
-                                tag = "view_mode_grid"
-                            )
-                        }
+                    Row(modifier = Modifier.padding(2.dp)) {
+                        ViewModeButton(
+                            icon = Icons.Default.Image,
+                            label = "Loupe",
+                            showLabel = !isCompact,
+                            selected = uiState.viewMode == DamViewMode.LOUPE,
+                            onClick = { onSetViewMode(DamViewMode.LOUPE) },
+                            tag = "view_mode_loupe"
+                        )
+                        ViewModeButton(
+                            icon = Icons.Default.Compare,
+                            label = "Compare",
+                            showLabel = !isCompact,
+                            selected = uiState.viewMode == DamViewMode.COMPARE,
+                            onClick = { onSetViewMode(DamViewMode.COMPARE) },
+                            tag = "view_mode_compare"
+                        )
+                        ViewModeButton(
+                            icon = Icons.Default.GridView,
+                            label = "Grid",
+                            showLabel = !isCompact,
+                            selected = uiState.viewMode == DamViewMode.GRID,
+                            onClick = { onSetViewMode(DamViewMode.GRID) },
+                            tag = "view_mode_grid"
+                        )
                     }
+                }
 
+                if (isCompact) {
+                    CompactOverflowMenu(
+                        uiState = uiState,
+                        onToggleMultiSelect = onToggleMultiSelect,
+                        onOpenExportDialog = onOpenExportDialog,
+                    )
+                } else {
                     // Multi-select toggle
                     Box(
                         modifier = Modifier
@@ -213,7 +193,7 @@ fun TopDamBar(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (uiState.isMultiSelectMode) "Select (${uiState.selectedPhotoIds.size})" else "Select",
+                                text = selectLabel(uiState),
                                 color = Color.White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
@@ -281,10 +261,10 @@ fun TopDamBar(
 
                 Box(modifier = Modifier.height(20.dp).width(1.dp).background(Color(0x33FFFFFF)))
 
-                // RAW+JPG Stacking filter
-                if (uiState.rawAndJpegCount > 0) {
+                // Paired files filter
+                pairChipLabel(uiState.photos)?.let { label ->
                     DamFilterChip(
-                        label = "RAW+JPG (${uiState.rawAndJpegCount})",
+                        label = "$label (${uiState.pairedCount})",
                         selected = uiState.filterOptions.pairFilter == PairMode.RAW_AND_RASTER,
                         activeColor = Color(0xFFA7F3D0),
                         onClick = {
@@ -294,25 +274,18 @@ fun TopDamBar(
                     )
                 }
 
-                // Format filters
-                DamFilterChip(
-                    label = "Sony ARW",
-                    selected = uiState.filterOptions.formatFilter == PhotoFormat.ARW,
-                    activeColor = Color(0xFFF97316),
-                    onClick = {
-                        val current = uiState.filterOptions.formatFilter
-                        onUpdateFilter { it.copy(formatFilter = if (current == PhotoFormat.ARW) null else PhotoFormat.ARW) }
-                    }
-                )
-                DamFilterChip(
-                    label = "Adobe DNG",
-                    selected = uiState.filterOptions.formatFilter == PhotoFormat.DNG,
-                    activeColor = Color(0xFF06B6D4),
-                    onClick = {
-                        val current = uiState.filterOptions.formatFilter
-                        onUpdateFilter { it.copy(formatFilter = if (current == PhotoFormat.DNG) null else PhotoFormat.DNG) }
-                    }
-                )
+                // Format filters, for the formats in this catalog
+                formatsPresent(uiState.photos).forEach { format ->
+                    DamFilterChip(
+                        label = format.extension,
+                        selected = uiState.filterOptions.formatFilter == format,
+                        activeColor = formatChipColor(format),
+                        onClick = {
+                            val current = uiState.filterOptions.formatFilter
+                            onUpdateFilter { it.copy(formatFilter = if (current == format) null else format) }
+                        }
+                    )
+                }
 
                 Box(modifier = Modifier.height(20.dp).width(1.dp).background(Color(0x33FFFFFF)))
 
@@ -337,6 +310,200 @@ fun TopDamBar(
                 )
             }
         }
+
+        ScanProgressLine(uiState)
+        if (!uiState.isSourceAvailable) {
+            SourceUnavailableBanner(onRetry = sourceActions.onRetry)
+        }
+        }
+        }
+    }
+}
+
+private fun selectLabel(uiState: DamUiState): String =
+    if (uiState.isMultiSelectMode) "Select (${uiState.selectedPhotoIds.size})" else "Select"
+
+private fun formatChipColor(format: PhotoFormat): Color = when (format) {
+    PhotoFormat.ARW -> Color(0xFFF97316)
+    PhotoFormat.DNG -> Color(0xFF06B6D4)
+    else -> Color(0xFF38BDF8)
+}
+
+@Composable
+private fun SourceDropdown(uiState: DamUiState, actions: SourceActions) {
+    var expanded by remember { mutableStateOf(false) }
+
+    fun choose(action: () -> Unit) {
+        expanded = false
+        action()
+    }
+
+    Box {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .clickable { expanded = true }
+                .padding(vertical = 1.dp)
+                .testTag("source_folder_button")
+        ) {
+            Icon(
+                imageVector = Icons.Default.Usb,
+                contentDescription = null,
+                tint = Color(0xFF38BDF8),
+                modifier = Modifier.size(13.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = uiState.sourceFolderName,
+                fontSize = 11.sp,
+                color = Color(0xFF38BDF8),
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Icon(
+                imageVector = Icons.Default.ArrowDropDown,
+                contentDescription = "Source menu",
+                tint = Color(0xFF38BDF8),
+                modifier = Modifier.size(14.dp)
+            )
+        }
+
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            uiState.recentSources.forEach { recent ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = if (recent.isAvailable) recent.displayName else "${recent.displayName} (not connected)",
+                            color = if (recent.isAvailable) Color.White else Color(0xFF64748B),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    onClick = { choose { actions.onOpenRecent(recent.uri) } }
+                )
+            }
+            if (uiState.recentSources.isNotEmpty()) HorizontalDivider(color = Color(0x22FFFFFF))
+            DropdownMenuItem(text = { Text("Open SD card…") }, onClick = { choose(actions.onOpenCard) })
+            DropdownMenuItem(text = { Text("Pick folder…") }, onClick = { choose(actions.onPickFolder) })
+            DropdownMenuItem(
+                text = { Text("Demo shoot") },
+                onClick = { choose(actions.onLoadDemo) },
+                modifier = Modifier.testTag("sample_shoot_button")
+            )
+            HorizontalDivider(color = Color(0x22FFFFFF))
+            DropdownMenuItem(
+                text = { Text("Rescan") },
+                enabled = !uiState.isDemoSource,
+                onClick = { choose(actions.onRescan) }
+            )
+            DropdownMenuItem(
+                text = { Text("Close source") },
+                onClick = { choose(actions.onCloseSource) },
+                modifier = Modifier.testTag("close_source_button")
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactOverflowMenu(
+    uiState: DamUiState,
+    onToggleMultiSelect: () -> Unit,
+    onOpenExportDialog: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(
+            onClick = { expanded = true },
+            modifier = Modifier.size(36.dp).testTag("top_bar_overflow_button")
+        ) {
+            Icon(Icons.Default.MoreVert, contentDescription = "More actions", tint = Color.White)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text(selectLabel(uiState)) },
+                leadingIcon = { Icon(Icons.Default.SelectAll, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onToggleMultiSelect()
+                },
+                modifier = Modifier.testTag("multi_select_toggle_button")
+            )
+            DropdownMenuItem(
+                text = { Text("Ingest Culled (${uiState.picksCount})") },
+                leadingIcon = { Icon(Icons.Default.FileUpload, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onOpenExportDialog()
+                },
+                modifier = Modifier.testTag("open_export_dialog_button")
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScanProgressLine(uiState: DamUiState) {
+    if (uiState.isScanning) {
+        val progress = uiState.scanProgress
+        if (progress != null) {
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth().height(2.dp),
+                color = Color(0xFF38BDF8),
+                trackColor = Color(0xFF161E28),
+            )
+        } else {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().height(2.dp),
+                color = Color(0xFF38BDF8),
+                trackColor = Color(0xFF161E28),
+            )
+        }
+    }
+    if (uiState.scanStatusText.isNotBlank()) {
+        Text(
+            text = uiState.scanStatusText,
+            color = Color(0xFF64748B),
+            fontSize = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .padding(horizontal = 14.dp, vertical = 2.dp)
+                .testTag("scan_status_text")
+        )
+    }
+}
+
+@Composable
+private fun SourceUnavailableBanner(onRetry: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF3B2A0B))
+            .padding(start = 14.dp, end = 6.dp)
+            .testTag("source_unavailable_banner"),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Warning,
+            contentDescription = null,
+            tint = Color(0xFFFBBF24),
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "Card disconnected. Reconnect it and tap Retry",
+            color = Color(0xFFFDE68A),
+            fontSize = 12.sp,
+            modifier = Modifier.weight(1f)
+        )
+        TextButton(onClick = onRetry, modifier = Modifier.testTag("source_retry_button")) {
+            Text("Retry", color = Color(0xFFFBBF24), fontWeight = FontWeight.Bold)
+        }
     }
 }
 
@@ -344,6 +511,7 @@ fun TopDamBar(
 private fun ViewModeButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
+    showLabel: Boolean,
     selected: Boolean,
     onClick: () -> Unit,
     tag: String
@@ -364,13 +532,15 @@ private fun ViewModeButton(
                 tint = if (selected) Color.White else Color(0xFF94A3B8),
                 modifier = Modifier.size(16.dp)
             )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = label,
-                color = if (selected) Color.White else Color(0xFF94A3B8),
-                fontSize = 11.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-            )
+            if (showLabel) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = label,
+                    color = if (selected) Color.White else Color(0xFF94A3B8),
+                    fontSize = 11.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                )
+            }
         }
     }
 }
