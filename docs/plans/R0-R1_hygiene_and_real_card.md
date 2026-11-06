@@ -219,3 +219,58 @@ Android photo culling + ingest DAM (tablet-first, phone-responsive). Kotlin, Jet
 ## Planning docs
 Feature plans live in `docs/plans/`. Implement exactly one plan at a time, one commit per numbered task, and append "Implementation notes" (deviations, open questions, measurements) to the plan when done.
 ```
+
+---
+
+## Implementation notes
+
+Implemented on `feature/r0-r1-real-card`. 86 JVM tests pass. The flows below were also run end to end on an API 36 emulator with a synthetic card on its removable volume. **No real card, reader, tablet or camera RAW file has been tested yet**, so the R1 acceptance checklist still needs its manual pass.
+
+### Measured scan timings (R1.4)
+**Not a real measurement.** The plan asks for one with a real card and reader, which wasn't available. These are emulator numbers only and say little about a USB-3 reader. 1,007 files (500 ARW+JPG pairs, 2 JPEGs, 5 other files), 5 folders, very small files, Medium Phone API 36 with software rendering.
+
+| Run | Phase A | of which walk | Files/s | Phase B (502 assets) | Median per file |
+|---|---|---|---|---|---|
+| Cold, first run after copying | 8.6 s | not logged | 117 | 12.2 s | 62 ms |
+| Second run | 4.1 s | 3.3 s | 242 | 7.6 s | 38 ms |
+| Warm | 1.6 s | 1.3 s | 616 | 5.9 s | 30 ms |
+
+- The target of phase A < 2 s was met only warm. A freshly inserted card is the cold case, so this needs checking on hardware.
+- The walk dominates phase A; grouping and merging took about 0.3–0.8 s.
+- Time to first thumbnail wasn't measured.
+- To record the real figure: `adb logcat -s RawCull.Scan`, then add the card and reader model and the file count here.
+
+### Deviations
+1. **Branch and repo setup.** `docs/plans/` and `gradle-daemon-jvm.properties` were untracked in the main checkout, so they were copied in and committed. The repo had no `gradlew`, `gradlew.bat` or wrapper jar, so these were added in R0.1.
+2. **Commit count.** R0.1 is two commits, as the plan asks. The Room v3 data model, which has no task number, is its own commit before R1.1.
+3. **Asset ids.** `sha1(root|dir|stem)` collides for two RAWs with one stem and for a leftover raster. `AssetIds.of` takes an optional discriminator (the lowercase extension) for every asset after the first in a stem group.
+4. **Shared sidecars.** Those same assets would all write `<stem>.xmp`. It now goes to the first asset only; the others use `<name>.<ext>.xmp`.
+5. **`updateMetadataBatch`** is not a whole-row `@Update`, which would overwrite a flag set during enrichment. It uses a partial entity plus a conditional `UPDATE ... WHERE lastModified < :xmpLastModified`. New rows start with `lastModified = 0`, which is how "XMP wins on a new row" is expressed.
+6. **`buildConfig` stays on**, because the XMP toolkit string uses `BuildConfig.VERSION_NAME`.
+7. **`.RAW` files** are still recognised (as `RAW_OTHER`), as the old scanner did, though D4 doesn't list them.
+8. **`SafTreeWalkerTest`** took the plan's simpler option: the rules are in the pure `WalkPolicy`, tested by `WalkPolicyTest`. The walker itself was exercised on the emulator only.
+9. **Grid headers aren't sticky.** `LazyVerticalGrid` has no sticky-header API, so they are full-width items that scroll away. One appears at each change of folder, which keeps the active sort but can repeat a folder if sort order interleaves folders.
+10. **Enrichment order** follows capture date, not the active sort, so it matches display order only for the default sort. It still works outward from the selection.
+
+### Additions the plan didn't list
+- A `MEDIA_*` broadcast receiver and a resume check. Without them, unplugging a card while no scan is running would never show the banner.
+- "Close source" clears `lastSourceUri`, so the next launch goes to Welcome.
+- `ScanMerger` also resets `metadataLoaded` when a sidecar is newer than the row. Otherwise an externally edited sidecar would never be read on rescan.
+- The sidecar URI is stored after the first write, so repeat ratings don't create `DSC001 (1).xmp`.
+- Preview caches are keyed on id + `fileLastModified`: stable ids could otherwise show a stale preview for a reused file name.
+- JPEG/HEIF primaries decode directly, because the EXIF thumbnail is too small for the loupe.
+- `._*` macOS stubs are ignored.
+- Exported sidecars and HEIF files are created as `application/octet-stream`.
+- The histogram no longer restarts on every enrichment batch.
+
+### Open questions
+1. **Android refuses the root of an SD card in the folder picker** ("Can't use this folder"), seen on the emulator's removable volume, including through `createOpenDocumentTreeIntent()`. Acceptance step 1 says to pick the card root; here the user has to pick `DCIM`, which works. USB readers may be exempt, but that's untested. If your tablet blocks the root, `PRIVATE` is simply never in scope, but the Welcome screen could use a hint to open `DCIM`. Decide after trying it on the tablet.
+2. **Rating a photo currently replaces an existing sidecar's contents.** Confirmed on the emulator: the `.xmp` is rewritten and anything else in it is lost. That's the plan's accepted Round-1 writer, but on a card with Lightroom or darktable sidecars it destroys their edits. **Don't rate photos with sidecars you care about until Round 2 lands.**
+3. **The `XMP LIVE` badge is static.** `xmpSyncStatus = ERROR` is now recorded, but the UI doesn't show it, so a failed write (for example a write-protected card) looks like success. Round 2 covers this.
+4. **RAW previews weren't tested with real files.** The fixture `.ARW` files are JPEG bytes. Real ARW, CR3 (companion EXIF path) and HEIF decoding haven't been run, and RAW loupe quality still depends on the EXIF thumbnail (Round 3).
+5. **The selected photo isn't restored after a relaunch**; the first photo is selected. The plan doesn't ask for it.
+
+### Verified on the emulator
+Open via the card button; 52 assets in 3 folders with hidden, `PRIVATE`, `MISC` and video files excluded; both sidecar styles read; selection held while enrichment re-sorted; JPEG-only folder badged `JPG`; one new sidecar next to the file after three ratings; relaunch reopens without a picker; banner on unmount while idle; banner after relaunch with the card out; edits blocked with a snackbar; Retry after remount; unmount during a 1,007-file scan with no crash and no catalog loss; demo isolated from card photos; Close source and recents; no top-bar overflow at 360dp; layouts at 640dp and 1280dp.
+
+Two bugs were found this way and fixed in R1.6: snackbars were cancelled before they could show, and cards without EXIF showed a stray `• • ISO`.
