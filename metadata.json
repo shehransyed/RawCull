@@ -1,6 +1,0 @@
-{
-  "name": "RawCull",
-  "description": "Professional RAW photo DAM for importing, culling, rating, and exporting DNG and Sony ARW photos.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
