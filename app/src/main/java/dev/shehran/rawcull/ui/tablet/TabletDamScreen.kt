@@ -118,7 +118,7 @@ fun TabletDamScreen(
                     DamViewMode.GRID -> {
                         GridViewGallery(
                             photos = uiState.filteredPhotos,
-                            selectedIndex = uiState.selectedIndex,
+                            selectedPhotoId = uiState.selectedPhotoId,
                             selectedIds = uiState.selectedPhotoIds,
                             isMultiSelectMode = uiState.isMultiSelectMode,
                             onSelectIndex = {
@@ -227,7 +227,7 @@ fun TabletDamScreen(
         // Bottom Filmstrip
         FilmstripBar(
             photos = uiState.filteredPhotos,
-            selectedIndex = uiState.selectedIndex,
+            selectedPhotoId = uiState.selectedPhotoId,
             selectedPhotoIds = uiState.selectedPhotoIds,
             isMultiSelectMode = uiState.isMultiSelectMode,
             onSelectIndex = viewModel::selectPhotoIndex,

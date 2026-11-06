@@ -61,7 +61,7 @@ import dev.shehran.rawcull.util.RawPreviewLoader
 @Composable
 fun FilmstripBar(
     photos: List<PhotoAsset>,
-    selectedIndex: Int,
+    selectedPhotoId: String?,
     selectedPhotoIds: Set<String>,
     isMultiSelectMode: Boolean,
     onSelectIndex: (Int) -> Unit,
@@ -70,8 +70,10 @@ fun FilmstripBar(
 ) {
     val listState = rememberLazyListState()
 
-    LaunchedEffect(selectedIndex) {
-        if (selectedIndex in photos.indices) {
+    // Keyed on the position too, so the selected photo stays in view when a re-sort moves it.
+    val selectedIndex = remember(photos, selectedPhotoId) { photos.indexOfFirst { it.id == selectedPhotoId } }
+    LaunchedEffect(selectedPhotoId, selectedIndex) {
+        if (selectedIndex >= 0) {
             listState.animateScrollToItem((selectedIndex - 1).coerceAtLeast(0))
         }
     }
@@ -91,7 +93,7 @@ fun FilmstripBar(
             modifier = Modifier.fillMaxSize(),
         ) {
             itemsIndexed(photos, key = { _, item -> item.id }) { index, photo ->
-                val isCurrent = index == selectedIndex
+                val isCurrent = photo.id == selectedPhotoId
                 val isChecked = selectedPhotoIds.contains(photo.id)
 
                 FilmstripThumbnailItem(

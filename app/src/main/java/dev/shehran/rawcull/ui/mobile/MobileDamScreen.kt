@@ -134,7 +134,7 @@ fun MobileDamScreen(
                 DamViewMode.GRID -> {
                     GridViewGallery(
                         photos = uiState.filteredPhotos,
-                        selectedIndex = uiState.selectedIndex,
+                        selectedPhotoId = uiState.selectedPhotoId,
                         selectedIds = uiState.selectedPhotoIds,
                         isMultiSelectMode = uiState.isMultiSelectMode,
                         onSelectIndex = {
@@ -155,7 +155,7 @@ fun MobileDamScreen(
         if (uiState.viewMode != DamViewMode.GRID) {
             FilmstripBar(
                 photos = uiState.filteredPhotos,
-                selectedIndex = uiState.selectedIndex,
+                selectedPhotoId = uiState.selectedPhotoId,
                 selectedPhotoIds = uiState.selectedPhotoIds,
                 isMultiSelectMode = uiState.isMultiSelectMode,
                 onSelectIndex = viewModel::selectPhotoIndex,

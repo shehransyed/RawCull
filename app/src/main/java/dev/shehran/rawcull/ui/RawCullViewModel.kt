@@ -55,8 +55,8 @@ enum class DamViewMode {
 data class DamUiState(
     val photos: List<PhotoAsset> = emptyList(),
     val filteredPhotos: List<PhotoAsset> = emptyList(),
-    val selectedIndex: Int = 0,
-    val compareIndex: Int = 1,
+    val selectedPhotoId: String? = null,
+    val comparePhotoId: String? = null,
     val isCompareMode: Boolean = false,
     val viewMode: DamViewMode = DamViewMode.LOUPE,
     val filterOptions: FilterOptions = FilterOptions(),
@@ -77,6 +77,15 @@ data class DamUiState(
     val isLoupeZoomed: Boolean = false,
     val zoomFactor: Float = 1f
 ) {
+    /** Derived, not stored: enrichment re-sorts the list, and the selection must follow the photo. */
+    val selectedIndex: Int by lazy(LazyThreadSafetyMode.NONE) {
+        filteredPhotos.indexOfFirst { it.id == selectedPhotoId }
+    }
+
+    val compareIndex: Int by lazy(LazyThreadSafetyMode.NONE) {
+        filteredPhotos.indexOfFirst { it.id == comparePhotoId }
+    }
+
     val currentPhoto: PhotoAsset?
         get() = filteredPhotos.getOrNull(selectedIndex)
 
@@ -104,6 +113,7 @@ class RawCullViewModel(
 
     private var exportJob: Job? = null
     private var histogramJob: Job? = null
+    private var histogramKey: String? = null
 
     init {
         viewModelScope.launch { restoreSession() }
@@ -118,17 +128,30 @@ class RawCullViewModel(
 
     private fun updatePhotosList(photoList: List<PhotoAsset>) {
         val current = _uiState.value
-        val filtered = applyFilterAndSort(photoList, current.filterOptions)
-        val newIndex = current.selectedIndex.coerceIn(0, (filtered.size - 1).coerceAtLeast(0))
-        val newCompare = current.compareIndex.coerceIn(0, (filtered.size - 1).coerceAtLeast(0))
+        applyVisiblePhotos(photoList, current.filterOptions)
+    }
+
+    /** Publishes a new visible list, carrying the selection over by id. */
+    private fun applyVisiblePhotos(photoList: List<PhotoAsset>, filter: FilterOptions) {
+        val current = _uiState.value
+        val filtered = applyFilterAndSort(photoList, filter)
+        val previousIds = current.filteredPhotos.map { it.id }
+        val nextIds = filtered.map { it.id }
+        val selectedId = SelectionLogic.reconcile(previousIds, nextIds, current.selectedPhotoId)
 
         _uiState.value = current.copy(
             photos = photoList,
             filteredPhotos = filtered,
-            selectedIndex = newIndex,
-            compareIndex = if (newCompare == newIndex && filtered.size > 1) (newIndex + 1) % filtered.size else newCompare
+            filterOptions = filter,
+            selectedPhotoId = selectedId,
+            comparePhotoId = SelectionLogic.reconcileCompare(nextIds, current.comparePhotoId, selectedId),
         )
+        if (selectedId != current.selectedPhotoId) onSelectionChanged()
         refreshHistogram()
+    }
+
+    private fun onSelectionChanged() {
+        _uiState.value.selectedPhotoId?.let(scanCoordinator::prioritize)
     }
 
     private fun applyFilterAndSort(
@@ -191,11 +214,11 @@ class RawCullViewModel(
         val filtered = _uiState.value.filteredPhotos
         if (index in filtered.indices) {
             _uiState.value = _uiState.value.copy(
-                selectedIndex = index,
+                selectedPhotoId = filtered[index].id,
                 isLoupeZoomed = false,
                 zoomFactor = 1f
             )
-            scanCoordinator.prioritize(filtered[index].id)
+            onSelectionChanged()
             refreshHistogram()
         }
     }
@@ -217,7 +240,7 @@ class RawCullViewModel(
     fun setCompareIndex(index: Int) {
         val filtered = _uiState.value.filteredPhotos
         if (index in filtered.indices) {
-            _uiState.value = _uiState.value.copy(compareIndex = index)
+            _uiState.value = _uiState.value.copy(comparePhotoId = filtered[index].id)
         }
     }
 
@@ -295,13 +318,7 @@ class RawCullViewModel(
 
     // --- FILTER ACTIONS ---
     fun updateFilter(filterModifier: (FilterOptions) -> FilterOptions) {
-        val newFilter = filterModifier(_uiState.value.filterOptions)
-        _uiState.value = _uiState.value.copy(
-            filterOptions = newFilter,
-            filteredPhotos = applyFilterAndSort(_uiState.value.photos, newFilter),
-            selectedIndex = 0
-        )
-        refreshHistogram()
+        applyVisiblePhotos(_uiState.value.photos, filterModifier(_uiState.value.filterOptions))
     }
 
     // --- SOURCE & DESTINATION FOLDERS (SAF & OTG SD CARD) ---
@@ -347,8 +364,8 @@ class RawCullViewModel(
                 currentRootUri = rootUri,
                 sourceFolderName = folderName,
                 isSourceAvailable = isAvailable,
-                selectedIndex = 0,
-                compareIndex = 1,
+                selectedPhotoId = null,
+                comparePhotoId = null,
                 filterOptions = FilterOptions(),
                 selectedPhotoIds = emptySet(),
                 isMultiSelectMode = false,
@@ -524,9 +541,12 @@ class RawCullViewModel(
         }
     }
 
+    /** Keyed on the photo's version, so enrichment batches don't restart it on every emission. */
     private fun refreshHistogram() {
-        histogramJob?.cancel()
         val photo = _uiState.value.currentPhoto ?: return
+        if (photo.previewCacheKey == histogramKey) return
+        histogramKey = photo.previewCacheKey
+        histogramJob?.cancel()
         histogramJob = viewModelScope.launch {
             val bitmap = RawPreviewLoader.loadThumbnail(
                 appContext,

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -64,7 +65,7 @@ import dev.shehran.rawcull.util.RawPreviewLoader
 @Composable
 fun GridViewGallery(
     photos: List<PhotoAsset>,
-    selectedIndex: Int,
+    selectedPhotoId: String?,
     selectedIds: Set<String>,
     isMultiSelectMode: Boolean,
     onSelectIndex: (Int) -> Unit,
@@ -74,6 +75,12 @@ fun GridViewGallery(
     onOpenExport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val gridState = rememberLazyGridState()
+    val selectedIndex = remember(photos, selectedPhotoId) { photos.indexOfFirst { it.id == selectedPhotoId } }
+    LaunchedEffect(selectedPhotoId, selectedIndex) {
+        if (selectedIndex >= 0) gridState.scrollToItem(selectedIndex)
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -93,6 +100,7 @@ fun GridViewGallery(
             }
         } else {
             LazyVerticalGrid(
+                state = gridState,
                 columns = GridCells.Adaptive(minSize = 160.dp),
                 contentPadding = PaddingValues(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -100,7 +108,7 @@ fun GridViewGallery(
                 modifier = Modifier.fillMaxSize()
             ) {
                 itemsIndexed(photos, key = { _, item -> item.id }) { index, photo ->
-                    val isCurrent = index == selectedIndex
+                    val isCurrent = photo.id == selectedPhotoId
                     val isChecked = selectedIds.contains(photo.id)
 
                     GridPhotoCard(
