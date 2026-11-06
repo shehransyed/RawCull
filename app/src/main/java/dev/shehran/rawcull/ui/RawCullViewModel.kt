@@ -331,7 +331,7 @@ class RawCullViewModel(
         val trimmed = tag.trim()
         if (trimmed.isEmpty() || photo.tags.contains(trimmed)) return
         viewModelScope.launch {
-            repository.updatePhoto(photo.copy(tags = photo.tags + trimmed))
+            repository.batchAddTag(listOf(photo.id), trimmed)
         }
     }
 
@@ -339,7 +339,7 @@ class RawCullViewModel(
         if (!canEdit()) return
         val photo = _uiState.value.currentPhoto ?: return
         viewModelScope.launch {
-            repository.updatePhoto(photo.copy(tags = photo.tags - tag))
+            repository.removeTag(photo.id, tag)
         }
     }
 

@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import dev.shehran.rawcull.data.model.PhotoAsset
 
-@Database(entities = [PhotoAsset::class], version = 3, exportSchema = true)
+@Database(entities = [PhotoAsset::class], version = 4, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun rawPhotoDao(): RawPhotoDao

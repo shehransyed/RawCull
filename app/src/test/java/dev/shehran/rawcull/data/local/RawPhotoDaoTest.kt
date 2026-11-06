@@ -80,7 +80,7 @@ class RawPhotoDaoTest {
     @Test
     fun `a metadata batch leaves user state alone`() = runTest {
         dao.upsertAll(listOf(row(lastModified = 500L)))
-        dao.updateRating("a", 5, time = 600L)
+        dao.updateRating(listOf("a"), 5, time = 600L)
 
         dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp = null)))
 
@@ -117,7 +117,7 @@ class RawPhotoDaoTest {
     @Test
     fun `a flag set during enrichment beats an older sidecar`() = runTest {
         dao.upsertAll(listOf(row(lastModified = 0L)))
-        dao.updateCullStatus("a", CullStatus.REJECT, time = 1_000L)
+        dao.updateCullStatus(listOf("a"), CullStatus.REJECT, time = 1_000L)
 
         dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp(lastModified = 900L))))
 

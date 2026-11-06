@@ -49,6 +49,7 @@ object ScanMerger {
         companionFileSizeBytes = draft.companion?.size,
         companionFormat = draft.companionFormat,
         xmpFileUri = draft.sidecar?.docUri,
+        darktableXmpUri = draft.darktableXmp?.docUri,
         pairMode = draft.pairMode,
     )
 
@@ -70,6 +71,7 @@ object ScanMerger {
             companionFileSizeBytes = draft.companion?.size,
             companionFormat = draft.companionFormat,
             xmpFileUri = draft.sidecar?.docUri,
+            darktableXmpUri = draft.darktableXmp?.docUri,
             pairMode = draft.pairMode,
         )
     }

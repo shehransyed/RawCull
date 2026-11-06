@@ -1,0 +1,253 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 4,
+    "identityHash": "78334dad21de031b8cd366674324211d",
+    "entities": [
+      {
+        "tableName": "photo_assets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `rootUri` TEXT NOT NULL, `relativeDir` TEXT NOT NULL, `parentDocUri` TEXT NOT NULL, `fileName` TEXT NOT NULL, `fileUri` TEXT NOT NULL, `format` TEXT NOT NULL, `fileSizeBytes` INTEGER NOT NULL, `fileLastModified` INTEGER NOT NULL, `dateTaken` INTEGER NOT NULL, `metadataLoaded` INTEGER NOT NULL, `cullStatus` TEXT NOT NULL, `rating` INTEGER NOT NULL, `colorLabel` TEXT NOT NULL, `tags` TEXT NOT NULL, `width` INTEGER NOT NULL, `height` INTEGER NOT NULL, `cameraMake` TEXT, `cameraModel` TEXT, `lensModel` TEXT, `shutterSpeed` TEXT, `aperture` TEXT, `iso` TEXT, `focalLength` TEXT, `exposureBias` TEXT, `orientation` INTEGER NOT NULL, `cachedThumbnailPath` TEXT, `lastModified` INTEGER NOT NULL, `companionFileName` TEXT, `companionFileUri` TEXT, `companionFileSizeBytes` INTEGER, `companionFormat` TEXT, `xmpFileUri` TEXT, `pairMode` TEXT NOT NULL, `xmpSyncStatus` TEXT NOT NULL, `xmpLastSyncedMtime` INTEGER, `xmpError` TEXT, `darktableXmpUri` TEXT, `xmpPendingFields` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rootUri",
+            "columnName": "rootUri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "relativeDir",
+            "columnName": "relativeDir",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentDocUri",
+            "columnName": "parentDocUri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileName",
+            "columnName": "fileName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileUri",
+            "columnName": "fileUri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "format",
+            "columnName": "format",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileSizeBytes",
+            "columnName": "fileSizeBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileLastModified",
+            "columnName": "fileLastModified",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dateTaken",
+            "columnName": "dateTaken",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadataLoaded",
+            "columnName": "metadataLoaded",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cullStatus",
+            "columnName": "cullStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rating",
+            "columnName": "rating",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "colorLabel",
+            "columnName": "colorLabel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tags",
+            "columnName": "tags",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "width",
+            "columnName": "width",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "height",
+            "columnName": "height",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cameraMake",
+            "columnName": "cameraMake",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cameraModel",
+            "columnName": "cameraModel",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lensModel",
+            "columnName": "lensModel",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "shutterSpeed",
+            "columnName": "shutterSpeed",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "aperture",
+            "columnName": "aperture",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "iso",
+            "columnName": "iso",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "focalLength",
+            "columnName": "focalLength",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "exposureBias",
+            "columnName": "exposureBias",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "orientation",
+            "columnName": "orientation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cachedThumbnailPath",
+            "columnName": "cachedThumbnailPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastModified",
+            "columnName": "lastModified",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companionFileName",
+            "columnName": "companionFileName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "companionFileUri",
+            "columnName": "companionFileUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "companionFileSizeBytes",
+            "columnName": "companionFileSizeBytes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "companionFormat",
+            "columnName": "companionFormat",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "xmpFileUri",
+            "columnName": "xmpFileUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pairMode",
+            "columnName": "pairMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "xmpSyncStatus",
+            "columnName": "xmpSyncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "xmpLastSyncedMtime",
+            "columnName": "xmpLastSyncedMtime",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "xmpError",
+            "columnName": "xmpError",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "darktableXmpUri",
+            "columnName": "darktableXmpUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "xmpPendingFields",
+            "columnName": "xmpPendingFields",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_photo_assets_rootUri",
+            "unique": false,
+            "columnNames": [
+              "rootUri"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_photo_assets_rootUri` ON `${TABLE_NAME}` (`rootUri`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '78334dad21de031b8cd366674324211d')"
+    ]
+  }
+}
