@@ -16,8 +16,8 @@ import dev.shehran.rawcull.data.model.ExportConfig
 import dev.shehran.rawcull.data.model.ExportMode
 import dev.shehran.rawcull.data.model.ExportProgress
 import dev.shehran.rawcull.data.model.FilterOptions
-import dev.shehran.rawcull.data.model.RawFormat
-import dev.shehran.rawcull.data.model.RawPhotoItem
+import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.SortOrder
 import dev.shehran.rawcull.data.repository.RawCatalogRepository
 import dev.shehran.rawcull.util.HistogramCalculator
@@ -39,8 +39,8 @@ enum class DamViewMode {
 }
 
 data class DamUiState(
-    val photos: List<RawPhotoItem> = emptyList(),
-    val filteredPhotos: List<RawPhotoItem> = emptyList(),
+    val photos: List<PhotoAsset> = emptyList(),
+    val filteredPhotos: List<PhotoAsset> = emptyList(),
     val selectedIndex: Int = 0,
     val compareIndex: Int = 1,
     val isCompareMode: Boolean = false,
@@ -61,17 +61,17 @@ data class DamUiState(
     val isLoupeZoomed: Boolean = false,
     val zoomFactor: Float = 1f
 ) {
-    val currentPhoto: RawPhotoItem?
+    val currentPhoto: PhotoAsset?
         get() = filteredPhotos.getOrNull(selectedIndex)
 
-    val comparePhoto: RawPhotoItem?
+    val comparePhoto: PhotoAsset?
         get() = filteredPhotos.getOrNull(compareIndex)
 
     val totalCount: Int get() = photos.size
     val picksCount: Int get() = photos.count { it.cullStatus == CullStatus.PICK }
     val rejectsCount: Int get() = photos.count { it.cullStatus == CullStatus.REJECT }
     val unflaggedCount: Int get() = photos.count { it.cullStatus == CullStatus.UNFLAGGED }
-    val rawAndJpegCount: Int get() = photos.count { it.hasCompanionJpeg }
+    val rawAndJpegCount: Int get() = photos.count { it.hasCompanion }
 }
 
 class RawCullViewModel(
@@ -98,7 +98,7 @@ class RawCullViewModel(
         }
     }
 
-    private fun updatePhotosList(photoList: List<RawPhotoItem>) {
+    private fun updatePhotosList(photoList: List<PhotoAsset>) {
         val current = _uiState.value
         val filtered = applyFilterAndSort(photoList, current.filterOptions)
         val newIndex = current.selectedIndex.coerceIn(0, (filtered.size - 1).coerceAtLeast(0))
@@ -114,9 +114,9 @@ class RawCullViewModel(
     }
 
     private fun applyFilterAndSort(
-        list: List<RawPhotoItem>,
+        list: List<PhotoAsset>,
         filter: FilterOptions
-    ): List<RawPhotoItem> {
+    ): List<PhotoAsset> {
         var filtered = list.filter { photo ->
             // Cull mode filter
             val cullMatch = when (filter.cullFilter) {
@@ -438,10 +438,10 @@ class RawCullViewModel(
             val bitmap = RawPreviewLoader.loadThumbnail(
                 appContext,
                 Uri.parse(photo.fileUri),
-                photo.id,
+                photo.previewCacheKey,
                 photo.format,
                 maxDimension = 320,
-                companionJpegUri = photo.jpegFileUri?.let { Uri.parse(it) }
+                companionUri = photo.companionFileUri?.let { Uri.parse(it) }
             )
             if (bitmap != null) {
                 val hist = HistogramCalculator.compute(bitmap)

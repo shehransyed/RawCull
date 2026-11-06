@@ -2,16 +2,18 @@ package dev.shehran.rawcull.data.repository
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import dev.shehran.rawcull.data.local.RawPhotoDao
+import dev.shehran.rawcull.data.model.AssetIds
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.ExportConfig
 import dev.shehran.rawcull.data.model.ExportProgress
 import dev.shehran.rawcull.data.model.IngestFileSelection
 import dev.shehran.rawcull.data.model.PairMode
-import dev.shehran.rawcull.data.model.RawFormat
-import dev.shehran.rawcull.data.model.RawPhotoItem
+import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.XmpSyncStatus
 import dev.shehran.rawcull.util.RawMetadataParser
 import dev.shehran.rawcull.util.SamplePhotosGenerator
@@ -34,9 +36,9 @@ class RawCatalogRepository(
     private val context: Context,
     private val dao: RawPhotoDao,
 ) {
-    val allPhotos: Flow<List<RawPhotoItem>> = dao.getAllPhotos()
+    val allPhotos: Flow<List<PhotoAsset>> = dao.getAllPhotos()
 
-    suspend fun loadSampleShoot(): List<RawPhotoItem> = withContext(Dispatchers.IO) {
+    suspend fun loadSampleShoot(): List<PhotoAsset> = withContext(Dispatchers.IO) {
         val samples = SamplePhotosGenerator.createSampleShoot(context)
         dao.insertPhotos(samples)
         samples
@@ -48,6 +50,9 @@ class RawCatalogRepository(
     ): Int = withContext(Dispatchers.IO) {
         val rootDoc = DocumentFile.fromTreeUri(context, treeUri) ?: return@withContext 0
         val files = rootDoc.listFiles()
+        val rootDocUri = DocumentsContract.buildDocumentUriUsingTree(
+            treeUri, DocumentsContract.getTreeDocumentId(treeUri)
+        ).toString()
 
         val rawExtensions = setOf("arw", "dng", "cr2", "cr3", "nef", "raw")
         val jpegExtensions = setOf("jpg", "jpeg")
@@ -71,7 +76,7 @@ class RawCatalogRepository(
             }
         }
 
-        val rawItems = mutableListOf<RawPhotoItem>()
+        val rawItems = mutableListOf<PhotoAsset>()
         var scannedCount = 0
 
         for ((stem, rawFile) in rawDocs) {
@@ -79,12 +84,12 @@ class RawCatalogRepository(
             scannedCount++
             onProgress(scannedCount, name)
 
-            val format = RawFormat.fromFileName(name)
+            val format = PhotoFormat.fromFileName(name)
             val metadata = RawMetadataParser.parse(context, rawFile.uri, format)
 
             // Companion JPEG check
             val matchingJpeg = jpegDocs[stem]
-            val pairMode = if (matchingJpeg != null) PairMode.RAW_AND_JPEG else PairMode.RAW_ONLY
+            val pairMode = if (matchingJpeg != null) PairMode.RAW_AND_RASTER else PairMode.RAW_ONLY
 
             // Existing XMP Sidecar check & pre-population
             val matchingXmp = xmpDocs[stem]
@@ -92,11 +97,14 @@ class RawCatalogRepository(
                 XmpSidecarManager.readSidecar(context, matchingXmp.uri)
             } else null
 
-            val item = RawPhotoItem(
-                id = "${treeUri}_$name".hashCode().toString(),
+            val item = PhotoAsset(
+                id = AssetIds.of(treeUri.toString(), "", name.substringBeforeLast('.')),
                 fileName = name,
                 fileUri = rawFile.uri.toString(),
-                folderUri = treeUri.toString(),
+                rootUri = treeUri.toString(),
+                parentDocUri = rootDocUri,
+                fileLastModified = rawFile.lastModified(),
+                metadataLoaded = true,
                 format = format,
                 fileSizeBytes = rawFile.length(),
                 dateTaken = if (metadata.dateTaken > 0) metadata.dateTaken else rawFile.lastModified(),
@@ -115,10 +123,10 @@ class RawCatalogRepository(
                 focalLength = metadata.focalLength,
                 exposureBias = metadata.exposureBias,
                 orientation = metadata.orientation,
-                isSample = false,
-                jpegFileName = matchingJpeg?.name,
-                jpegFileUri = matchingJpeg?.uri?.toString(),
-                jpegFileSizeBytes = matchingJpeg?.length(),
+                companionFileName = matchingJpeg?.name,
+                companionFileUri = matchingJpeg?.uri?.toString(),
+                companionFileSizeBytes = matchingJpeg?.length(),
+                companionFormat = matchingJpeg?.let { PhotoFormat.JPEG },
                 xmpFileUri = matchingXmp?.uri?.toString(),
                 pairMode = pairMode,
                 xmpSyncStatus = XmpSyncStatus.SYNCED
@@ -132,9 +140,18 @@ class RawCatalogRepository(
         rawItems.size
     }
 
+    /** `.HIF` isn't an extension providers map to image/heif, so they would append one. */
+    private fun exportMimeType(format: PhotoFormat): String =
+        if (format == PhotoFormat.HEIF) "application/octet-stream" else format.mimeType
+
     private suspend fun syncXmpOnDisk(photoId: String) {
         val photo = dao.getPhotoById(photoId) ?: return
-        XmpSidecarManager.writeSidecar(context, photo.folderUri, photo)
+        val xmpUri = XmpSidecarManager.writeSidecar(context, photo)
+        val status = if (xmpUri != null) XmpSyncStatus.SYNCED else XmpSyncStatus.ERROR
+        val storedUri = xmpUri ?: photo.xmpFileUri
+        if (storedUri != photo.xmpFileUri || status != photo.xmpSyncStatus) {
+            dao.updateXmpState(photoId, storedUri, status)
+        }
     }
 
     suspend fun setCullStatus(id: String, status: CullStatus) = withContext(Dispatchers.IO) {
@@ -152,7 +169,7 @@ class RawCatalogRepository(
         syncXmpOnDisk(id)
     }
 
-    suspend fun updatePhoto(photo: RawPhotoItem) = withContext(Dispatchers.IO) {
+    suspend fun updatePhoto(photo: PhotoAsset) = withContext(Dispatchers.IO) {
         dao.updatePhoto(photo)
         syncXmpOnDisk(photo.id)
     }
@@ -203,7 +220,7 @@ class RawCatalogRepository(
      * - Live MB/s telemetry
      */
     fun exportCulledFiles(
-        photosToExport: List<RawPhotoItem>,
+        photosToExport: List<PhotoAsset>,
         config: ExportConfig
     ): Flow<ExportProgress> = flow {
         if (photosToExport.isEmpty()) {
@@ -266,18 +283,10 @@ class RawCatalogRepository(
             // 1. Copy RAW file (if selection is BOTH or RAW_ONLY)
             if (config.fileSelection == IngestFileSelection.BOTH_RAW_AND_JPEG ||
                 config.fileSelection == IngestFileSelection.RAW_ONLY ||
-                photo.jpegFileUri == null
+                photo.companionFileUri == null
             ) {
                 val sourceUri = Uri.parse(photo.fileUri)
-                val mimeType = when (photo.format) {
-                    RawFormat.DNG -> "image/x-adobe-dng"
-                    RawFormat.ARW -> "image/x-sony-arw"
-                    RawFormat.CR2, RawFormat.CR3 -> "image/x-canon-cr2"
-                    RawFormat.NEF -> "image/x-nikon-nef"
-                    else -> "application/octet-stream"
-                }
-
-                val targetRawDoc = targetDirectoryDoc.createFile(mimeType, photo.fileName)
+                val targetRawDoc = targetDirectoryDoc.createFile(exportMimeType(photo.format), photo.fileName)
                 if (targetRawDoc != null) {
                     var fileBytes = 0L
                     runCatching {
@@ -300,10 +309,13 @@ class RawCatalogRepository(
             // 2. Copy Companion JPEG file (if selection is BOTH or JPEG_ONLY and JPEG exists)
             if ((config.fileSelection == IngestFileSelection.BOTH_RAW_AND_JPEG ||
                  config.fileSelection == IngestFileSelection.JPEG_ONLY) &&
-                photo.jpegFileUri != null && photo.jpegFileName != null
+                photo.companionFileUri != null && photo.companionFileName != null
             ) {
-                val jpegSourceUri = Uri.parse(photo.jpegFileUri)
-                val targetJpegDoc = targetDirectoryDoc.createFile("image/jpeg", photo.jpegFileName)
+                val jpegSourceUri = Uri.parse(photo.companionFileUri)
+                val targetJpegDoc = targetDirectoryDoc.createFile(
+                    exportMimeType(photo.companionFormat ?: PhotoFormat.JPEG),
+                    photo.companionFileName
+                )
                 if (targetJpegDoc != null) {
                     var jpegBytes = 0L
                     runCatching {
@@ -325,8 +337,7 @@ class RawCatalogRepository(
 
             // 3. Generate and copy matching Adobe XMP sidecar
             if (config.generateXmpSidecars) {
-                val xmpName = "${photo.baseStem}.xmp"
-                val xmpDoc = targetDirectoryDoc.createFile("application/rdf+xml", xmpName)
+                val xmpDoc = targetDirectoryDoc.createFile("application/octet-stream", photo.sidecarFileName)
                 if (xmpDoc != null) {
                     runCatching {
                         context.contentResolver.openOutputStream(xmpDoc.uri)?.use { output ->

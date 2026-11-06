@@ -54,13 +54,13 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
-import dev.shehran.rawcull.data.model.RawFormat
-import dev.shehran.rawcull.data.model.RawPhotoItem
+import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.util.RawPreviewLoader
 
 @Composable
 fun FilmstripBar(
-    photos: List<RawPhotoItem>,
+    photos: List<PhotoAsset>,
     selectedIndex: Int,
     selectedPhotoIds: Set<String>,
     isMultiSelectMode: Boolean,
@@ -115,7 +115,7 @@ fun FilmstripBar(
 
 @Composable
 private fun FilmstripThumbnailItem(
-    photo: RawPhotoItem,
+    photo: PhotoAsset,
     isCurrent: Boolean,
     isChecked: Boolean,
     isMultiSelectMode: Boolean,
@@ -128,14 +128,14 @@ private fun FilmstripThumbnailItem(
 
     LaunchedEffect(photo.id) {
         isLoading = true
-        val jpegUri = photo.jpegFileUri?.toUri()
+        val jpegUri = photo.companionFileUri?.toUri()
         thumbBitmap = RawPreviewLoader.loadThumbnail(
             context = context,
             uri = photo.fileUri.toUri(),
-            id = photo.id,
+            id = photo.previewCacheKey,
             format = photo.format,
             maxDimension = 240,
-            companionJpegUri = jpegUri,
+            companionUri = jpegUri,
         )
         isLoading = false
     }
@@ -191,8 +191,8 @@ private fun FilmstripThumbnailItem(
                     .padding(horizontal = 4.dp, vertical = 1.dp)
             ) {
                 Text(
-                    text = if (photo.hasCompanionJpeg) "RAW+JPG" else photo.format.extension,
-                    color = if (photo.hasCompanionJpeg) Color(0xFFA7F3D0) else if (photo.format == RawFormat.ARW) Color(0xFFF97316) else Color(0xFF38BDF8),
+                    text = photo.badgeText,
+                    color = if (photo.hasCompanion) Color(0xFFA7F3D0) else if (photo.format == PhotoFormat.ARW) Color(0xFFF97316) else Color(0xFF38BDF8),
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold
                 )

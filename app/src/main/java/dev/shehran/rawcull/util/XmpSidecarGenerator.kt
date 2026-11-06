@@ -3,11 +3,11 @@ package dev.shehran.rawcull.util
 import dev.shehran.rawcull.BuildConfig
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
-import dev.shehran.rawcull.data.model.RawPhotoItem
+import dev.shehran.rawcull.data.model.PhotoAsset
 
 object XmpSidecarGenerator {
 
-    fun generateXmp(photo: RawPhotoItem): String {
+    fun generateXmp(photo: PhotoAsset): String {
         val rating = photo.rating
         val label = when (photo.colorLabel) {
             ColorLabel.RED -> "Red"

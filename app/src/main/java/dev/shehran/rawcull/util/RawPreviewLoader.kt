@@ -9,7 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.util.LruCache
 import androidx.exifinterface.media.ExifInterface
-import dev.shehran.rawcull.data.model.RawFormat
+import dev.shehran.rawcull.data.model.PhotoFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -30,10 +30,10 @@ object RawPreviewLoader {
         context: Context,
         uri: Uri,
         id: String,
-        format: RawFormat,
+        format: PhotoFormat,
         targetWidth: Int = 1920,
         targetHeight: Int = 1080,
-        companionJpegUri: Uri? = null,
+        companionUri: Uri? = null,
     ): Bitmap? = withContext(Dispatchers.IO) {
         val cacheKey = "${id}_${targetWidth}x$targetHeight"
         memoryCache[cacheKey]?.let { return@withContext it }
@@ -46,12 +46,12 @@ object RawPreviewLoader {
         }
 
         // Decode from companion JPEG if available, or RAW source
-        val companionBitmap = companionJpegUri?.let { jpegUri ->
+        val companionBitmap = companionUri?.let { jpegUri ->
             decodeWithBitmapFactory(context, jpegUri, targetWidth, targetHeight)?.let {
                 applyExifOrientation(context, jpegUri, it)
             }
         }
-        val bitmap = companionBitmap ?: decodeRaw(context, uri, format, targetWidth, targetHeight)
+        val bitmap = companionBitmap ?: decodePrimary(context, uri, format, targetWidth, targetHeight)
 
         if (bitmap != null) {
             memoryCache.put(cacheKey, bitmap)
@@ -64,9 +64,9 @@ object RawPreviewLoader {
         context: Context,
         uri: Uri,
         id: String,
-        format: RawFormat,
+        format: PhotoFormat,
         maxDimension: Int = 512,
-        companionJpegUri: Uri? = null,
+        companionUri: Uri? = null,
     ): Bitmap? = withContext(Dispatchers.IO) {
         val cacheKey = "${id}_thumb_$maxDimension"
         memoryCache[cacheKey]?.let { return@withContext it }
@@ -77,12 +77,12 @@ object RawPreviewLoader {
             return@withContext diskCached
         }
 
-        val companionBitmap = companionJpegUri?.let { jpegUri ->
+        val companionBitmap = companionUri?.let { jpegUri ->
             decodeWithBitmapFactory(context, jpegUri, maxDimension, maxDimension)?.let {
                 applyExifOrientation(context, jpegUri, it)
             }
         }
-        val bitmap = companionBitmap ?: decodeRaw(context, uri, format, maxDimension, maxDimension)
+        val bitmap = companionBitmap ?: decodePrimary(context, uri, format, maxDimension, maxDimension)
 
         if (bitmap != null) {
             memoryCache.put(cacheKey, bitmap)
@@ -91,10 +91,31 @@ object RawPreviewLoader {
         bitmap
     }
 
+    private fun decodePrimary(
+        context: Context,
+        uri: Uri,
+        format: PhotoFormat,
+        targetW: Int,
+        targetH: Int,
+    ): Bitmap? =
+        if (format.isRaw) decodeRaw(context, uri, targetW, targetH) else decodeRaster(context, uri, targetW, targetH)
+
+    /** JPEG/HEIF primaries decode directly: their EXIF thumbnail is far too small for the loupe. */
+    private fun decodeRaster(context: Context, uri: Uri, targetW: Int, targetH: Int): Bitmap? {
+        // ImageDecoder applies EXIF orientation itself; the BitmapFactory path needs it applied.
+        val decoded = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            decodeWithImageDecoder(context, uri, targetW, targetH)
+        } else {
+            null
+        }
+        return decoded ?: decodeWithBitmapFactory(context, uri, targetW, targetH)?.let {
+            applyExifOrientation(context, uri, it)
+        }
+    }
+
     private fun decodeRaw(
         context: Context,
         uri: Uri,
-        @Suppress("UNUSED_PARAMETER") format: RawFormat,
         targetW: Int,
         targetH: Int,
     ): Bitmap? {

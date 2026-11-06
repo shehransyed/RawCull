@@ -32,15 +32,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.shehran.rawcull.data.model.RawFormat
-import dev.shehran.rawcull.data.model.RawPhotoItem
+import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.data.model.PhotoAsset
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 @Composable
 fun ExifInspectorPanel(
-    photo: RawPhotoItem?,
+    photo: PhotoAsset?,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -68,8 +68,8 @@ fun ExifInspectorPanel(
 
                 if (photo != null) {
                     val badgeColor = when (photo.format) {
-                        RawFormat.ARW -> Color(0xFFF97316) // Sony Orange
-                        RawFormat.DNG -> Color(0xFF06B6D4) // Adobe Cyan
+                        PhotoFormat.ARW -> Color(0xFFF97316) // Sony Orange
+                        PhotoFormat.DNG -> Color(0xFF06B6D4) // Adobe Cyan
                         else -> Color(0xFFA855F7)
                     }
                     Box(
@@ -182,18 +182,18 @@ fun ExifInspectorPanel(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // Paired JPEG & Live XMP
-                if (photo.hasCompanionJpeg) {
+                if (photo.hasCompanion) {
                     MetadataRow(
                         icon = Icons.Default.Info,
-                        label = "Paired JPEG",
-                        value = photo.jpegFileName ?: "Yes"
+                        label = "Paired ${photo.companionFormat?.displayName ?: "file"}",
+                        value = photo.companionFileName ?: "Yes"
                     )
                 }
 
                 MetadataRow(
                     icon = Icons.Default.Info,
                     label = "XMP Sidecar",
-                    value = "${photo.baseStem}.xmp (Live Sync)"
+                    value = "${photo.sidecarFileName} (Live Sync)"
                 )
             }
         }

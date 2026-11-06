@@ -52,13 +52,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import dev.shehran.rawcull.data.model.CullStatus
-import dev.shehran.rawcull.data.model.RawPhotoItem
+import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.util.RawPreviewLoader
 
 @Composable
 fun CompareLoupeView(
-    photoA: RawPhotoItem?,
-    photoB: RawPhotoItem?,
+    photoA: PhotoAsset?,
+    photoB: PhotoAsset?,
     onPickA: () -> Unit,
     onPickB: () -> Unit,
     onRejectA: () -> Unit,
@@ -78,8 +78,8 @@ fun CompareLoupeView(
     LaunchedEffect(photoA?.id) {
         if (photoA != null) {
             loadingA = true
-            val jpegUriA = photoA.jpegFileUri?.toUri()
-            bitmapA = RawPreviewLoader.loadPreview(context, photoA.fileUri.toUri(), photoA.id, photoA.format, 1920, 1200, companionJpegUri = jpegUriA)
+            val jpegUriA = photoA.companionFileUri?.toUri()
+            bitmapA = RawPreviewLoader.loadPreview(context, photoA.fileUri.toUri(), photoA.previewCacheKey, photoA.format, 1920, 1200, companionUri = jpegUriA)
             loadingA = false
         }
     }
@@ -87,8 +87,8 @@ fun CompareLoupeView(
     LaunchedEffect(photoB?.id) {
         if (photoB != null) {
             loadingB = true
-            val jpegUriB = photoB.jpegFileUri?.toUri()
-            bitmapB = RawPreviewLoader.loadPreview(context, photoB.fileUri.toUri(), photoB.id, photoB.format, 1920, 1200, companionJpegUri = jpegUriB)
+            val jpegUriB = photoB.companionFileUri?.toUri()
+            bitmapB = RawPreviewLoader.loadPreview(context, photoB.fileUri.toUri(), photoB.previewCacheKey, photoB.format, 1920, 1200, companionUri = jpegUriB)
             loadingB = false
         }
     }
@@ -200,7 +200,7 @@ fun CompareLoupeView(
 @Composable
 private fun ComparePane(
     title: String,
-    photo: RawPhotoItem?,
+    photo: PhotoAsset?,
     bitmap: Bitmap?,
     isLoading: Boolean,
     scale: Float,

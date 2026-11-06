@@ -59,13 +59,13 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
-import dev.shehran.rawcull.data.model.RawFormat
-import dev.shehran.rawcull.data.model.RawPhotoItem
+import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.util.RawPreviewLoader
 
 @Composable
 fun ZoomableLoupeView(
-    photo: RawPhotoItem?,
+    photo: PhotoAsset?,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     modifier: Modifier = Modifier,
@@ -85,15 +85,15 @@ fun ZoomableLoupeView(
         }
         isLoading = true
         val uri = photo.fileUri.toUri()
-        val jpegUri = photo.jpegFileUri?.toUri()
+        val jpegUri = photo.companionFileUri?.toUri()
         val bmp = RawPreviewLoader.loadPreview(
             context = context,
             uri = uri,
-            id = photo.id,
+            id = photo.previewCacheKey,
             format = photo.format,
             targetWidth = 2560,
             targetHeight = 1600,
-            companionJpegUri = jpegUri,
+            companionUri = jpegUri,
         )
         previewBitmap = bmp
         isLoading = false
@@ -191,8 +191,8 @@ fun ZoomableLoupeView(
             ) {
                 // RAW format badge
                 val formatBg = when (photo.format) {
-                    RawFormat.ARW -> Color(0xFFEA580C)
-                    RawFormat.DNG -> Color(0xFF0284C7)
+                    PhotoFormat.ARW -> Color(0xFFEA580C)
+                    PhotoFormat.DNG -> Color(0xFF0284C7)
                     else -> Color(0xFF7C3AED)
                 }
                 Box(
@@ -202,7 +202,7 @@ fun ZoomableLoupeView(
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = if (photo.hasCompanionJpeg) "${photo.format.extension} + JPG" else photo.format.displayName.uppercase(),
+                        text = if (photo.hasCompanion) photo.badgeText else photo.format.displayName.uppercase(),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp

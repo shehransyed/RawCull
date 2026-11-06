@@ -2,14 +2,15 @@ package dev.shehran.rawcull.util
 
 import android.content.Context
 import android.net.Uri
-import androidx.documentfile.provider.DocumentFile
+import android.provider.DocumentsContract
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
-import dev.shehran.rawcull.data.model.RawPhotoItem
+import dev.shehran.rawcull.data.model.PhotoAsset
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.InputStreamReader
 
@@ -92,52 +93,58 @@ object XmpSidecarManager {
     }
 
     /**
-     * Atomically writes or updates the .xmp sidecar directly alongside the photo file
+     * Writes the .xmp sidecar next to the photo and returns its URI, or null if that failed.
+     * Demo assets live in a local folder; everything else goes through SAF using the stored
+     * [PhotoAsset.xmpFileUri] / [PhotoAsset.parentDocUri], never findFile.
      */
-    suspend fun writeSidecar(
-        context: Context,
-        folderUriString: String,
-        photo: RawPhotoItem
-    ): String? = withContext(Dispatchers.IO) {
-        val xmpName = "${photo.baseStem}.xmp"
-        val xmpXml = XmpSidecarGenerator.generateXmp(photo)
-
-        // Case 1: Local file scheme or sample folder
-        if (folderUriString.startsWith("file://") || folderUriString.startsWith("/")) {
-            val localPath = if (folderUriString.startsWith("file://")) Uri.parse(folderUriString).path else folderUriString
-            if (localPath != null) {
-                val dir = File(localPath)
-                if (dir.exists()) {
-                    val xmpFile = File(dir, xmpName)
-                    runCatching {
-                        FileOutputStream(xmpFile).use { out ->
-                            out.write(xmpXml.toByteArray(Charsets.UTF_8))
-                            out.flush()
-                        }
-                        return@withContext Uri.fromFile(xmpFile).toString()
-                    }
-                }
-            }
+    suspend fun writeSidecar(context: Context, photo: PhotoAsset): String? = withContext(Dispatchers.IO) {
+        val bytes = XmpSidecarGenerator.generateXmp(photo).toByteArray(Charsets.UTF_8)
+        if (photo.parentDocUri.startsWith("file://")) {
+            writeLocal(photo, bytes)
+        } else {
+            writeExisting(context, photo.xmpFileUri, bytes) ?: createAndWrite(context, photo, bytes)
         }
+    }
 
-        // Case 2: Storage Access Framework (SAF) tree Uri
-        runCatching {
-            val treeUri = Uri.parse(folderUriString)
-            val parentDoc = DocumentFile.fromTreeUri(context, treeUri) ?: return@runCatching null
+    private fun writeLocal(photo: PhotoAsset, bytes: ByteArray): String? = runCatching {
+        val dir = File(requireNotNull(Uri.parse(photo.parentDocUri).path))
+        val xmpFile = File(dir, photo.sidecarFileName)
+        FileOutputStream(xmpFile).use { it.write(bytes) }
+        Uri.fromFile(xmpFile).toString()
+    }.getOrNull()
 
-            // Find existing .xmp or create a new one
-            var xmpDoc = parentDoc.findFile(xmpName)
-            if (xmpDoc == null) {
-                xmpDoc = parentDoc.createFile("application/rdf+xml", xmpName)
-            }
-
-            if (xmpDoc != null) {
-                context.contentResolver.openOutputStream(xmpDoc.uri, "wt")?.use { out ->
-                    out.write(xmpXml.toByteArray(Charsets.UTF_8))
-                    out.flush()
-                }
-                xmpDoc.uri.toString()
-            } else null
+    private fun writeExisting(context: Context, xmpUri: String?, bytes: ByteArray): String? {
+        if (xmpUri == null) return null
+        return runCatching {
+            writeBytes(context, Uri.parse(xmpUri), bytes)
+            xmpUri
         }.getOrNull()
     }
+
+    private fun createAndWrite(context: Context, photo: PhotoAsset, bytes: ByteArray): String? = runCatching {
+        val resolver = context.contentResolver
+        val name = photo.sidecarFileName
+        // octet-stream stops providers appending an extension to the name.
+        val created = DocumentsContract.createDocument(
+            resolver, Uri.parse(photo.parentDocUri), "application/octet-stream", name
+        ) ?: return null
+        // A provider that de-duplicates would hand back "DSC001 (1).xmp", which no app would read.
+        if (displayName(context, created) != name) {
+            DocumentsContract.deleteDocument(resolver, created)
+            return null
+        }
+        writeBytes(context, created, bytes)
+        created.toString()
+    }.getOrNull()
+
+    private fun writeBytes(context: Context, uri: Uri, bytes: ByteArray) {
+        val stream = context.contentResolver.openOutputStream(uri, "wt")
+            ?: throw FileNotFoundException("No output stream for $uri")
+        stream.use { it.write(bytes) }
+    }
+
+    private fun displayName(context: Context, uri: Uri): String? =
+        context.contentResolver.query(
+            uri, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null
+        )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
 }

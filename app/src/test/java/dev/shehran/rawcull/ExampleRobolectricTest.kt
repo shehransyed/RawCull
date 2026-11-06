@@ -5,8 +5,8 @@ import androidx.test.core.app.ApplicationProvider
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PairMode
-import dev.shehran.rawcull.data.model.RawFormat
-import dev.shehran.rawcull.data.model.RawPhotoItem
+import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.util.XmpSidecarGenerator
 import dev.shehran.rawcull.util.XmpSidecarManager
 import org.junit.Assert.assertEquals
@@ -29,20 +29,20 @@ class ExampleRobolectricTest {
 
     @Test
     fun `test raw format detection`() {
-        assertEquals(RawFormat.ARW, RawFormat.fromFileName("DSC04891.ARW"))
-        assertEquals(RawFormat.ARW, RawFormat.fromFileName("photo.arw"))
-        assertEquals(RawFormat.DNG, RawFormat.fromFileName("L1002341.DNG"))
-        assertEquals(RawFormat.DNG, RawFormat.fromFileName("drone.dng"))
+        assertEquals(PhotoFormat.ARW, PhotoFormat.fromFileName("DSC04891.ARW"))
+        assertEquals(PhotoFormat.ARW, PhotoFormat.fromFileName("photo.arw"))
+        assertEquals(PhotoFormat.DNG, PhotoFormat.fromFileName("L1002341.DNG"))
+        assertEquals(PhotoFormat.DNG, PhotoFormat.fromFileName("drone.dng"))
     }
 
     @Test
     fun `test xmp sidecar generator generates valid ratings and tags`() {
-        val photo = RawPhotoItem(
+        val photo = PhotoAsset(
             id = "test_1",
             fileName = "DSC04891.ARW",
             fileUri = "file:///dummy.arw",
-            folderUri = "file:///dummy",
-            format = RawFormat.ARW,
+            rootUri = "file:///dummy",
+            format = PhotoFormat.ARW,
             fileSizeBytes = 35_000_000L,
             dateTaken = System.currentTimeMillis(),
             cullStatus = CullStatus.PICK,
@@ -93,22 +93,23 @@ class ExampleRobolectricTest {
 
     @Test
     fun `test raw and jpeg pair mode properties`() {
-        val pairedItem = RawPhotoItem(
+        val pairedItem = PhotoAsset(
             id = "pair_1",
             fileName = "DSC04891.ARW",
             fileUri = "file:///dummy.arw",
-            folderUri = "file:///dummy",
-            format = RawFormat.ARW,
+            rootUri = "file:///dummy",
+            format = PhotoFormat.ARW,
             fileSizeBytes = 35_000_000L,
             dateTaken = System.currentTimeMillis(),
-            jpegFileName = "DSC04891.JPG",
-            jpegFileUri = "file:///dummy.jpg",
-            jpegFileSizeBytes = 8_000_000L,
-            pairMode = PairMode.RAW_AND_JPEG
+            companionFileName = "DSC04891.JPG",
+            companionFileUri = "file:///dummy.jpg",
+            companionFileSizeBytes = 8_000_000L,
+            companionFormat = PhotoFormat.JPEG,
+            pairMode = PairMode.RAW_AND_RASTER
         )
 
-        assertTrue(pairedItem.hasCompanionJpeg)
+        assertTrue(pairedItem.hasCompanion)
         assertEquals("DSC04891", pairedItem.baseStem)
-        assertEquals(PairMode.RAW_AND_JPEG, pairedItem.pairMode)
+        assertEquals(PairMode.RAW_AND_RASTER, pairedItem.pairMode)
     }
 }

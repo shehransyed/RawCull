@@ -5,7 +5,7 @@ data class FilterOptions(
     val minRating: Int = 0, // 0 = all, 1..5
     val exactRating: Int? = null,
     val colorFilter: ColorLabel? = null,
-    val formatFilter: RawFormat? = null,
+    val formatFilter: PhotoFormat? = null,
     val pairFilter: PairMode? = null,
     val tagFilter: String? = null,
     val searchQuery: String = "",

@@ -57,13 +57,13 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
-import dev.shehran.rawcull.data.model.RawFormat
-import dev.shehran.rawcull.data.model.RawPhotoItem
+import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.util.RawPreviewLoader
 
 @Composable
 fun GridViewGallery(
-    photos: List<RawPhotoItem>,
+    photos: List<PhotoAsset>,
     selectedIndex: Int,
     selectedIds: Set<String>,
     isMultiSelectMode: Boolean,
@@ -184,7 +184,7 @@ fun GridViewGallery(
 
 @Composable
 private fun GridPhotoCard(
-    photo: RawPhotoItem,
+    photo: PhotoAsset,
     isCurrent: Boolean,
     isChecked: Boolean,
     isMultiSelectMode: Boolean,
@@ -197,14 +197,14 @@ private fun GridPhotoCard(
 
     LaunchedEffect(photo.id) {
         isLoading = true
-        val jpegUri = photo.jpegFileUri?.toUri()
+        val jpegUri = photo.companionFileUri?.toUri()
         bitmap = RawPreviewLoader.loadThumbnail(
             context = context,
             uri = photo.fileUri.toUri(),
-            id = photo.id,
+            id = photo.previewCacheKey,
             format = photo.format,
             maxDimension = 360,
-            companionJpegUri = jpegUri,
+            companionUri = jpegUri,
         )
         isLoading = false
     }
@@ -253,8 +253,8 @@ private fun GridPhotoCard(
                     .padding(horizontal = 6.dp, vertical = 2.dp)
             ) {
                 Text(
-                    text = if (photo.hasCompanionJpeg) "RAW+JPG" else photo.format.extension,
-                    color = if (photo.hasCompanionJpeg) Color(0xFFA7F3D0) else if (photo.format == RawFormat.ARW) Color(0xFFF97316) else Color(0xFF38BDF8),
+                    text = photo.badgeText,
+                    color = if (photo.hasCompanion) Color(0xFFA7F3D0) else if (photo.format == PhotoFormat.ARW) Color(0xFFF97316) else Color(0xFF38BDF8),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )

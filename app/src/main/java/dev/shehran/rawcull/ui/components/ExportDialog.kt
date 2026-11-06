@@ -64,15 +64,15 @@ import dev.shehran.rawcull.data.model.ExportConfig
 import dev.shehran.rawcull.data.model.ExportMode
 import dev.shehran.rawcull.data.model.ExportProgress
 import dev.shehran.rawcull.data.model.IngestFileSelection
-import dev.shehran.rawcull.data.model.RawPhotoItem
+import dev.shehran.rawcull.data.model.PhotoAsset
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 @Composable
 fun ExportDialog(
-    photos: List<RawPhotoItem>,
-    filteredPhotos: List<RawPhotoItem>,
+    photos: List<PhotoAsset>,
+    filteredPhotos: List<PhotoAsset>,
     selectedIds: Set<String>,
     destinationFolderUri: String?,
     destinationFolderName: String,

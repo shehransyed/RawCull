@@ -3,7 +3,7 @@ package dev.shehran.rawcull.util
 import android.content.Context
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
-import dev.shehran.rawcull.data.model.RawFormat
+import dev.shehran.rawcull.data.model.PhotoFormat
 import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -25,7 +25,7 @@ data class ExtractedRawMetadata(
 
 object RawMetadataParser {
 
-    fun parse(context: Context, uri: Uri, fallbackFormat: RawFormat): ExtractedRawMetadata {
+    fun parse(context: Context, uri: Uri, fallbackFormat: PhotoFormat): ExtractedRawMetadata {
         return runCatching {
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 parseFromStream(inputStream)
@@ -126,12 +126,13 @@ object RawMetadataParser {
         return null
     }
 
-    private fun fallbackMetadata(format: RawFormat): ExtractedRawMetadata {
+    private fun fallbackMetadata(format: PhotoFormat): ExtractedRawMetadata {
         val defaultModel = when (format) {
-            RawFormat.ARW -> "Sony Alpha (RAW)"
-            RawFormat.DNG -> "Adobe DNG Digital Negative"
-            RawFormat.CR2, RawFormat.CR3 -> "Canon EOS (RAW)"
-            RawFormat.NEF -> "Nikon NEF (RAW)"
+            PhotoFormat.ARW -> "Sony Alpha (RAW)"
+            PhotoFormat.DNG -> "Adobe DNG Digital Negative"
+            PhotoFormat.CR2, PhotoFormat.CR3 -> "Canon EOS (RAW)"
+            PhotoFormat.NEF, PhotoFormat.NRW -> "Nikon NEF (RAW)"
+            PhotoFormat.JPEG, PhotoFormat.HEIF -> null
             else -> "Digital RAW Camera"
         }
         return ExtractedRawMetadata(

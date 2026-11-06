@@ -4,7 +4,7 @@ import androidx.room.TypeConverter
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PairMode
-import dev.shehran.rawcull.data.model.RawFormat
+import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.XmpSyncStatus
 import org.json.JSONArray
 
@@ -26,12 +26,12 @@ class Converters {
     }.getOrDefault(ColorLabel.NONE)
 
     @TypeConverter
-    fun fromRawFormat(format: RawFormat): String = format.name
+    fun fromPhotoFormat(format: PhotoFormat): String = format.name
 
     @TypeConverter
-    fun toRawFormat(value: String): RawFormat = runCatching {
-        RawFormat.valueOf(value)
-    }.getOrDefault(RawFormat.RAW_OTHER)
+    fun toPhotoFormat(value: String): PhotoFormat = runCatching {
+        PhotoFormat.valueOf(value)
+    }.getOrDefault(PhotoFormat.RAW_OTHER)
 
     @TypeConverter
     fun fromPairMode(mode: PairMode): String = mode.name

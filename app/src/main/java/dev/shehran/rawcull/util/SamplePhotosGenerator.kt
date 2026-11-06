@@ -12,11 +12,13 @@ import android.graphics.Shader
 import android.net.Uri
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toColorInt
+import dev.shehran.rawcull.data.model.AssetIds
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
+import dev.shehran.rawcull.data.model.DEMO_ROOT_URI
 import dev.shehran.rawcull.data.model.PairMode
-import dev.shehran.rawcull.data.model.RawFormat
-import dev.shehran.rawcull.data.model.RawPhotoItem
+import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.data.model.PhotoAsset
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -24,14 +26,14 @@ import java.io.FileOutputStream
 
 object SamplePhotosGenerator {
 
-    suspend fun createSampleShoot(context: Context): List<RawPhotoItem> = withContext(Dispatchers.IO) {
+    suspend fun createSampleShoot(context: Context): List<PhotoAsset> = withContext(Dispatchers.IO) {
         val sampleDir = File(context.filesDir, "sample_raw_shoot")
         if (!sampleDir.exists()) sampleDir.mkdirs()
 
         val sampleConfigs = listOf(
             SampleDef(
                 fileName = "DSC04891.ARW",
-                format = RawFormat.ARW,
+                format = PhotoFormat.ARW,
                 cameraMake = "SONY",
                 cameraModel = "ILCE-7M4 (Sony A7 IV)",
                 lensModel = "FE 24-70mm F2.8 GM II",
@@ -49,7 +51,7 @@ object SamplePhotosGenerator {
             ),
             SampleDef(
                 fileName = "DSC04892.ARW",
-                format = RawFormat.ARW,
+                format = PhotoFormat.ARW,
                 cameraMake = "SONY",
                 cameraModel = "ILCE-7M4 (Sony A7 IV)",
                 lensModel = "FE 24-70mm F2.8 GM II",
@@ -67,7 +69,7 @@ object SamplePhotosGenerator {
             ),
             SampleDef(
                 fileName = "DSC04893.ARW",
-                format = RawFormat.ARW,
+                format = PhotoFormat.ARW,
                 cameraMake = "SONY",
                 cameraModel = "ILCE-7M4 (Sony A7 IV)",
                 lensModel = "FE 24-70mm F2.8 GM II",
@@ -85,7 +87,7 @@ object SamplePhotosGenerator {
             ),
             SampleDef(
                 fileName = "L1002341.DNG",
-                format = RawFormat.DNG,
+                format = PhotoFormat.DNG,
                 cameraMake = "LEICA CAMERA AG",
                 cameraModel = "LEICA M11",
                 lensModel = "APO-Summicron-M 50mm f/2 ASPH",
@@ -103,7 +105,7 @@ object SamplePhotosGenerator {
             ),
             SampleDef(
                 fileName = "L1002342.DNG",
-                format = RawFormat.DNG,
+                format = PhotoFormat.DNG,
                 cameraMake = "LEICA CAMERA AG",
                 cameraModel = "LEICA M11",
                 lensModel = "APO-Summicron-M 50mm f/2 ASPH",
@@ -121,7 +123,7 @@ object SamplePhotosGenerator {
             ),
             SampleDef(
                 fileName = "DJI_0428.DNG",
-                format = RawFormat.DNG,
+                format = PhotoFormat.DNG,
                 cameraMake = "DJI",
                 cameraModel = "Mavic 3 Pro",
                 lensModel = "Hasselblad 24mm f/2.8",
@@ -139,7 +141,7 @@ object SamplePhotosGenerator {
             ),
             SampleDef(
                 fileName = "DSC04905.ARW",
-                format = RawFormat.ARW,
+                format = PhotoFormat.ARW,
                 cameraMake = "SONY",
                 cameraModel = "ILCE-7M4 (Sony A7 IV)",
                 lensModel = "FE 85mm F1.4 GM",
@@ -157,7 +159,7 @@ object SamplePhotosGenerator {
             ),
             SampleDef(
                 fileName = "DSC04906.ARW",
-                format = RawFormat.ARW,
+                format = PhotoFormat.ARW,
                 cameraMake = "SONY",
                 cameraModel = "ILCE-7M4 (Sony A7 IV)",
                 lensModel = "FE 85mm F1.4 GM",
@@ -175,7 +177,7 @@ object SamplePhotosGenerator {
             )
         )
 
-        val resultItems = mutableListOf<RawPhotoItem>()
+        val resultItems = mutableListOf<PhotoAsset>()
         val baseTime = System.currentTimeMillis() - (sampleConfigs.size * 180_000L)
 
         sampleConfigs.forEachIndexed { index, def ->
@@ -189,7 +191,7 @@ object SamplePhotosGenerator {
             }
 
             // Create companion JPEG for the first 4 shots to demonstrate RAW+JPEG pairing
-            var companionJpegUri: String? = null
+            var companionUri: String? = null
             var companionJpegName: String? = null
             var companionJpegSize: Long? = null
             var pairMode = PairMode.RAW_ONLY
@@ -203,19 +205,22 @@ object SamplePhotosGenerator {
                         bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
                     }
                 }
-                companionJpegUri = Uri.fromFile(jpegFile).toString()
+                companionUri = Uri.fromFile(jpegFile).toString()
                 companionJpegName = "$stem.JPG"
                 companionJpegSize = 8_420_000L
-                pairMode = PairMode.RAW_AND_JPEG
+                pairMode = PairMode.RAW_AND_RASTER
             }
 
             // Create initial .xmp sidecar file
             val xmpFile = File(sampleDir, "${def.fileName.substringBeforeLast('.')}.xmp")
-            val item = RawPhotoItem(
-                id = "sample_${def.fileName}",
+            val item = PhotoAsset(
+                id = AssetIds.of(DEMO_ROOT_URI, "", def.fileName.substringBeforeLast('.')),
                 fileName = def.fileName,
                 fileUri = Uri.fromFile(file).toString(),
-                folderUri = Uri.fromFile(sampleDir).toString(),
+                rootUri = DEMO_ROOT_URI,
+                parentDocUri = Uri.fromFile(sampleDir).toString(),
+                fileLastModified = file.lastModified(),
+                metadataLoaded = true,
                 format = def.format,
                 fileSizeBytes = def.sizeBytes,
                 dateTaken = baseTime + (index * 180_000L),
@@ -233,10 +238,10 @@ object SamplePhotosGenerator {
                 iso = def.iso,
                 focalLength = def.focalLength,
                 exposureBias = def.exposureBias,
-                isSample = true,
-                jpegFileName = companionJpegName,
-                jpegFileUri = companionJpegUri,
-                jpegFileSizeBytes = companionJpegSize,
+                companionFileName = companionJpegName,
+                companionFileUri = companionUri,
+                companionFileSizeBytes = companionJpegSize,
+                companionFormat = if (companionJpegName != null) PhotoFormat.JPEG else null,
                 xmpFileUri = Uri.fromFile(xmpFile).toString(),
                 pairMode = pairMode
             )
@@ -429,7 +434,7 @@ object SamplePhotosGenerator {
 
     private data class SampleDef(
         val fileName: String,
-        val format: RawFormat,
+        val format: PhotoFormat,
         val cameraMake: String,
         val cameraModel: String,
         val lensModel: String,

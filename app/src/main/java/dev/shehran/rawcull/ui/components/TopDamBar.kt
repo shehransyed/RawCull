@@ -57,7 +57,7 @@ import androidx.compose.ui.unit.sp
 import dev.shehran.rawcull.data.model.CullFilterMode
 import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.PairMode
-import dev.shehran.rawcull.data.model.RawFormat
+import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.ui.DamUiState
 import dev.shehran.rawcull.ui.DamViewMode
 
@@ -288,11 +288,11 @@ fun TopDamBar(
                 if (uiState.rawAndJpegCount > 0) {
                     DamFilterChip(
                         label = "RAW+JPG (${uiState.rawAndJpegCount})",
-                        selected = uiState.filterOptions.pairFilter == PairMode.RAW_AND_JPEG,
+                        selected = uiState.filterOptions.pairFilter == PairMode.RAW_AND_RASTER,
                         activeColor = Color(0xFFA7F3D0),
                         onClick = {
                             val current = uiState.filterOptions.pairFilter
-                            onUpdateFilter { it.copy(pairFilter = if (current == PairMode.RAW_AND_JPEG) null else PairMode.RAW_AND_JPEG) }
+                            onUpdateFilter { it.copy(pairFilter = if (current == PairMode.RAW_AND_RASTER) null else PairMode.RAW_AND_RASTER) }
                         }
                     )
                 }
@@ -300,20 +300,20 @@ fun TopDamBar(
                 // Format filters
                 DamFilterChip(
                     label = "Sony ARW",
-                    selected = uiState.filterOptions.formatFilter == RawFormat.ARW,
+                    selected = uiState.filterOptions.formatFilter == PhotoFormat.ARW,
                     activeColor = Color(0xFFF97316),
                     onClick = {
                         val current = uiState.filterOptions.formatFilter
-                        onUpdateFilter { it.copy(formatFilter = if (current == RawFormat.ARW) null else RawFormat.ARW) }
+                        onUpdateFilter { it.copy(formatFilter = if (current == PhotoFormat.ARW) null else PhotoFormat.ARW) }
                     }
                 )
                 DamFilterChip(
                     label = "Adobe DNG",
-                    selected = uiState.filterOptions.formatFilter == RawFormat.DNG,
+                    selected = uiState.filterOptions.formatFilter == PhotoFormat.DNG,
                     activeColor = Color(0xFF06B6D4),
                     onClick = {
                         val current = uiState.filterOptions.formatFilter
-                        onUpdateFilter { it.copy(formatFilter = if (current == RawFormat.DNG) null else RawFormat.DNG) }
+                        onUpdateFilter { it.copy(formatFilter = if (current == PhotoFormat.DNG) null else PhotoFormat.DNG) }
                     }
                 )
 
