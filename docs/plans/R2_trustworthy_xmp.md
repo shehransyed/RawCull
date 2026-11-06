@@ -1,6 +1,6 @@
 # RawCull — Implementation Plan: Round 2 (Trustworthy XMP)
 
-Status: **READY FOR CLAUDE CODE after R0–R1 is merged** · Planned 2026-11-06
+Status: **IMPLEMENTED, awaiting the manual acceptance pass** · Planned 2026-11-06
 Prerequisite: `R0-R1_hygiene_and_real_card.md` (uses `PhotoAsset`, `parentDocUri`, `AppContainer`, `SettingsRepository`, `ScanCoordinator`).
 
 ## Goal
@@ -130,3 +130,49 @@ Plain JUnit against the fixtures:
 4. A tag `R&D <test>` produces a valid file (opens in Lightroom/darktable).
 5. Hand-corrupt a sidecar → RawCull shows Error and leaves the file untouched; "Replace sidecar" creates a `.bak`.
 6. A read-only source shows the 🔒 state; exporting it writes sidecars carrying the ratings at the destination.
+
+---
+
+## Implementation notes
+
+Implemented on `feature/r2-xmp`, branched from `origin/main` after R0–R1 merged (#1), one commit per task. 199 JVM tests pass, and `XmpDocumentDeviceTest` passes on an API 36 emulator. **No real Lightroom, Bridge or darktable has opened these files, and no real card or tablet was used**, so the R2 acceptance checklist still needs its manual pass.
+
+### DOM on Android
+DOM proved workable, so no third-party library was needed. The JVM tests run on the JDK's parser and serialiser, not Android's, so the fixtures also run on a device (`androidTest`, with `src/test/resources` added as assets). Only API 36 was tested; minSdk is 24.
+
+### Deviations
+1. **Added column `xmpPendingFields`** (bitmask of `XmpField`), not listed in the plan. "Our pending fields win" needs to know which fields are pending. Without it, a row the scan hasn't reached would overwrite a sidecar's real rating with the catalog's default 0. `XmpMapper.apply` takes an optional `fields` set for this. Only pending fields are written, always, so the conflict rule is not a separate branch: the mtime check only decides the INFO log. Fields that came from the file are copied back into the row after the write.
+2. **Rating and pick are written together**, because `xmp:Rating` carries both. If only one is pending, the other comes from the file.
+3. **A file with no pick keeps the row's pick** instead of becoming UNFLAGGED, because most apps have no pick flag. Rating, label and tags in the file always win (a missing rating reads as 0, since Lightroom may remove it at 0 stars).
+4. **"Replace sidecar" only appears for parse errors.** On an I/O error it would rewrite a good sidecar from the catalog. Retry is always there.
+5. **`SidecarStore.create` replaces `resolve`**; the queue owns the "use the stored URI, otherwise create" choice.
+6. **Plan's "w" fallback pads with spaces.** Without truncation the tail of a longer old file would stay after the new XML.
+7. **Provider renames are verified.** `ExternalStorageProvider` de-duplicates on create and on rename instead of failing, so a clash gives `X (1).xmp`. The stray file is deleted and the row goes to ERROR; the existing sidecar isn't touched. A rescan then picks it up.
+8. **Empty sidecars count as new**, because a crash between create and write leaves one. They are filled from the catalog rather than reported as broken.
+9. **`XmpSidecarGenerator` and the regex parser were deleted in X2.6**, not X2.2, since export and the demo shoot used them until then.
+10. **Rows are re-enqueued after each scan** as well as at start, so edits that failed while a card was out get written once it returns. READ_ONLY rows aren't retried automatically; the next edit retries them with everything still pending.
+11. **The error dot is top-centre**, because every corner of the thumbnails is already used.
+12. **`RawPhotoDao` implements `XmpRows`**, the small interface that lets the queue be tested without Room. The guards themselves are tested against real SQL in `XmpRowsDaoTest`.
+13. Nested `rdf:Description` elements (such as `xmpMM:Pantry` entries) are ignored on read and write. They describe other resources, and the old regex would have read their ratings. `multi_description.xmp` covers this.
+
+### Verified on the emulator (real SAF, `ExternalStorageProvider`)
+- Rating `LR001`: a full diff shows only `xmp:Rating`, `xmp:MetadataDate` and the new pick/rawcull properties changed.
+- Corrupt sidecar: MD5 unchanged after rating, Error chip, dot and counter shown; Replace kept the original as `.bak` (same MD5) and wrote the rating.
+- `DT001.JPG.xmp` stayed a reject (`-1`, stars in `rawcull:Rating`), kept its history, and no `DT001.xmp` was created.
+- Legacy file: `crs:Pick` removed, pick kept.
+- Force-stop 200 ms after a tap: nothing on disk, then the rating was written after relaunch.
+- Rescan: an external rating change reached the catalog, and a newly corrupted sidecar was flagged. The errors filter and Settings sheet work.
+
+### Not verified
+- **Export end to end.** `exportBytes` is unit-tested, but no export was run on the emulator.
+- **A read-only source**: only the store's flag checks are tested, with a fake provider.
+- **Acceptance 3's "no lag" over 50 photos**: not measured.
+- Layout of the counter at 360dp (checked at phone width only, about 411dp).
+
+### Open questions
+1. **Un-rejecting in another app.** If Lightroom changes a rejected photo from -1 to 4 stars and keeps `rawcull:Pick="-1"`, RawCull still reads REJECT. With `rejectAsNegativeRating` off that combination is legitimate, so the file alone can't settle it. X3 makes `rawcull:Pick` authoritative, so this follows the plan, but check whether it feels wrong in practice.
+2. **Does Lightroom keep the `rawcull` namespace** when it rewrites a sidecar? If not, un-reject restores 0 stars after a Lightroom save.
+3. **A failed sidecar write during export is silent**, as it was before: `ExportProgress.errorMessage` isn't shown by the dialog. Ratings could be missing at the destination with no warning.
+4. **FAT stores times in 2 s steps**, so after a remount sidecars may look changed. That only costs a re-read, but it's worth watching on a real card.
+5. **`xmp:Label=""` stays in legacy files** until the label is edited. It is harmless and reads as no label.
+6. **Non-atomic writes.** SAF has no atomic replace, so a crash during a write can leave a truncated sidecar, which then shows as a parse error. The demo store has the same limit.
