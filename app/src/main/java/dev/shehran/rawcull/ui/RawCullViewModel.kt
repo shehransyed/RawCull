@@ -12,6 +12,7 @@ import dev.shehran.rawcull.RawCullApp
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullFilterMode
 import dev.shehran.rawcull.data.model.CullStatus
+import dev.shehran.rawcull.data.model.DEMO_ROOT_URI
 import dev.shehran.rawcull.data.model.ExportConfig
 import dev.shehran.rawcull.data.model.ExportMode
 import dev.shehran.rawcull.data.model.ExportProgress
@@ -28,6 +29,7 @@ import dev.shehran.rawcull.util.HistogramData
 import dev.shehran.rawcull.util.RawPreviewLoader
 import dev.shehran.rawcull.util.SafPermissions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -35,6 +37,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -54,8 +58,8 @@ data class DamUiState(
     val isCompareMode: Boolean = false,
     val viewMode: DamViewMode = DamViewMode.LOUPE,
     val filterOptions: FilterOptions = FilterOptions(),
-    val sourceFolderName: String = "No folder selected",
-    val sourceFolderUri: String? = null,
+    val sourceFolderName: String = "No source",
+    val currentRootUri: String? = null,
     val isSourceAvailable: Boolean = true,
     val destinationFolderName: String = "Not set",
     val destinationFolderUri: String? = null,
@@ -83,11 +87,14 @@ data class DamUiState(
     val rawAndJpegCount: Int get() = photos.count { it.hasCompanion }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class RawCullViewModel(
     private val appContext: Context,
     private val repository: RawCatalogRepository,
     private val settings: SettingsRepository,
 ) : ViewModel() {
+    private val currentRootUri = MutableStateFlow<String?>(null)
+
     private val _uiState = MutableStateFlow(DamUiState())
     val uiState: StateFlow<DamUiState> = _uiState.asStateFlow()
 
@@ -97,16 +104,10 @@ class RawCullViewModel(
     init {
         viewModelScope.launch { restoreSession() }
 
-        // Collect photos from database
         viewModelScope.launch {
-            repository.allPhotos.collect { photoList ->
-                if (photoList.isEmpty()) {
-                    // Automatically load sample shoot for immediate first run
-                    repository.loadSampleShoot()
-                } else {
-                    updatePhotosList(photoList)
-                }
-            }
+            currentRootUri
+                .flatMapLatest { root -> root?.let(repository::observeByRoot) ?: flowOf(emptyList()) }
+                .collect(::updatePhotosList)
         }
     }
 
@@ -313,9 +314,7 @@ class RawCullViewModel(
         if (withContext(Dispatchers.IO) { SafPermissions.isAvailable(appContext, uri) }) {
             openSource(uri, source.displayName)
         } else {
-            _uiState.update {
-                it.copy(sourceFolderUri = source.uri, sourceFolderName = source.displayName, isSourceAvailable = false)
-            }
+            setRoot(source.uri, source.displayName, isAvailable = false)
         }
     }
 
@@ -336,11 +335,25 @@ class RawCullViewModel(
         if (!inUse) SafPermissions.release(appContext, Uri.parse(uri))
     }
 
+    private fun setRoot(rootUri: String?, folderName: String, isAvailable: Boolean = true) {
+        _uiState.update {
+            it.copy(
+                currentRootUri = rootUri,
+                sourceFolderName = folderName,
+                isSourceAvailable = isAvailable,
+                selectedIndex = 0,
+                compareIndex = 1,
+                filterOptions = FilterOptions(),
+                selectedPhotoIds = emptySet(),
+                isMultiSelectMode = false,
+            )
+        }
+        currentRootUri.value = rootUri
+    }
+
     private fun openSource(uri: Uri, folderName: String) {
+        setRoot(uri.toString(), folderName)
         _uiState.value = _uiState.value.copy(
-            sourceFolderUri = uri.toString(),
-            sourceFolderName = folderName,
-            isSourceAvailable = true,
             isScanning = true,
             scanStatusText = "Scanning $folderName for RAW files (ARW, DNG)..."
         )
@@ -373,14 +386,11 @@ class RawCullViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isScanning = true,
-                scanStatusText = "Loading high-resolution sample RAW shoot..."
+                scanStatusText = "Loading the demo shoot..."
             )
             repository.loadSampleShoot()
-            _uiState.value = _uiState.value.copy(
-                isScanning = false,
-                sourceFolderName = "Sample RAW Shoot (Sony ARW & Adobe DNG)",
-                scanStatusText = ""
-            )
+            setRoot(DEMO_ROOT_URI, "Demo shoot")
+            _uiState.value = _uiState.value.copy(isScanning = false, scanStatusText = "")
         }
     }
 

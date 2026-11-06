@@ -8,6 +8,7 @@ import dev.shehran.rawcull.data.local.RawPhotoDao
 import dev.shehran.rawcull.data.model.AssetIds
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
+import dev.shehran.rawcull.data.model.DEMO_ROOT_URI
 import dev.shehran.rawcull.data.model.ExportConfig
 import dev.shehran.rawcull.data.model.ExportProgress
 import dev.shehran.rawcull.data.model.IngestFileSelection
@@ -36,12 +37,13 @@ class RawCatalogRepository(
     private val context: Context,
     private val dao: RawPhotoDao,
 ) {
-    val allPhotos: Flow<List<PhotoAsset>> = dao.getAllPhotos()
+    fun observeByRoot(rootUri: String): Flow<List<PhotoAsset>> = dao.observeByRoot(rootUri)
 
-    suspend fun loadSampleShoot(): List<PhotoAsset> = withContext(Dispatchers.IO) {
-        val samples = SamplePhotosGenerator.createSampleShoot(context)
-        dao.insertPhotos(samples)
-        samples
+    /** Generates the demo shoot once, so flags set on it survive reopening it. */
+    suspend fun loadSampleShoot() = withContext(Dispatchers.IO) {
+        if (dao.getIdsByRoot(DEMO_ROOT_URI).isEmpty()) {
+            dao.upsertAll(SamplePhotosGenerator.createSampleShoot(context))
+        }
     }
 
     suspend fun scanSourceFolder(
@@ -135,7 +137,7 @@ class RawCatalogRepository(
         }
 
         if (rawItems.isNotEmpty()) {
-            dao.insertPhotos(rawItems)
+            dao.upsertAll(rawItems)
         }
         rawItems.size
     }
@@ -206,10 +208,6 @@ class RawCatalogRepository(
                 syncXmpOnDisk(id)
             }
         }
-    }
-
-    suspend fun clearCatalog() = withContext(Dispatchers.IO) {
-        dao.clearAll()
     }
 
     /**

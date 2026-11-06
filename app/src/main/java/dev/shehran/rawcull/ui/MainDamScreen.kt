@@ -22,6 +22,7 @@ fun MainDamScreen(
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val isTablet = this.maxWidth >= 700.dp
 
+        // With no source, the top bar's picker and demo button are the entry points until R1.6.
         if (isTablet) {
             TabletDamScreen(
                 uiState = uiState,
