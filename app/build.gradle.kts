@@ -59,6 +59,8 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+  // The XMP fixtures also run on a device, because Android's XML stack isn't the JDK's.
+  sourceSets.getByName("androidTest").assets.directories.add("src/test/resources")
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
@@ -78,6 +80,7 @@ dependencies {
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.datastore.preferences)
+  implementation(libs.androidx.lifecycle.process)
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.viewmodel.compose)

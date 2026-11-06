@@ -56,6 +56,7 @@ import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.XmpSyncStatus
 import dev.shehran.rawcull.util.RawPreviewLoader
 
 @Composable
@@ -198,6 +199,10 @@ private fun FilmstripThumbnailItem(
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold
                 )
+            }
+
+            if (photo.xmpSyncStatus == XmpSyncStatus.ERROR) {
+                SyncErrorDot(modifier = Modifier.align(Alignment.TopCenter).padding(top = 3.dp))
             }
 
             // Top-right: Checkbox in multi-select mode or Cull badge

@@ -6,7 +6,7 @@ data class MergeResult(
     /** New rows and rows that changed; rows identical to what's stored are left out. */
     val toUpsert: List<PhotoAsset>,
     val toDelete: List<String>,
-    /** Sidecar modification times by asset id, for the XMP-vs-row check during enrichment. */
+    /** Sidecar modification times by asset id, for the check against the row during enrichment. */
     val sidecarLastModified: Map<String, Long>,
 )
 
@@ -30,7 +30,6 @@ object ScanMerger {
         return MergeResult(toUpsert, existing.keys.filterNot { it in seenIds }, sidecarLastModified)
     }
 
-    /** lastModified = 0 marks the row as never changed, so any sidecar on disk wins over it. */
     private fun newAsset(id: String, rootUri: String, draft: AssetDraft): PhotoAsset = PhotoAsset(
         id = id,
         rootUri = rootUri,
@@ -43,18 +42,18 @@ object ScanMerger {
         fileLastModified = draft.primary.lastModified,
         dateTaken = draft.primary.lastModified,
         metadataLoaded = false,
-        lastModified = 0L,
         companionFileName = draft.companion?.name,
         companionFileUri = draft.companion?.docUri,
         companionFileSizeBytes = draft.companion?.size,
         companionFormat = draft.companionFormat,
         xmpFileUri = draft.sidecar?.docUri,
+        darktableXmpUri = draft.darktableXmp?.docUri,
         pairMode = draft.pairMode,
     )
 
     private fun refresh(stored: PhotoAsset, draft: AssetDraft): PhotoAsset {
         val fileChanged = stored.fileLastModified != draft.primary.lastModified
-        val sidecarNewer = (draft.sidecar?.lastModified ?: 0L) > stored.lastModified
+        val sidecarChanged = draft.sidecar?.let { it.lastModified != stored.xmpLastSyncedMtime } ?: false
         return stored.copy(
             relativeDir = draft.primary.relativeDir,
             parentDocUri = draft.primary.parentDocUri,
@@ -64,12 +63,14 @@ object ScanMerger {
             fileSizeBytes = draft.primary.size,
             fileLastModified = draft.primary.lastModified,
             dateTaken = if (fileChanged) draft.primary.lastModified else stored.dateTaken,
-            metadataLoaded = stored.metadataLoaded && !fileChanged && !sidecarNewer,
+            metadataLoaded = stored.metadataLoaded && !fileChanged && !sidecarChanged,
             companionFileName = draft.companion?.name,
             companionFileUri = draft.companion?.docUri,
             companionFileSizeBytes = draft.companion?.size,
             companionFormat = draft.companionFormat,
             xmpFileUri = draft.sidecar?.docUri,
+            darktableXmpUri = draft.darktableXmp?.docUri,
+            xmpLastSyncedMtime = stored.xmpLastSyncedMtime.takeIf { draft.sidecar != null },
             pairMode = draft.pairMode,
         )
     }

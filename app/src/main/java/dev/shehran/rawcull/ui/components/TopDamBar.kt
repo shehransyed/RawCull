@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -70,6 +71,7 @@ data class SourceActions(
     val onRescan: () -> Unit,
     val onCloseSource: () -> Unit,
     val onRetry: () -> Unit,
+    val onOpenSettings: () -> Unit,
 )
 
 private val CompactWidth = 600.dp
@@ -82,6 +84,7 @@ fun TopDamBar(
     onUpdateFilter: ((FilterOptions) -> FilterOptions) -> Unit,
     onOpenExportDialog: () -> Unit,
     onToggleMultiSelect: () -> Unit,
+    onToggleSyncErrors: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -123,7 +126,7 @@ fun TopDamBar(
 
                     Spacer(modifier = Modifier.width(10.dp))
 
-                    Column {
+                    Column(modifier = Modifier.weight(1f, fill = false)) {
                         Text(
                             text = "RAWCULL",
                             style = MaterialTheme.typography.titleSmall,
@@ -133,6 +136,8 @@ fun TopDamBar(
                         )
                         SourceDropdown(uiState = uiState, actions = sourceActions)
                     }
+
+                    SyncCounter(uiState = uiState, onToggleErrors = onToggleSyncErrors)
                 }
 
                 // View Mode Group
@@ -329,6 +334,30 @@ private fun formatChipColor(format: PhotoFormat): Color = when (format) {
     else -> Color(0xFF38BDF8)
 }
 
+/** Shows work in flight; tapping it narrows the view to the errors, which is where action is needed. */
+@Composable
+private fun SyncCounter(uiState: DamUiState, onToggleErrors: () -> Unit) {
+    val filtering = uiState.filterOptions.syncErrorsOnly
+    val text = if (filtering) "Errors only ✕" else syncCounterText(uiState.savingCount, uiState.syncErrorCount)
+    if (text == null) return
+
+    val hasErrors = filtering || uiState.syncErrorCount > 0
+    Spacer(modifier = Modifier.width(8.dp))
+    Text(
+        text = text,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Bold,
+        maxLines = 1,
+        color = if (hasErrors) Color(0xFFFECACA) else Color(0xFF38BDF8),
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(if (hasErrors) Color(0xCC7F1D1D) else Color(0xFF161E28))
+            .clickable(enabled = hasErrors, onClick = onToggleErrors)
+            .padding(horizontal = 6.dp, vertical = 3.dp)
+            .testTag("sync_counter")
+    )
+}
+
 @Composable
 private fun SourceDropdown(uiState: DamUiState, actions: SourceActions) {
     var expanded by remember { mutableStateOf(false) }
@@ -403,6 +432,13 @@ private fun SourceDropdown(uiState: DamUiState, actions: SourceActions) {
                 text = { Text("Close source") },
                 onClick = { choose(actions.onCloseSource) },
                 modifier = Modifier.testTag("close_source_button")
+            )
+            HorizontalDivider(color = Color(0x22FFFFFF))
+            DropdownMenuItem(
+                text = { Text("Settings") },
+                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                onClick = { choose(actions.onOpenSettings) },
+                modifier = Modifier.testTag("settings_button")
             )
         }
     }

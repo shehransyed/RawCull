@@ -18,10 +18,11 @@ data class EnrichedMetadata(
     val metadataLoaded: Boolean = true,
 )
 
+/** What a sidecar changed outside RawCull says. A null [cullStatus] means it has no opinion. */
 data class EnrichedXmp(
-    val rating: Int?,
+    val rating: Int,
     val cullStatus: CullStatus?,
-    val colorLabel: ColorLabel?,
+    val colorLabel: ColorLabel,
     val tagsJson: String,
     val lastModified: Long,
 )
@@ -29,4 +30,5 @@ data class EnrichedXmp(
 data class EnrichmentResult(
     val metadata: EnrichedMetadata,
     val xmp: EnrichedXmp?,
+    val sidecarUnreadable: Boolean = false,
 )

@@ -10,6 +10,8 @@ import dev.shehran.rawcull.data.model.EnrichedXmp
 import dev.shehran.rawcull.data.model.EnrichmentResult
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.data.model.XmpSyncStatus
+import dev.shehran.rawcull.data.xmp.XMP_PARSE_ERROR
 import dev.shehran.rawcull.data.repository.SettingsRepository
 import dev.shehran.rawcull.data.model.RecentSource
 import kotlinx.coroutines.test.runTest
@@ -69,7 +71,7 @@ class RawPhotoDaoTest {
         orientation = 1,
     )
 
-    private fun xmp(lastModified: Long, rating: Int? = 3, cullStatus: CullStatus? = CullStatus.PICK) = EnrichedXmp(
+    private fun xmp(lastModified: Long, rating: Int = 3, cullStatus: CullStatus? = CullStatus.PICK) = EnrichedXmp(
         rating = rating,
         cullStatus = cullStatus,
         colorLabel = ColorLabel.BLUE,
@@ -80,7 +82,7 @@ class RawPhotoDaoTest {
     @Test
     fun `a metadata batch leaves user state alone`() = runTest {
         dao.upsertAll(listOf(row(lastModified = 500L)))
-        dao.updateRating("a", 5, time = 600L)
+        dao.updateRating(listOf("a"), 5, time = 600L)
 
         dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp = null)))
 
@@ -102,11 +104,11 @@ class RawPhotoDaoTest {
         assertEquals(CullStatus.PICK, stored.cullStatus)
         assertEquals(ColorLabel.BLUE, stored.colorLabel)
         assertEquals(listOf("from-xmp"), stored.tags)
-        assertEquals(50L, stored.lastModified)
+        assertEquals(50L, stored.xmpLastSyncedMtime)
     }
 
     @Test
-    fun `a sidecar newer than the row wins`() = runTest {
+    fun `a sidecar wins over a row with no edits of its own`() = runTest {
         dao.upsertAll(listOf(row(lastModified = 500L)))
 
         dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp(lastModified = 900L))))
@@ -115,9 +117,9 @@ class RawPhotoDaoTest {
     }
 
     @Test
-    fun `a flag set during enrichment beats an older sidecar`() = runTest {
+    fun `a flag set during enrichment beats the sidecar`() = runTest {
         dao.upsertAll(listOf(row(lastModified = 0L)))
-        dao.updateCullStatus("a", CullStatus.REJECT, time = 1_000L)
+        dao.updateCullStatus(listOf("a"), CullStatus.REJECT, time = 1_000L)
 
         dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp(lastModified = 900L))))
 
@@ -128,16 +130,58 @@ class RawPhotoDaoTest {
     }
 
     @Test
-    fun `fields the sidecar doesn't set keep their value`() = runTest {
+    fun `a sidecar with no pick keeps the row's pick but its stars win`() = runTest {
         dao.upsertAll(listOf(row(lastModified = 0L).copy(rating = 2, cullStatus = CullStatus.PICK)))
 
         dao.updateMetadataBatch(
-            listOf(EnrichmentResult(metadata(), xmp(lastModified = 50L, rating = null, cullStatus = null)))
+            listOf(EnrichmentResult(metadata(), xmp(lastModified = 50L, rating = 0, cullStatus = null)))
         )
 
         val stored = dao.getPhotoById("a")!!
-        assertEquals(2, stored.rating)
+        assertEquals(0, stored.rating)
         assertEquals(CullStatus.PICK, stored.cullStatus)
+    }
+
+    @Test
+    fun `a sidecar clears an earlier parse error`() = runTest {
+        dao.upsertAll(listOf(row().copy(xmpSyncStatus = XmpSyncStatus.ERROR, xmpError = XMP_PARSE_ERROR)))
+
+        dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp(lastModified = 50L))))
+
+        val stored = dao.getPhotoById("a")!!
+        assertEquals(XmpSyncStatus.SYNCED, stored.xmpSyncStatus)
+        assertNull(stored.xmpError)
+    }
+
+    @Test
+    fun `an unreadable sidecar is reported and changes nothing else`() = runTest {
+        dao.upsertAll(listOf(row().copy(rating = 2)))
+
+        dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp = null, sidecarUnreadable = true)))
+
+        val stored = dao.getPhotoById("a")!!
+        assertEquals(XmpSyncStatus.ERROR, stored.xmpSyncStatus)
+        assertEquals(XMP_PARSE_ERROR, stored.xmpError)
+        assertEquals(2, stored.rating)
+    }
+
+    @Test
+    fun `an unreadable sidecar doesn't disturb a row the queue is about to write`() = runTest {
+        dao.upsertAll(listOf(row()))
+        dao.updateRating(listOf("a"), 3)
+
+        dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp = null, sidecarUnreadable = true)))
+
+        assertEquals(XmpSyncStatus.PENDING, dao.getPhotoById("a")!!.xmpSyncStatus)
+    }
+
+    @Test
+    fun `edits that could not be written survive a sidecar`() = runTest {
+        dao.upsertAll(listOf(row().copy(rating = 5, xmpSyncStatus = XmpSyncStatus.READ_ONLY, xmpPendingFields = 1)))
+
+        dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp(lastModified = 50L))))
+
+        assertEquals(5, dao.getPhotoById("a")!!.rating)
     }
 
     @Test

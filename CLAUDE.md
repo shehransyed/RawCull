@@ -5,17 +5,19 @@ Android photo culling + ingest DAM (tablet-first, phone-responsive). Kotlin, Jet
 ## Build & test
 - `./gradlew testDebugUnitTest assembleDebug` (Windows: `gradlew.bat ...`). Every commit must build and pass unit tests.
 - Pure logic (grouping, merging, XMP, path building, selection) lives in Android-free classes with plain JUnit tests. Use Robolectric only where Android types are unavoidable.
+- `XmpDocumentDeviceTest` runs the XMP fixtures on Android's own XML stack. With a phone or tablet attached, set `ANDROID_SERIAL` first, because connected tests install on every device.
 
 ## Architecture (single Activity, manual DI)
 - `RawCullApp` → `AppContainer` (database, DAO, repositories, ScanCoordinator, app scope).
 - `ui/RawCullViewModel` holds one `StateFlow<DamUiState>`. Selection is **id-based** (`selectedPhotoId`); indices are derived.
 - `data/scan/` — `SafTreeWalker` (DocumentsContract cursor walk), `AssetGrouper` (RAW+JPEG/HEIF pairing, pure), `ScanMerger` (pure), `ScanCoordinator` (phase A listing, phase B lazy EXIF/XMP enrichment).
 - `data/model/PhotoAsset` (Room entity `photo_assets`), `PhotoFormat`, `PairMode`, `CullStatus`, `ColorLabel`.
-- `util/RawPreviewLoader` (previews/thumbnails), `util/RawMetadataParser` (ExifInterface via FileDescriptor), `util/Xmp*` (sidecars).
+- `util/RawPreviewLoader` (previews/thumbnails), `util/RawMetadataParser` (ExifInterface via FileDescriptor), `util/xmp/` (`XmpDocument`, `XmpMapper`: pure sidecar model and mapping).
+- `data/xmp/` — `SidecarStore` (SAF and local), `XmpWriteQueue` (debounced writes; only a row's `xmpPendingFields` are written), `SidecarReconciler` (catalog vs file, export merge).
 - Layout switch: `MainDamScreen` → `TabletDamScreen` (≥700dp) / `MobileDamScreen`.
 
 ## Rules
-- **XMP sidecars are the source of truth; Room is a cache.** Never discard unknown content in an existing .xmp (after Round 2: always merge through `XmpDocument`).
+- **XMP sidecars are the source of truth; Room is a cache.** Never discard unknown content in an existing .xmp. Always merge through `XmpDocument`.
 - File access is SAF only (no MANAGE_EXTERNAL_STORAGE). Always take persistable permissions for picked trees. Never use `DocumentFile.listFiles()`/`findFile()` in hot paths; use `DocumentsContract` queries and stored document URIs.
 - Create sidecar documents with MIME `application/octet-stream` so providers don't append extensions; verify the returned display name.
 - Any change to a Room entity bumps the DB version and commits the exported schema in `app/schemas/`.

@@ -21,11 +21,13 @@ import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.RecentSource
 import dev.shehran.rawcull.data.model.SortOrder
+import dev.shehran.rawcull.data.model.XmpSyncStatus
 import dev.shehran.rawcull.data.repository.RawCatalogRepository
 import dev.shehran.rawcull.data.repository.SettingsRepository
 import dev.shehran.rawcull.data.repository.StoredFolder
 import dev.shehran.rawcull.data.scan.ScanCoordinator
 import dev.shehran.rawcull.data.scan.ScanState
+import dev.shehran.rawcull.data.xmp.XmpWriteQueue
 import dev.shehran.rawcull.util.HistogramCalculator
 import dev.shehran.rawcull.util.HistogramData
 import dev.shehran.rawcull.util.RawPreviewLoader
@@ -45,6 +47,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.IOException
 
 enum class DamViewMode {
     LOUPE,
@@ -84,6 +87,9 @@ data class DamUiState(
     val isMultiSelectMode: Boolean = false,
     val showExportDialog: Boolean = false,
     val showTagDialog: Boolean = false,
+    val showSettings: Boolean = false,
+    val syncDetailsPhotoId: String? = null,
+    val rejectAsNegativeRating: Boolean = true,
     val exportProgress: ExportProgress = ExportProgress(),
     val currentHistogram: HistogramData? = null,
     val isLoupeZoomed: Boolean = false,
@@ -109,6 +115,10 @@ data class DamUiState(
     val rejectsCount: Int get() = photos.count { it.cullStatus == CullStatus.REJECT }
     val unflaggedCount: Int get() = photos.count { it.cullStatus == CullStatus.UNFLAGGED }
     val pairedCount: Int get() = photos.count { it.hasCompanion }
+    val savingCount: Int
+        get() = photos.count { it.xmpSyncStatus == XmpSyncStatus.PENDING || it.xmpSyncStatus == XmpSyncStatus.WRITING }
+    val syncErrorCount: Int get() = photos.count { it.xmpSyncStatus == XmpSyncStatus.ERROR }
+    val syncDetailsPhoto: PhotoAsset? get() = photos.firstOrNull { it.id == syncDetailsPhotoId }
     val isDemoSource: Boolean get() = currentRootUri == DEMO_ROOT_URI
 }
 
@@ -118,6 +128,7 @@ class RawCullViewModel(
     private val repository: RawCatalogRepository,
     private val settings: SettingsRepository,
     private val scanCoordinator: ScanCoordinator,
+    private val writeQueue: XmpWriteQueue,
 ) : ViewModel() {
     private val currentRootUri = MutableStateFlow<String?>(null)
 
@@ -138,6 +149,11 @@ class RawCullViewModel(
             }
         }
         viewModelScope.launch { scanCoordinator.state.collect(::onScanState) }
+        viewModelScope.launch {
+            settings.xmpPrefs.collect { prefs ->
+                _uiState.update { it.copy(rejectAsNegativeRating = prefs.rejectAsNegativeRating) }
+            }
+        }
 
         viewModelScope.launch {
             currentRootUri
@@ -214,7 +230,9 @@ class RawCullViewModel(
                     (photo.lensModel?.contains(filter.searchQuery, ignoreCase = true) == true) ||
                     photo.tags.any { it.contains(filter.searchQuery, ignoreCase = true) }
 
-            cullMatch && ratingMatch && colorMatch && formatMatch && pairMatch && tagMatch && searchMatch
+            val syncMatch = !filter.syncErrorsOnly || photo.xmpSyncStatus == XmpSyncStatus.ERROR
+
+            cullMatch && ratingMatch && colorMatch && formatMatch && pairMatch && tagMatch && searchMatch && syncMatch
         }
 
         // Apply sort
@@ -331,7 +349,7 @@ class RawCullViewModel(
         val trimmed = tag.trim()
         if (trimmed.isEmpty() || photo.tags.contains(trimmed)) return
         viewModelScope.launch {
-            repository.updatePhoto(photo.copy(tags = photo.tags + trimmed))
+            repository.batchAddTag(listOf(photo.id), trimmed)
         }
     }
 
@@ -339,7 +357,7 @@ class RawCullViewModel(
         if (!canEdit()) return
         val photo = _uiState.value.currentPhoto ?: return
         viewModelScope.launch {
-            repository.updatePhoto(photo.copy(tags = photo.tags - tag))
+            repository.removeTag(photo.id, tag)
         }
     }
 
@@ -578,6 +596,48 @@ class RawCullViewModel(
         _uiState.value = _uiState.value.copy(showTagDialog = false)
     }
 
+    fun toggleSyncErrorFilter() {
+        updateFilter { it.copy(syncErrorsOnly = !it.syncErrorsOnly) }
+    }
+
+    fun showSyncDetails() {
+        _uiState.update { it.copy(syncDetailsPhotoId = it.currentPhoto?.id) }
+    }
+
+    fun dismissSyncDetails() {
+        _uiState.update { it.copy(syncDetailsPhotoId = null) }
+    }
+
+    fun retrySidecar(id: String) {
+        dismissSyncDetails()
+        viewModelScope.launch { writeQueue.retry(id) }
+    }
+
+    fun replaceSidecar(id: String) {
+        dismissSyncDetails()
+        viewModelScope.launch {
+            try {
+                writeQueue.replaceSidecar(id)
+            } catch (e: IOException) {
+                showMessage("Couldn't back up the old sidecar, so it wasn't replaced.")
+            } catch (e: IllegalStateException) {
+                showMessage("Couldn't back up the old sidecar, so it wasn't replaced.")
+            }
+        }
+    }
+
+    fun openSettings() {
+        _uiState.update { it.copy(showSettings = true) }
+    }
+
+    fun dismissSettings() {
+        _uiState.update { it.copy(showSettings = false) }
+    }
+
+    fun setRejectAsNegativeRating(enabled: Boolean) {
+        viewModelScope.launch { settings.setRejectAsNegativeRating(enabled) }
+    }
+
     fun startBatchExport(config: ExportConfig) {
         exportJob?.cancel()
         val photosToExport = when (config.exportMode) {
@@ -698,6 +758,7 @@ class RawCullViewModel(
                     repository = app.container.catalogRepository,
                     settings = app.container.settingsRepository,
                     scanCoordinator = app.container.scanCoordinator,
+                    writeQueue = app.container.xmpWriteQueue,
                 )
             }
         }

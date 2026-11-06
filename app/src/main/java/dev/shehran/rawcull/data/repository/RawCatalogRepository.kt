@@ -3,6 +3,9 @@ package dev.shehran.rawcull.data.repository
 import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
+import androidx.room.withTransaction
+import dev.shehran.rawcull.data.local.AppDatabase
+import dev.shehran.rawcull.data.local.Converters
 import dev.shehran.rawcull.data.local.RawPhotoDao
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
@@ -12,12 +15,14 @@ import dev.shehran.rawcull.data.model.ExportProgress
 import dev.shehran.rawcull.data.model.IngestFileSelection
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.PhotoAsset
-import dev.shehran.rawcull.data.model.XmpSyncStatus
+import dev.shehran.rawcull.data.xmp.SidecarReconciler
+import dev.shehran.rawcull.data.xmp.SidecarStores
+import dev.shehran.rawcull.data.xmp.XMP_TOOLKIT
+import dev.shehran.rawcull.data.xmp.XmpWriteQueue
 import dev.shehran.rawcull.util.SamplePhotosGenerator
-import dev.shehran.rawcull.util.XmpSidecarGenerator
-import dev.shehran.rawcull.util.XmpSidecarManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
@@ -31,8 +36,14 @@ import androidx.core.net.toUri
 
 class RawCatalogRepository(
     private val context: Context,
+    private val database: AppDatabase,
     private val dao: RawPhotoDao,
+    private val writeQueue: XmpWriteQueue,
+    private val stores: SidecarStores,
+    private val settings: SettingsRepository,
 ) {
+    private val converters = Converters()
+
     fun observeByRoot(rootUri: String): Flow<List<PhotoAsset>> = dao.observeByRoot(rootUri)
 
     /** Generates the demo shoot once, so flags set on it survive reopening it. */
@@ -46,68 +57,48 @@ class RawCatalogRepository(
     private fun exportMimeType(format: PhotoFormat): String =
         if (format == PhotoFormat.HEIF) "application/octet-stream" else format.mimeType
 
-    private suspend fun syncXmpOnDisk(photoId: String) {
-        val photo = dao.getPhotoById(photoId) ?: return
-        val xmpUri = XmpSidecarManager.writeSidecar(context, photo)
-        val status = if (xmpUri != null) XmpSyncStatus.SYNCED else XmpSyncStatus.ERROR
-        val storedUri = xmpUri ?: photo.xmpFileUri
-        if (storedUri != photo.xmpFileUri || status != photo.xmpSyncStatus) {
-            dao.updateXmpState(photoId, storedUri, status)
-        }
+    /** Room commits first and the queue writes later, so nothing here waits for the card. */
+    private suspend fun updateAll(ids: List<String>, update: suspend (List<String>) -> Unit) {
+        database.withTransaction { ids.chunked(MAX_IDS_PER_QUERY).forEach { update(it) } }
+        writeQueue.enqueue(ids)
     }
 
-    suspend fun setCullStatus(id: String, status: CullStatus) = withContext(Dispatchers.IO) {
-        dao.updateCullStatus(id, status)
-        syncXmpOnDisk(id)
-    }
+    suspend fun setCullStatus(id: String, status: CullStatus) = batchSetCullStatus(listOf(id), status)
 
-    suspend fun setRating(id: String, rating: Int) = withContext(Dispatchers.IO) {
-        dao.updateRating(id, rating.coerceIn(0, 5))
-        syncXmpOnDisk(id)
-    }
+    suspend fun setRating(id: String, rating: Int) = batchSetRating(listOf(id), rating)
 
-    suspend fun setColorLabel(id: String, label: ColorLabel) = withContext(Dispatchers.IO) {
-        dao.updateColorLabel(id, label)
-        syncXmpOnDisk(id)
-    }
-
-    suspend fun updatePhoto(photo: PhotoAsset) = withContext(Dispatchers.IO) {
-        dao.updatePhoto(photo)
-        syncXmpOnDisk(photo.id)
-    }
+    suspend fun setColorLabel(id: String, label: ColorLabel) = batchSetColorLabel(listOf(id), label)
 
     suspend fun batchSetCullStatus(ids: List<String>, status: CullStatus) = withContext(Dispatchers.IO) {
-        ids.forEach {
-            dao.updateCullStatus(it, status)
-            syncXmpOnDisk(it)
-        }
+        updateAll(ids) { dao.updateCullStatus(it, status) }
     }
 
     suspend fun batchSetRating(ids: List<String>, rating: Int) = withContext(Dispatchers.IO) {
-        ids.forEach {
-            dao.updateRating(it, rating)
-            syncXmpOnDisk(it)
-        }
+        updateAll(ids) { dao.updateRating(it, rating.coerceIn(0, 5)) }
     }
 
     suspend fun batchSetColorLabel(ids: List<String>, label: ColorLabel) = withContext(Dispatchers.IO) {
-        ids.forEach {
-            dao.updateColorLabel(it, label)
-            syncXmpOnDisk(it)
-        }
+        updateAll(ids) { dao.updateColorLabel(it, label) }
     }
 
-    suspend fun batchAddTag(ids: List<String>, tag: String) = withContext(Dispatchers.IO) {
+    suspend fun batchAddTag(ids: List<String>, tag: String) {
         val trimmed = tag.trim()
-        if (trimmed.isEmpty()) return@withContext
-        ids.forEach { id ->
-            val photo = dao.getPhotoById(id)
-            if (photo != null && !photo.tags.contains(trimmed)) {
-                val updated = photo.copy(tags = photo.tags + trimmed)
-                dao.updatePhoto(updated)
-                syncXmpOnDisk(id)
+        if (trimmed.isEmpty()) return
+        editTags(ids) { tags -> if (trimmed in tags) tags else tags + trimmed }
+    }
+
+    suspend fun removeTag(id: String, tag: String) = editTags(listOf(id)) { it - tag }
+
+    private suspend fun editTags(ids: List<String>, edit: (List<String>) -> List<String>) = withContext(Dispatchers.IO) {
+        val changed = database.withTransaction {
+            ids.filter { id ->
+                val tags = dao.getPhotoById(id)?.tags ?: return@filter false
+                val edited = edit(tags)
+                if (edited != tags) dao.updateTags(id, converters.fromTagsList(edited))
+                edited != tags
             }
         }
+        writeQueue.enqueue(changed)
     }
 
     /**
@@ -126,6 +117,7 @@ class RawCatalogRepository(
             return@flow
         }
 
+        val prefs = settings.xmpPrefs.first()
         val destUri = config.destinationFolderUri.toUri()
         val destDoc = DocumentFile.fromTreeUri(context, destUri)
         if (destDoc == null || !destDoc.canWrite()) {
@@ -233,14 +225,17 @@ class RawCatalogRepository(
                 }
             }
 
-            // 3. Generate and copy matching Adobe XMP sidecar
+            // 3. Merge the source sidecar with the current state, so develop settings travel too
             if (config.generateXmpSidecars) {
+                val source = photo.xmpFileUri?.let { uri ->
+                    runCatching { stores.forRoot(photo.rootUri).read(uri) }.getOrNull()
+                }
                 val xmpDoc = targetDirectoryDoc.createFile("application/octet-stream", photo.sidecarFileName)
                 if (xmpDoc != null) {
                     runCatching {
+                        val bytes = SidecarReconciler.exportBytes(photo, source?.bytes, prefs, XMP_TOOLKIT, Date())
                         context.contentResolver.openOutputStream(xmpDoc.uri)?.use { output ->
-                            val xmpContent = XmpSidecarGenerator.generateXmp(photo)
-                            output.write(xmpContent.toByteArray(Charsets.UTF_8))
+                            output.write(bytes)
                             output.flush()
                         }
                     }
@@ -265,4 +260,9 @@ class RawCatalogRepository(
             exportedFileNames = exportedNames
         ))
     }.flowOn(Dispatchers.IO)
+
+    private companion object {
+        /** Older SQLite builds allow 999 bound variables per statement. */
+        const val MAX_IDS_PER_QUERY = 500
+    }
 }

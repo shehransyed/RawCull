@@ -72,11 +72,13 @@ fun TabletDamScreen(
                 onRescan = viewModel::rescan,
                 onCloseSource = viewModel::closeSource,
                 onRetry = viewModel::retrySource,
+                onOpenSettings = viewModel::openSettings,
             ),
             onSetViewMode = viewModel::setViewMode,
             onUpdateFilter = viewModel::updateFilter,
             onOpenExportDialog = viewModel::openExportDialog,
-            onToggleMultiSelect = viewModel::toggleMultiSelectMode
+            onToggleMultiSelect = viewModel::toggleMultiSelectMode,
+            onToggleSyncErrors = viewModel::toggleSyncErrorFilter,
         )
 
         // Middle Work Area: Main Viewer + Right Inspector
@@ -99,6 +101,7 @@ fun TabletDamScreen(
                             photo = uiState.currentPhoto,
                             onNext = viewModel::nextPhoto,
                             onPrevious = viewModel::previousPhoto,
+                            onSyncChipClick = viewModel::showSyncDetails,
                             modifier = Modifier.fillMaxSize()
                         )
                     }

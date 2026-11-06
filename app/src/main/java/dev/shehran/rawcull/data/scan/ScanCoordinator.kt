@@ -12,9 +12,15 @@ import dev.shehran.rawcull.data.model.EnrichedMetadata
 import dev.shehran.rawcull.data.model.EnrichedXmp
 import dev.shehran.rawcull.data.model.EnrichmentResult
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.XmpSyncStatus
+import dev.shehran.rawcull.data.xmp.SidecarAction
+import dev.shehran.rawcull.data.xmp.SidecarReconciler
+import dev.shehran.rawcull.data.xmp.SidecarStores
+import dev.shehran.rawcull.data.xmp.XmpWriteQueue
 import dev.shehran.rawcull.util.RawMetadataParser
 import dev.shehran.rawcull.util.SafPermissions
-import dev.shehran.rawcull.util.XmpSidecarManager
+import dev.shehran.rawcull.util.xmp.XmpDocument
+import dev.shehran.rawcull.util.xmp.XmpMapper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +62,8 @@ class ScanCoordinator(
     private val database: AppDatabase,
     private val dao: RawPhotoDao,
     private val scope: CoroutineScope,
+    private val sidecarStores: SidecarStores,
+    private val writeQueue: XmpWriteQueue,
 ) {
     private val appContext = context.applicationContext
     private val walker = SafTreeWalker(appContext.contentResolver)
@@ -101,6 +109,7 @@ class ScanCoordinator(
         try {
             val listing = runPhaseA(rootUri)
             runPhaseB(rootUri, listing)
+            writeQueue.recover() // A card that just came back can take what failed while it was out.
             _state.value = ScanState.Complete(rootUri, listing.photoCount, listing.folderCount)
         } catch (e: CancellationException) {
             throw e
@@ -259,6 +268,7 @@ class ScanCoordinator(
         }
         if (!metadata.parsed) ensureSourceAvailable(rootUri)
 
+        val sidecar = readSidecar(row, sidecarLastModified)
         return EnrichmentResult(
             metadata = EnrichedMetadata(
                 id = row.id,
@@ -275,7 +285,8 @@ class ScanCoordinator(
                 exposureBias = metadata.exposureBias,
                 orientation = metadata.orientation,
             ),
-            xmp = readSidecar(row, sidecarLastModified),
+            xmp = sidecar.xmp,
+            sidecarUnreadable = sidecar.unreadable,
         )
     }
 
@@ -285,20 +296,38 @@ class ScanCoordinator(
         }
     }
 
-    private suspend fun readSidecar(row: PhotoAsset, sidecarLastModified: Long?): EnrichedXmp? {
-        val xmpUri = row.xmpFileUri ?: return null
-        if (sidecarLastModified == null || sidecarLastModified <= row.lastModified) return null
+    private class SidecarResult(val xmp: EnrichedXmp? = null, val unreadable: Boolean = false)
 
-        val parsed = XmpSidecarManager.readSidecar(appContext, Uri.parse(xmpUri))
-        val isEmpty = parsed.rating == null && parsed.cullStatus == null &&
-            parsed.colorLabel == null && parsed.tags.isEmpty()
-        if (isEmpty) return null // Unreadable sidecars must not wipe what the row already has.
-        return EnrichedXmp(
-            rating = parsed.rating,
-            cullStatus = parsed.cullStatus,
-            colorLabel = parsed.colorLabel,
-            tagsJson = converters.fromTagsList(parsed.tags),
-            lastModified = sidecarLastModified,
+    private suspend fun readSidecar(row: PhotoAsset, sidecarLastModified: Long?): SidecarResult {
+        val xmpUri = row.xmpFileUri ?: return SidecarResult()
+        when (SidecarReconciler.actionFor(row, sidecarLastModified)) {
+            SidecarAction.NOTHING -> return SidecarResult()
+            SidecarAction.KEEP_CATALOG -> {
+                // The file may have been repaired, and nothing else retries a parse error.
+                if (row.xmpSyncStatus == XmpSyncStatus.ERROR) writeQueue.retry(row.id)
+                return SidecarResult()
+            }
+            SidecarAction.READ_FILE -> Unit
+        }
+
+        val content = try {
+            sidecarStores.forRoot(row.rootUri).read(xmpUri)
+        } catch (e: IOException) {
+            null
+        } catch (e: SecurityException) {
+            null
+        } ?: return SidecarResult()
+
+        val doc = XmpDocument.parse(content.bytes).getOrNull() ?: return SidecarResult(unreadable = true)
+        val parsed = XmpMapper.read(doc)
+        return SidecarResult(
+            EnrichedXmp(
+                rating = parsed.rating,
+                cullStatus = parsed.cullStatus,
+                colorLabel = parsed.colorLabel,
+                tagsJson = converters.fromTagsList(parsed.tags),
+                lastModified = content.lastModified ?: sidecarLastModified ?: 0L,
+            )
         )
     }
 

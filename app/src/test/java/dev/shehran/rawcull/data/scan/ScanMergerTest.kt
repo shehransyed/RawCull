@@ -5,8 +5,11 @@ import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PairMode
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.data.model.XmpSyncStatus
+import dev.shehran.rawcull.util.xmp.XmpField
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -56,7 +59,6 @@ class ScanMergerTest {
         assertEquals(1_000L, row.dateTaken)
         assertEquals(1_000L, row.fileLastModified)
         assertFalse(row.metadataLoaded)
-        assertEquals("sidecars must win over a row nobody has edited", 0L, row.lastModified)
         assertEquals(CullStatus.UNFLAGGED, row.cullStatus)
         assertEquals("DCIM", row.relativeDir)
         assertEquals("content://doc/dir", row.parentDocUri)
@@ -104,8 +106,8 @@ class ScanMergerTest {
     }
 
     @Test
-    fun `a sidecar newer than the row triggers a re-read`() {
-        val stored = storedRow()
+    fun `a sidecar that changed since the last sync triggers a re-read`() {
+        val stored = storedRow().copy(xmpLastSyncedMtime = 8_000L)
         val edited = draft(sidecar = scanned("DSC001.xmp", lastModified = 10_000L))
 
         val result = ScanMerger.merge(root, mapOf(stored.id to stored), listOf(edited))
@@ -115,14 +117,59 @@ class ScanMergerTest {
     }
 
     @Test
-    fun `a sidecar older than the row does not`() {
-        val stored = storedRow()
+    fun `a sidecar that hasn't changed does not`() {
+        val stored = storedRow().copy(xmpLastSyncedMtime = 8_000L)
         val old = draft(sidecar = scanned("DSC001.xmp", lastModified = 8_000L))
 
         val row = ScanMerger.merge(root, mapOf(stored.id to stored), listOf(old)).toUpsert.single()
 
         assertTrue(row.metadataLoaded)
         assertEquals("content://doc/DSC001.xmp", row.xmpFileUri)
+    }
+
+    @Test
+    fun `an older restored sidecar counts as changed`() {
+        val stored = storedRow().copy(xmpLastSyncedMtime = 8_000L)
+        val restored = draft(sidecar = scanned("DSC001.xmp", lastModified = 3_000L))
+
+        assertFalse(ScanMerger.merge(root, mapOf(stored.id to stored), listOf(restored)).toUpsert.single().metadataLoaded)
+    }
+
+    @Test
+    fun `a deleted sidecar forgets its sync time and keeps the row's values`() {
+        val stored = storedRow().copy(xmpFileUri = "content://doc/DSC001.xmp", xmpLastSyncedMtime = 8_000L)
+
+        val row = ScanMerger.merge(root, mapOf(stored.id to stored), listOf(draft())).toUpsert.single()
+
+        assertNull(row.xmpFileUri)
+        assertNull(row.xmpLastSyncedMtime)
+        assertTrue(row.metadataLoaded)
+        assertEquals(4, row.rating)
+    }
+
+    @Test
+    fun `sync state survives a rescan`() {
+        val stored = storedRow().copy(
+            xmpSyncStatus = XmpSyncStatus.PENDING,
+            xmpPendingFields = XmpField.RATING.bit,
+        )
+
+        val row = ScanMerger.merge(root, mapOf(stored.id to stored), listOf(draft(lastModified = 2_000L))).toUpsert.single()
+
+        assertEquals(XmpSyncStatus.PENDING, row.xmpSyncStatus)
+        assertEquals(XmpField.RATING.bit, row.xmpPendingFields)
+    }
+
+    @Test
+    fun `a darktable sidecar is tracked alongside the adobe one`() {
+        val adobe = scanned("DSC001.xmp", lastModified = 1L)
+        val darktable = scanned("DSC001.ARW.xmp", lastModified = 1L)
+
+        val row = ScanMerger.merge(root, emptyMap(), listOf(draft(sidecar = adobe).copy(darktableXmp = darktable)))
+            .toUpsert.single()
+
+        assertEquals("content://doc/DSC001.xmp", row.xmpFileUri)
+        assertEquals("content://doc/DSC001.ARW.xmp", row.darktableXmpUri)
     }
 
     @Test
