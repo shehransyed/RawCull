@@ -64,7 +64,7 @@ import dev.shehran.rawcull.ui.DamViewMode
 @Composable
 fun TopDamBar(
     uiState: DamUiState,
-    onSourceFolderPicked: (Uri, String) -> Unit,
+    onSourceFolderPicked: (Uri) -> Unit,
     onLoadSampleShoot: () -> Unit,
     onSetViewMode: (DamViewMode) -> Unit,
     onUpdateFilter: ((FilterOptions) -> FilterOptions) -> Unit,
@@ -75,10 +75,7 @@ fun TopDamBar(
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
-        if (uri != null) {
-            val folderName = uri.lastPathSegment?.substringAfterLast(':') ?: "Source Folder"
-            onSourceFolderPicked(uri, folderName)
-        }
+        if (uri != null) onSourceFolderPicked(uri)
     }
 
     Surface(

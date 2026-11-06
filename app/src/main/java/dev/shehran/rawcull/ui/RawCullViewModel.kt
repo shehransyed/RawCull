@@ -18,19 +18,27 @@ import dev.shehran.rawcull.data.model.ExportProgress
 import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.RecentSource
 import dev.shehran.rawcull.data.model.SortOrder
 import dev.shehran.rawcull.data.repository.RawCatalogRepository
+import dev.shehran.rawcull.data.repository.SettingsRepository
+import dev.shehran.rawcull.data.repository.StoredFolder
 import dev.shehran.rawcull.util.HistogramCalculator
 import dev.shehran.rawcull.util.HistogramData
 import dev.shehran.rawcull.util.RawPreviewLoader
+import dev.shehran.rawcull.util.SafPermissions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class DamViewMode {
     LOUPE,
@@ -48,6 +56,7 @@ data class DamUiState(
     val filterOptions: FilterOptions = FilterOptions(),
     val sourceFolderName: String = "No folder selected",
     val sourceFolderUri: String? = null,
+    val isSourceAvailable: Boolean = true,
     val destinationFolderName: String = "Not set",
     val destinationFolderUri: String? = null,
     val isScanning: Boolean = false,
@@ -77,6 +86,7 @@ data class DamUiState(
 class RawCullViewModel(
     private val appContext: Context,
     private val repository: RawCatalogRepository,
+    private val settings: SettingsRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(DamUiState())
     val uiState: StateFlow<DamUiState> = _uiState.asStateFlow()
@@ -85,6 +95,8 @@ class RawCullViewModel(
     private var histogramJob: Job? = null
 
     init {
+        viewModelScope.launch { restoreSession() }
+
         // Collect photos from database
         viewModelScope.launch {
             repository.allPhotos.collect { photoList ->
@@ -286,10 +298,49 @@ class RawCullViewModel(
     }
 
     // --- SOURCE & DESTINATION FOLDERS (SAF & OTG SD CARD) ---
-    fun onSourceFolderSelected(uri: Uri, folderName: String) {
+    private suspend fun restoreSession() {
+        val persisted = withContext(Dispatchers.IO) { SafPermissions.persistedUris(appContext) }
+        settings.pruneRecents(persisted)
+
+        settings.lastDestination()?.takeIf { it.uri in persisted }?.let { destination ->
+            _uiState.update {
+                it.copy(destinationFolderUri = destination.uri, destinationFolderName = destination.displayName)
+            }
+        }
+
+        val source = settings.lastSource()?.takeIf { it.uri in persisted } ?: return
+        val uri = Uri.parse(source.uri)
+        if (withContext(Dispatchers.IO) { SafPermissions.isAvailable(appContext, uri) }) {
+            openSource(uri, source.displayName)
+        } else {
+            _uiState.update {
+                it.copy(sourceFolderUri = source.uri, sourceFolderName = source.displayName, isSourceAvailable = false)
+            }
+        }
+    }
+
+    fun onSourceFolderSelected(uri: Uri) {
+        SafPermissions.takePersistable(appContext, uri)
+        viewModelScope.launch {
+            val name = withContext(Dispatchers.IO) { SafPermissions.displayName(appContext, uri) }
+            val evicted = settings.recordSourceOpened(RecentSource(uri.toString(), name, System.currentTimeMillis()))
+            evicted.forEach { releaseIfUnused(it.uri) }
+            openSource(uri, name)
+        }
+    }
+
+    /** Evicted or replaced folders keep no grant unless a recent entry or the destination needs it. */
+    private suspend fun releaseIfUnused(uri: String) {
+        val inUse = uri == _uiState.value.destinationFolderUri ||
+                settings.recentSources.first().any { it.uri == uri }
+        if (!inUse) SafPermissions.release(appContext, Uri.parse(uri))
+    }
+
+    private fun openSource(uri: Uri, folderName: String) {
         _uiState.value = _uiState.value.copy(
             sourceFolderUri = uri.toString(),
             sourceFolderName = folderName,
+            isSourceAvailable = true,
             isScanning = true,
             scanStatusText = "Scanning $folderName for RAW files (ARW, DNG)..."
         )
@@ -307,11 +358,15 @@ class RawCullViewModel(
         }
     }
 
-    fun onDestinationFolderSelected(uri: Uri, folderName: String) {
-        _uiState.value = _uiState.value.copy(
-            destinationFolderUri = uri.toString(),
-            destinationFolderName = folderName
-        )
+    fun onDestinationFolderSelected(uri: Uri) {
+        SafPermissions.takePersistable(appContext, uri)
+        viewModelScope.launch {
+            val name = withContext(Dispatchers.IO) { SafPermissions.displayName(appContext, uri) }
+            val previous = _uiState.value.destinationFolderUri
+            _uiState.update { it.copy(destinationFolderUri = uri.toString(), destinationFolderName = name) }
+            settings.setLastDestination(StoredFolder(uri.toString(), name))
+            if (previous != null && previous != uri.toString()) releaseIfUnused(previous)
+        }
     }
 
     fun loadSampleShoot() {
@@ -454,7 +509,7 @@ class RawCullViewModel(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as RawCullApp
-                RawCullViewModel(app, app.container.catalogRepository)
+                RawCullViewModel(app, app.container.catalogRepository, app.container.settingsRepository)
             }
         }
     }

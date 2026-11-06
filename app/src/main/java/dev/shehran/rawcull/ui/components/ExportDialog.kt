@@ -77,7 +77,7 @@ fun ExportDialog(
     destinationFolderUri: String?,
     destinationFolderName: String,
     exportProgress: ExportProgress,
-    onPickDestinationFolder: (Uri, String) -> Unit,
+    onPickDestinationFolder: (Uri) -> Unit,
     onStartExport: (ExportConfig) -> Unit,
     onCancelExport: () -> Unit,
     onDismiss: () -> Unit,
@@ -86,10 +86,7 @@ fun ExportDialog(
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
-        if (uri != null) {
-            val name = uri.lastPathSegment?.substringAfterLast(':') ?: "Selected Folder"
-            onPickDestinationFolder(uri, name)
-        }
+        if (uri != null) onPickDestinationFolder(uri)
     }
 
     var shootName by remember { mutableStateOf("Pacific_Coast_Shoot") }
@@ -309,7 +306,7 @@ fun ExportDialog(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
                             .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(10.dp))
-                            .clickable { folderPickerLauncher.launch(null) }
+                            .clickable { folderPickerLauncher.launch(destinationFolderUri?.let(Uri::parse)) }
                             .testTag("choose_dest_folder_button"),
                         color = Color(0xFF0A0E14)
                     ) {
