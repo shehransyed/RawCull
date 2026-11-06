@@ -10,6 +10,8 @@ import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.net.Uri
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.toColorInt
 import com.example.data.model.ColorLabel
 import com.example.data.model.CullStatus
 import com.example.data.model.PairMode
@@ -19,7 +21,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-import java.util.UUID
 
 object SamplePhotosGenerator {
 
@@ -180,7 +181,7 @@ object SamplePhotosGenerator {
         sampleConfigs.forEachIndexed { index, def ->
             val file = File(sampleDir, def.fileName)
             // Generate RAW file
-            if (!file.exists() || file.length() < 1000) {
+            if (!file.exists() || (file.length() < 1000)) {
                 val bitmap = renderSceneBitmap(def.sceneType)
                 FileOutputStream(file).use { out ->
                     bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
@@ -257,7 +258,7 @@ object SamplePhotosGenerator {
     private fun renderSceneBitmap(scene: SceneType): Bitmap {
         val width = 1600
         val height = 1067
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
@@ -266,7 +267,7 @@ object SamplePhotosGenerator {
                 // Sunset sky gradient
                 paint.shader = LinearGradient(
                     0f, 0f, 0f, height * 0.65f,
-                    intArrayOf(Color.parseColor("#1A1C2E"), Color.parseColor("#7A3E48"), Color.parseColor("#E65C40"), Color.parseColor("#FFB03B")),
+                    intArrayOf("#1A1C2E".toColorInt(), "#7A3E48".toColorInt(), "#E65C40".toColorInt(), "#FFB03B".toColorInt()),
                     floatArrayOf(0f, 0.4f, 0.75f, 1f),
                     Shader.TileMode.CLAMP
                 )
@@ -275,7 +276,7 @@ object SamplePhotosGenerator {
                 // Sun glow
                 paint.shader = RadialGradient(
                     width * 0.65f, height * 0.52f, 320f,
-                    intArrayOf(Color.parseColor("#FFF7D1"), Color.parseColor("#FFA03B"), Color.TRANSPARENT),
+                    intArrayOf("#FFF7D1".toColorInt(), "#FFA03B".toColorInt(), Color.TRANSPARENT),
                     floatArrayOf(0f, 0.35f, 1f),
                     Shader.TileMode.CLAMP
                 )
@@ -284,7 +285,7 @@ object SamplePhotosGenerator {
                 // Ocean water with reflections
                 paint.shader = LinearGradient(
                     0f, height * 0.65f, 0f, height.toFloat(),
-                    intArrayOf(Color.parseColor("#E67E22"), Color.parseColor("#2C3E50"), Color.parseColor("#0F172A")),
+                    intArrayOf("#E67E22".toColorInt(), "#2C3E50".toColorInt(), "#0F172A".toColorInt()),
                     floatArrayOf(0f, 0.3f, 1f),
                     Shader.TileMode.CLAMP
                 )
@@ -292,7 +293,7 @@ object SamplePhotosGenerator {
 
                 // Coastal sea stack rocks silhouette
                 paint.shader = null
-                paint.color = Color.parseColor("#0F172A")
+                paint.color = "#0F172A".toColorInt()
                 val rockPath = Path().apply {
                     moveTo(width * 0.15f, height.toFloat())
                     lineTo(width * 0.22f, height * 0.45f)
@@ -308,7 +309,7 @@ object SamplePhotosGenerator {
                 renderSceneBitmap(SceneType.GOLDEN_COAST).let { base ->
                     val tmpCanvas = Canvas(base)
                     val foamPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.parseColor("#CCFFFFFF")
+                        color = "#CCFFFFFF".toColorInt()
                     }
                     tmpCanvas.drawCircle(width * 0.25f, height * 0.62f, 40f, foamPaint)
                     return base
@@ -318,13 +319,13 @@ object SamplePhotosGenerator {
                 // Dark motion blur test
                 paint.shader = LinearGradient(
                     0f, 0f, width.toFloat(), height.toFloat(),
-                    intArrayOf(Color.parseColor("#374151"), Color.parseColor("#1F2937"), Color.parseColor("#111827")),
+                    intArrayOf("#374151".toColorInt(), "#1F2937".toColorInt(), "#111827".toColorInt()),
                     null,
                     Shader.TileMode.CLAMP
                 )
                 canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
                 paint.shader = null
-                paint.color = Color.parseColor("#6B7280")
+                paint.color = "#6B7280".toColorInt()
                 paint.strokeWidth = 32f
                 paint.style = Paint.Style.STROKE
                 canvas.drawLine(100f, height * 0.5f, width - 100f, height * 0.5f, paint)
@@ -333,7 +334,7 @@ object SamplePhotosGenerator {
                 // Dramatic snow peaks with clear turquoise sky
                 paint.shader = LinearGradient(
                     0f, 0f, 0f, height * 0.55f,
-                    intArrayOf(Color.parseColor("#0C4A6E"), Color.parseColor("#38BDF8")),
+                    intArrayOf("#0C4A6E".toColorInt(), "#38BDF8".toColorInt()),
                     null,
                     Shader.TileMode.CLAMP
                 )
@@ -341,7 +342,7 @@ object SamplePhotosGenerator {
 
                 // Mountain peaks
                 paint.shader = null
-                paint.color = Color.parseColor("#F8FAFC")
+                paint.color = "#F8FAFC".toColorInt()
                 val peakPath = Path().apply {
                     moveTo(0f, height * 0.65f)
                     lineTo(width * 0.35f, height * 0.22f)
@@ -355,7 +356,7 @@ object SamplePhotosGenerator {
                 canvas.drawPath(peakPath, paint)
 
                 // Mountain shadow side
-                paint.color = Color.parseColor("#334155")
+                paint.color = "#334155".toColorInt()
                 val shadowPath = Path().apply {
                     moveTo(width * 0.35f, height * 0.22f)
                     lineTo(width * 0.55f, height * 0.42f)
@@ -369,7 +370,7 @@ object SamplePhotosGenerator {
                 // Misty deep forest greens
                 paint.shader = LinearGradient(
                     0f, 0f, 0f, height.toFloat(),
-                    intArrayOf(Color.parseColor("#E2E8F0"), Color.parseColor("#64748B"), Color.parseColor("#14532D"), Color.parseColor("#052E16")),
+                    intArrayOf("#E2E8F0".toColorInt(), "#64748B".toColorInt(), "#14532D".toColorInt(), "#052E16".toColorInt()),
                     floatArrayOf(0f, 0.35f, 0.7f, 1f),
                     Shader.TileMode.CLAMP
                 )
@@ -379,7 +380,7 @@ object SamplePhotosGenerator {
                 // Deep cyan tropical water and islands
                 paint.shader = RadialGradient(
                     width * 0.5f, height * 0.5f, width * 0.6f,
-                    intArrayOf(Color.parseColor("#06B6D4"), Color.parseColor("#0891B2"), Color.parseColor("#0E7490"), Color.parseColor("#155E75")),
+                    intArrayOf("#06B6D4".toColorInt(), "#0891B2".toColorInt(), "#0E7490".toColorInt(), "#155E75".toColorInt()),
                     floatArrayOf(0f, 0.4f, 0.75f, 1f),
                     Shader.TileMode.CLAMP
                 )
@@ -387,14 +388,14 @@ object SamplePhotosGenerator {
 
                 // Coral reef & atoll islands
                 paint.shader = null
-                paint.color = Color.parseColor("#FEF08A")
+                paint.color = "#FEF08A".toColorInt()
                 canvas.drawCircle(width * 0.35f, height * 0.45f, 120f, paint)
-                paint.color = Color.parseColor("#15803D")
+                paint.color = "#15803D".toColorInt()
                 canvas.drawCircle(width * 0.35f, height * 0.45f, 85f, paint)
 
-                paint.color = Color.parseColor("#FEF08A")
+                paint.color = "#FEF08A".toColorInt()
                 canvas.drawCircle(width * 0.68f, height * 0.6f, 160f, paint)
-                paint.color = Color.parseColor("#15803D")
+                paint.color = "#15803D".toColorInt()
                 canvas.drawCircle(width * 0.68f, height * 0.6f, 120f, paint)
             }
             SceneType.STUDIO_PORTRAIT -> {

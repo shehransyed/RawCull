@@ -43,7 +43,7 @@ object RawMetadataParser {
         val shutter = formatShutterSpeed(exif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME))
         val aperture = formatAperture(exif.getAttribute(ExifInterface.TAG_F_NUMBER))
         val iso = exif.getAttribute(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY)
-            ?: exif.getAttribute(ExifInterface.TAG_ISO_SPEED_RATINGS)
+            ?: @Suppress("DEPRECATION") exif.getAttribute(ExifInterface.TAG_ISO_SPEED_RATINGS)
         val focalLength = formatFocalLength(exif.getAttribute(ExifInterface.TAG_FOCAL_LENGTH))
         val exposureBias = formatExposureBias(exif.getAttribute(ExifInterface.TAG_EXPOSURE_BIAS_VALUE))
 

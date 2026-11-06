@@ -16,7 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -200,7 +200,7 @@ fun TabletDamScreen(
                                     shape = RoundedCornerShape(6.dp),
                                     modifier = Modifier.height(28.dp)
                                 ) {
-                                    Icon(Icons.Default.Label, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.padding(end = 4.dp))
+                                    Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.padding(end = 4.dp))
                                     Text("Edit Tags", fontSize = 11.sp, color = Color(0xFF38BDF8))
                                 }
                             }

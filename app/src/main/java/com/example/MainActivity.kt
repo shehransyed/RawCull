@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.example.data.model.ColorLabel
 import com.example.data.model.CullStatus
 import com.example.ui.MainDamScreen
 import com.example.ui.RawCullViewModel

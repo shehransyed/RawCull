@@ -15,12 +15,12 @@ import com.example.ui.tablet.TabletDamScreen
 @Composable
 fun MainDamScreen(
     viewModel: RawCullViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val isTablet = maxWidth >= 700.dp
+        val isTablet = this.maxWidth >= 700.dp
 
         if (isTablet) {
             TabletDamScreen(

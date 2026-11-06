@@ -17,8 +17,6 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lens
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.ShutterSpeed
-import androidx.compose.material3.Divider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,7 +41,7 @@ import java.util.Locale
 @Composable
 fun ExifInspectorPanel(
     photo: RawPhotoItem?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Surface(
         modifier = modifier
@@ -188,7 +186,7 @@ fun ExifInspectorPanel(
                     MetadataRow(
                         icon = Icons.Default.Info,
                         label = "Paired JPEG",
-                        value = "${photo.jpegFileName ?: "Yes"}"
+                        value = photo.jpegFileName ?: "Yes"
                     )
                 }
 

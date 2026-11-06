@@ -21,8 +21,8 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "lumina_raw_catalog.db"
-                ).fallbackToDestructiveMigration().build()
+                    "lumina_raw_catalog.db",
+                ).fallbackToDestructiveMigration(dropAllTables = true).build()
                 INSTANCE = instance
                 instance
             }

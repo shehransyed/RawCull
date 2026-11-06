@@ -1,10 +1,6 @@
 package com.example.ui.components
 
 import android.graphics.Bitmap
-import android.net.Uri
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,6 +56,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import com.example.data.model.ColorLabel
 import com.example.data.model.CullStatus
 import com.example.data.model.RawFormat
@@ -71,11 +68,11 @@ fun ZoomableLoupeView(
     photo: RawPhotoItem?,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     var previewBitmap by remember(photo?.id) { mutableStateOf<Bitmap?>(null) }
-    var isLoading by remember(photo?.id) { mutableStateOf(true) }
+    var isLoading by remember(photo?.id) { mutableStateOf(value = true) }
 
     var scale by remember(photo?.id) { mutableFloatStateOf(1f) }
     var offset by remember(photo?.id) { mutableStateOf(Offset.Zero) }
@@ -87,8 +84,8 @@ fun ZoomableLoupeView(
             return@LaunchedEffect
         }
         isLoading = true
-        val uri = Uri.parse(photo.fileUri)
-        val jpegUri = photo.jpegFileUri?.let { Uri.parse(it) }
+        val uri = photo.fileUri.toUri()
+        val jpegUri = photo.jpegFileUri?.toUri()
         val bmp = RawPreviewLoader.loadPreview(
             context = context,
             uri = uri,
@@ -96,7 +93,7 @@ fun ZoomableLoupeView(
             format = photo.format,
             targetWidth = 2560,
             targetHeight = 1600,
-            companionJpegUri = jpegUri
+            companionJpegUri = jpegUri,
         )
         previewBitmap = bmp
         isLoading = false
@@ -129,15 +126,15 @@ fun ZoomableLoupeView(
                     val newScale = (scale * zoom).coerceIn(1f, 6f)
                     scale = newScale
 
-                    if (newScale > 1f) {
+                    offset = if (newScale > 1f) {
                         val maxPanX = (size.width * (newScale - 1f)) / 2f
                         val maxPanY = (size.height * (newScale - 1f)) / 2f
-                        offset = Offset(
+                        Offset(
                             x = (offset.x + pan.x).coerceIn(-maxPanX, maxPanX),
                             y = (offset.y + pan.y).coerceIn(-maxPanY, maxPanY)
                         )
                     } else {
-                        offset = Offset.Zero
+                        Offset.Zero
                     }
                 }
             }

@@ -2,6 +2,7 @@ package com.example.data.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import java.util.Locale
 
 enum class CullStatus {
     UNFLAGGED,
@@ -100,7 +101,7 @@ data class RawPhotoItem(
         get() {
             val totalBytes = fileSizeBytes + (jpegFileSizeBytes ?: 0L)
             val mb = totalBytes / (1024.0 * 1024.0)
-            return if (mb >= 1.0) String.format("%.1f MB", mb) else "${totalBytes / 1024} KB"
+            return if (mb >= 1.0) String.format(Locale.US, "%.1f MB", mb) else "${totalBytes / 1024} KB"
         }
 
     val displayExposure: String

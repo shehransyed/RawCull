@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -82,9 +81,8 @@ fun ExportDialog(
     onStartExport: (ExportConfig) -> Unit,
     onCancelExport: () -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -190,7 +188,7 @@ fun ExportDialog(
                         Spacer(modifier = Modifier.height(6.dp))
                         val mb = exportProgress.bytesWritten / (1024.0 * 1024.0)
                         Text(
-                            text = "Transferred ${exportProgress.totalFiles} files (${String.format("%.1f MB", mb)}) at ${exportProgress.formattedSpeed} to '${exportProgress.targetDirectoryPath}'",
+                            text = "Transferred ${exportProgress.totalFiles} files (${String.format(Locale.US, "%.1f MB", mb)}) at ${exportProgress.formattedSpeed} to '${exportProgress.targetDirectoryPath}'",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFFCBD5E1)
                         )

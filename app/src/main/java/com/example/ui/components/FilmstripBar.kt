@@ -1,7 +1,6 @@
 package com.example.ui.components
 
 import android.graphics.Bitmap
-import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,7 +31,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import com.example.data.model.ColorLabel
 import com.example.data.model.CullStatus
 import com.example.data.model.RawFormat
@@ -67,7 +66,7 @@ fun FilmstripBar(
     isMultiSelectMode: Boolean,
     onSelectIndex: (Int) -> Unit,
     onToggleSelectPhoto: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
 
@@ -83,13 +82,13 @@ fun FilmstripBar(
             .height(115.dp)
             .testTag("filmstrip_bar"),
         color = Color(0xFF0F141A),
-        tonalElevation = 4.dp
+        tonalElevation = 4.dp,
     ) {
         LazyRow(
             state = listState,
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
         ) {
             itemsIndexed(photos, key = { _, item -> item.id }) { index, photo ->
                 val isCurrent = index == selectedIndex
@@ -107,7 +106,7 @@ fun FilmstripBar(
                             onSelectIndex(index)
                         }
                     },
-                    modifier = Modifier.testTag("filmstrip_item_$index")
+                    modifier = Modifier.testTag("filmstrip_item_$index"),
                 )
             }
         }
@@ -121,22 +120,22 @@ private fun FilmstripThumbnailItem(
     isChecked: Boolean,
     isMultiSelectMode: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     var thumbBitmap by remember(photo.id) { mutableStateOf<Bitmap?>(null) }
-    var isLoading by remember(photo.id) { mutableStateOf(true) }
+    var isLoading by remember(photo.id) { mutableStateOf(value = true) }
 
     LaunchedEffect(photo.id) {
         isLoading = true
-        val jpegUri = photo.jpegFileUri?.let { Uri.parse(it) }
+        val jpegUri = photo.jpegFileUri?.toUri()
         thumbBitmap = RawPreviewLoader.loadThumbnail(
             context = context,
-            uri = Uri.parse(photo.fileUri),
+            uri = photo.fileUri.toUri(),
             id = photo.id,
             format = photo.format,
             maxDimension = 240,
-            companionJpegUri = jpegUri
+            companionJpegUri = jpegUri,
         )
         isLoading = false
     }
@@ -252,7 +251,7 @@ private fun FilmstripThumbnailItem(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(10.dp))
                         Text(
-                            text = "${photo.rating}",
+                            text = photo.rating.toString(),
                             color = Color(0xFFFBBF24),
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold

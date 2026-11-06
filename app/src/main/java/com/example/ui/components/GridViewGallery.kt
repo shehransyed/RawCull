@@ -1,7 +1,6 @@
 package com.example.ui.components
 
 import android.graphics.Bitmap
-import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -55,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import com.example.data.model.ColorLabel
 import com.example.data.model.CullStatus
 import com.example.data.model.RawFormat
@@ -72,7 +72,7 @@ fun GridViewGallery(
     onBatchPick: () -> Unit,
     onBatchReject: () -> Unit,
     onOpenExport: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
@@ -193,18 +193,18 @@ private fun GridPhotoCard(
 ) {
     val context = LocalContext.current
     var bitmap by remember(photo.id) { mutableStateOf<Bitmap?>(null) }
-    var isLoading by remember(photo.id) { mutableStateOf(true) }
+    var isLoading by remember(photo.id) { mutableStateOf(value = true) }
 
     LaunchedEffect(photo.id) {
         isLoading = true
-        val jpegUri = photo.jpegFileUri?.let { Uri.parse(it) }
+        val jpegUri = photo.jpegFileUri?.toUri()
         bitmap = RawPreviewLoader.loadThumbnail(
             context = context,
-            uri = Uri.parse(photo.fileUri),
+            uri = photo.fileUri.toUri(),
             id = photo.id,
             format = photo.format,
             maxDimension = 360,
-            companionJpegUri = jpegUri
+            companionJpegUri = jpegUri,
         )
         isLoading = false
     }
@@ -312,7 +312,7 @@ private fun GridPhotoCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(12.dp))
                         Spacer(modifier = Modifier.width(3.dp))
-                        Text(text = "${photo.rating}", color = Color(0xFFFBBF24), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(text = photo.rating.toString(), color = Color(0xFFFBBF24), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

@@ -12,10 +12,8 @@ import androidx.exifinterface.media.ExifInterface
 import com.example.data.model.RawFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
 
 object RawPreviewLoader {
     private val memoryCache: LruCache<String, Bitmap> = run {
@@ -35,10 +33,10 @@ object RawPreviewLoader {
         format: RawFormat,
         targetWidth: Int = 1920,
         targetHeight: Int = 1080,
-        companionJpegUri: Uri? = null
+        companionJpegUri: Uri? = null,
     ): Bitmap? = withContext(Dispatchers.IO) {
-        val cacheKey = "${id}_${targetWidth}x${targetHeight}"
-        memoryCache.get(cacheKey)?.let { return@withContext it }
+        val cacheKey = "${id}_${targetWidth}x$targetHeight"
+        memoryCache[cacheKey]?.let { return@withContext it }
 
         // Check disk cache
         val diskCached = getFromDiskCache(context, cacheKey)
@@ -48,8 +46,12 @@ object RawPreviewLoader {
         }
 
         // Decode from companion JPEG if available, or RAW source
-        val bitmap = (if (companionJpegUri != null) decodeWithBitmapFactory(context, companionJpegUri, targetWidth, targetHeight)?.let { applyExifOrientation(context, companionJpegUri, it) } else null)
-            ?: decodeRaw(context, uri, format, targetWidth, targetHeight)
+        val companionBitmap = companionJpegUri?.let { jpegUri ->
+            decodeWithBitmapFactory(context, jpegUri, targetWidth, targetHeight)?.let {
+                applyExifOrientation(context, jpegUri, it)
+            }
+        }
+        val bitmap = companionBitmap ?: decodeRaw(context, uri, format, targetWidth, targetHeight)
 
         if (bitmap != null) {
             memoryCache.put(cacheKey, bitmap)
@@ -64,10 +66,10 @@ object RawPreviewLoader {
         id: String,
         format: RawFormat,
         maxDimension: Int = 512,
-        companionJpegUri: Uri? = null
+        companionJpegUri: Uri? = null,
     ): Bitmap? = withContext(Dispatchers.IO) {
-        val cacheKey = "${id}_thumb_${maxDimension}"
-        memoryCache.get(cacheKey)?.let { return@withContext it }
+        val cacheKey = "${id}_thumb_$maxDimension"
+        memoryCache[cacheKey]?.let { return@withContext it }
 
         val diskCached = getFromDiskCache(context, cacheKey)
         if (diskCached != null) {
@@ -75,8 +77,12 @@ object RawPreviewLoader {
             return@withContext diskCached
         }
 
-        val bitmap = (if (companionJpegUri != null) decodeWithBitmapFactory(context, companionJpegUri, maxDimension, maxDimension)?.let { applyExifOrientation(context, companionJpegUri, it) } else null)
-            ?: decodeRaw(context, uri, format, maxDimension, maxDimension)
+        val companionBitmap = companionJpegUri?.let { jpegUri ->
+            decodeWithBitmapFactory(context, jpegUri, maxDimension, maxDimension)?.let {
+                applyExifOrientation(context, jpegUri, it)
+            }
+        }
+        val bitmap = companionBitmap ?: decodeRaw(context, uri, format, maxDimension, maxDimension)
 
         if (bitmap != null) {
             memoryCache.put(cacheKey, bitmap)
@@ -88,15 +94,15 @@ object RawPreviewLoader {
     private fun decodeRaw(
         context: Context,
         uri: Uri,
-        format: RawFormat,
+        @Suppress("UNUSED_PARAMETER") format: RawFormat,
         targetW: Int,
-        targetH: Int
+        targetH: Int,
     ): Bitmap? {
         // Strategy 1: Extract embedded JPEG thumbnail/preview from ExifInterface
         var bitmap = extractExifThumbnail(context, uri)
 
         // Strategy 2: If format is DNG or ARW and ExifInterface thumbnail is small/null, use ImageDecoder (API 28+)
-        if (bitmap == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        if ((bitmap == null) && (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)) {
             bitmap = decodeWithImageDecoder(context, uri, targetW, targetH)
         }
 
@@ -159,9 +165,7 @@ object RawPreviewLoader {
             context.contentResolver.openInputStream(uri)?.use { stream ->
                 // Search for JPEG SOI (0xFF, 0xD8, 0xFF) within the first 16MB of the RAW file
                 val buffer = ByteArray(64 * 1024)
-                var bytesRead = stream.read(buffer)
-                var totalScanned = 0
-                val maxScan = 16 * 1024 * 1024
+                val bytesRead = stream.read(buffer)
 
                 // Find 0xFF 0xD8 0xFF
                 var soiOffset = -1

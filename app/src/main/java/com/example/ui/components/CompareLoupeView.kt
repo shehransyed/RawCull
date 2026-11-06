@@ -1,7 +1,6 @@
 package com.example.ui.components
 
 import android.graphics.Bitmap
-import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,6 +50,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import com.example.data.model.CullStatus
 import com.example.data.model.RawPhotoItem
 import com.example.util.RawPreviewLoader
@@ -64,13 +63,13 @@ fun CompareLoupeView(
     onPickB: () -> Unit,
     onRejectA: () -> Unit,
     onRejectB: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     var bitmapA by remember(photoA?.id) { mutableStateOf<Bitmap?>(null) }
     var bitmapB by remember(photoB?.id) { mutableStateOf<Bitmap?>(null) }
-    var loadingA by remember(photoA?.id) { mutableStateOf(true) }
-    var loadingB by remember(photoB?.id) { mutableStateOf(true) }
+    var loadingA by remember(photoA?.id) { mutableStateOf(value = true) }
+    var loadingB by remember(photoB?.id) { mutableStateOf(value = true) }
 
     // Synchronized zoom & pan state
     var sharedScale by remember { mutableFloatStateOf(1f) }
@@ -79,8 +78,8 @@ fun CompareLoupeView(
     LaunchedEffect(photoA?.id) {
         if (photoA != null) {
             loadingA = true
-            val jpegUriA = photoA.jpegFileUri?.let { Uri.parse(it) }
-            bitmapA = RawPreviewLoader.loadPreview(context, Uri.parse(photoA.fileUri), photoA.id, photoA.format, 1920, 1200, companionJpegUri = jpegUriA)
+            val jpegUriA = photoA.jpegFileUri?.toUri()
+            bitmapA = RawPreviewLoader.loadPreview(context, photoA.fileUri.toUri(), photoA.id, photoA.format, 1920, 1200, companionJpegUri = jpegUriA)
             loadingA = false
         }
     }
@@ -88,8 +87,8 @@ fun CompareLoupeView(
     LaunchedEffect(photoB?.id) {
         if (photoB != null) {
             loadingB = true
-            val jpegUriB = photoB.jpegFileUri?.let { Uri.parse(it) }
-            bitmapB = RawPreviewLoader.loadPreview(context, Uri.parse(photoB.fileUri), photoB.id, photoB.format, 1920, 1200, companionJpegUri = jpegUriB)
+            val jpegUriB = photoB.jpegFileUri?.toUri()
+            bitmapB = RawPreviewLoader.loadPreview(context, photoB.fileUri.toUri(), photoB.id, photoB.format, 1920, 1200, companionJpegUri = jpegUriB)
             loadingB = false
         }
     }
@@ -156,15 +155,15 @@ fun CompareLoupeView(
                     detectTransformGestures { _, pan, zoom, _ ->
                         val newScale = (sharedScale * zoom).coerceIn(1f, 5f)
                         sharedScale = newScale
-                        if (newScale > 1f) {
+                        sharedOffset = if (newScale > 1f) {
                             val maxPanX = (size.width * (newScale - 1f)) / 2f
                             val maxPanY = (size.height * (newScale - 1f)) / 2f
-                            sharedOffset = Offset(
+                            Offset(
                                 (sharedOffset.x + pan.x).coerceIn(-maxPanX, maxPanX),
                                 (sharedOffset.y + pan.y).coerceIn(-maxPanY, maxPanY)
                             )
                         } else {
-                            sharedOffset = Offset.Zero
+                            Offset.Zero
                         }
                     }
                 }
@@ -208,7 +207,7 @@ private fun ComparePane(
     offset: Offset,
     onPick: () -> Unit,
     onReject: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
@@ -219,7 +218,7 @@ private fun ComparePane(
         if (bitmap != null) {
             Image(
                 bitmap = bitmap.asImageBitmap(),
-                contentDescription = photo?.fileName ?: "RAW A",
+                contentDescription = photo?.fileName ?: title,
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {

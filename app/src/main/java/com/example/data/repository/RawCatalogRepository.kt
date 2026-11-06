@@ -7,7 +7,6 @@ import com.example.data.local.RawPhotoDao
 import com.example.data.model.ColorLabel
 import com.example.data.model.CullStatus
 import com.example.data.model.ExportConfig
-import com.example.data.model.ExportMode
 import com.example.data.model.ExportProgress
 import com.example.data.model.IngestFileSelection
 import com.example.data.model.PairMode
@@ -29,9 +28,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import androidx.core.net.toUri
+
 class RawCatalogRepository(
     private val context: Context,
-    private val dao: RawPhotoDao
+    private val dao: RawPhotoDao,
 ) {
     val allPhotos: Flow<List<RawPhotoItem>> = dao.getAllPhotos()
 
@@ -210,7 +211,7 @@ class RawCatalogRepository(
             return@flow
         }
 
-        val destUri = Uri.parse(config.destinationFolderUri)
+        val destUri = config.destinationFolderUri.toUri()
         val destDoc = DocumentFile.fromTreeUri(context, destUri)
         if (destDoc == null || !destDoc.canWrite()) {
             emit(ExportProgress(completed = true, errorMessage = "Destination folder is not writable or inaccessible."))

@@ -22,8 +22,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,7 +49,7 @@ fun CullingActionBar(
     onToggleReject: () -> Unit,
     onSetRating: (Int) -> Unit,
     onSetColorLabel: (ColorLabel) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Surface(
         modifier = modifier
@@ -59,7 +57,7 @@ fun CullingActionBar(
             .clip(RoundedCornerShape(12.dp))
             .testTag("culling_action_bar"),
         color = Color(0xFF13181F),
-        tonalElevation = 3.dp
+        tonalElevation = 3.dp,
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
