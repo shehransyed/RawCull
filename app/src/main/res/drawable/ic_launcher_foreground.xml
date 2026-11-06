@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/lumina_raw_icon_1793580258305"
+        android:drawable="@drawable/rawcull_icon"
         android:gravity="center" />
 </layer-list>
