@@ -33,6 +33,7 @@ class ExampleRobolectricTest {
         assertEquals(PhotoFormat.ARW, PhotoFormat.fromFileName("photo.arw"))
         assertEquals(PhotoFormat.DNG, PhotoFormat.fromFileName("L1002341.DNG"))
         assertEquals(PhotoFormat.DNG, PhotoFormat.fromFileName("drone.dng"))
+        assertEquals(PhotoFormat.HEIF, PhotoFormat.fromFileName("DSC00001.HIF"))
     }
 
     @Test
