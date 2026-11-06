@@ -2,21 +2,17 @@ package dev.shehran.rawcull.data.repository
 
 import android.content.Context
 import android.net.Uri
-import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import dev.shehran.rawcull.data.local.RawPhotoDao
-import dev.shehran.rawcull.data.model.AssetIds
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.DEMO_ROOT_URI
 import dev.shehran.rawcull.data.model.ExportConfig
 import dev.shehran.rawcull.data.model.ExportProgress
 import dev.shehran.rawcull.data.model.IngestFileSelection
-import dev.shehran.rawcull.data.model.PairMode
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.XmpSyncStatus
-import dev.shehran.rawcull.util.RawMetadataParser
 import dev.shehran.rawcull.util.SamplePhotosGenerator
 import dev.shehran.rawcull.util.XmpSidecarGenerator
 import dev.shehran.rawcull.util.XmpSidecarManager
@@ -44,102 +40,6 @@ class RawCatalogRepository(
         if (dao.getIdsByRoot(DEMO_ROOT_URI).isEmpty()) {
             dao.upsertAll(SamplePhotosGenerator.createSampleShoot(context))
         }
-    }
-
-    suspend fun scanSourceFolder(
-        treeUri: Uri,
-        onProgress: (scanned: Int, currentName: String) -> Unit
-    ): Int = withContext(Dispatchers.IO) {
-        val rootDoc = DocumentFile.fromTreeUri(context, treeUri) ?: return@withContext 0
-        val files = rootDoc.listFiles()
-        val rootDocUri = DocumentsContract.buildDocumentUriUsingTree(
-            treeUri, DocumentsContract.getTreeDocumentId(treeUri)
-        ).toString()
-
-        val rawExtensions = setOf("arw", "dng", "cr2", "cr3", "nef", "raw")
-        val jpegExtensions = setOf("jpg", "jpeg")
-
-        // Map files by base stem (lowercase)
-        val rawDocs = mutableMapOf<String, DocumentFile>()
-        val jpegDocs = mutableMapOf<String, DocumentFile>()
-        val xmpDocs = mutableMapOf<String, DocumentFile>()
-
-        for (file in files) {
-            if (file.isFile) {
-                val name = file.name ?: continue
-                val stem = name.substringBeforeLast('.').lowercase()
-                val ext = name.substringAfterLast('.', "").lowercase()
-
-                when {
-                    ext in rawExtensions -> rawDocs[stem] = file
-                    ext in jpegExtensions -> jpegDocs[stem] = file
-                    ext == "xmp" -> xmpDocs[stem] = file
-                }
-            }
-        }
-
-        val rawItems = mutableListOf<PhotoAsset>()
-        var scannedCount = 0
-
-        for ((stem, rawFile) in rawDocs) {
-            val name = rawFile.name ?: continue
-            scannedCount++
-            onProgress(scannedCount, name)
-
-            val format = PhotoFormat.fromFileName(name)
-            val metadata = RawMetadataParser.parse(context, rawFile.uri, format)
-
-            // Companion JPEG check
-            val matchingJpeg = jpegDocs[stem]
-            val pairMode = if (matchingJpeg != null) PairMode.RAW_AND_RASTER else PairMode.RAW_ONLY
-
-            // Existing XMP Sidecar check & pre-population
-            val matchingXmp = xmpDocs[stem]
-            val xmpData = if (matchingXmp != null) {
-                XmpSidecarManager.readSidecar(context, matchingXmp.uri)
-            } else null
-
-            val item = PhotoAsset(
-                id = AssetIds.of(treeUri.toString(), "", name.substringBeforeLast('.')),
-                fileName = name,
-                fileUri = rawFile.uri.toString(),
-                rootUri = treeUri.toString(),
-                parentDocUri = rootDocUri,
-                fileLastModified = rawFile.lastModified(),
-                metadataLoaded = true,
-                format = format,
-                fileSizeBytes = rawFile.length(),
-                dateTaken = if (metadata.dateTaken > 0) metadata.dateTaken else rawFile.lastModified(),
-                cullStatus = xmpData?.cullStatus ?: CullStatus.UNFLAGGED,
-                rating = xmpData?.rating ?: 0,
-                colorLabel = xmpData?.colorLabel ?: ColorLabel.NONE,
-                tags = xmpData?.tags ?: emptyList(),
-                width = metadata.width,
-                height = metadata.height,
-                cameraMake = metadata.cameraMake,
-                cameraModel = metadata.cameraModel,
-                lensModel = metadata.lensModel,
-                shutterSpeed = metadata.shutterSpeed,
-                aperture = metadata.aperture,
-                iso = metadata.iso,
-                focalLength = metadata.focalLength,
-                exposureBias = metadata.exposureBias,
-                orientation = metadata.orientation,
-                companionFileName = matchingJpeg?.name,
-                companionFileUri = matchingJpeg?.uri?.toString(),
-                companionFileSizeBytes = matchingJpeg?.length(),
-                companionFormat = matchingJpeg?.let { PhotoFormat.JPEG },
-                xmpFileUri = matchingXmp?.uri?.toString(),
-                pairMode = pairMode,
-                xmpSyncStatus = XmpSyncStatus.SYNCED
-            )
-            rawItems.add(item)
-        }
-
-        if (rawItems.isNotEmpty()) {
-            dao.upsertAll(rawItems)
-        }
-        rawItems.size
     }
 
     /** `.HIF` isn't an extension providers map to image/heif, so they would append one. */

@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
 import dev.shehran.rawcull.data.model.PhotoFormat
+import java.io.FileDescriptor
+import java.io.FileNotFoundException
 import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -17,25 +19,48 @@ data class ExtractedRawMetadata(
     val iso: String?,
     val focalLength: String?,
     val exposureBias: String?,
-    val dateTaken: Long,
+    val dateTaken: Long?, // Null when the file doesn't say; callers keep their own fallback
     val width: Int,
     val height: Int,
-    val orientation: Int
+    val orientation: Int,
+    val parsed: Boolean = true, // False for fallback values that weren't read from the file
 )
 
 object RawMetadataParser {
 
-    fun parse(context: Context, uri: Uri, fallbackFormat: PhotoFormat): ExtractedRawMetadata {
-        return runCatching {
-            context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                parseFromStream(inputStream)
-            }
-        }.getOrNull() ?: fallbackMetadata(fallbackFormat)
+    /**
+     * Reads headers through a seekable descriptor, so the whole file isn't streamed. The companion
+     * is the EXIF source when the primary isn't parseable (CR3, unknown RAW).
+     *
+     * A file that can't be opened throws, because that may mean the volume is gone. A file that
+     * opens but can't be parsed yields fallback metadata with [ExtractedRawMetadata.parsed] false.
+     */
+    fun parse(context: Context, uri: Uri, format: PhotoFormat, companionUri: Uri? = null): ExtractedRawMetadata {
+        val primary = parseDocument(context, uri)
+        if (primary != null && primary.hasCameraData) return primary
+        val companion = companionUri?.let { parseDocument(context, it) }
+        if (companion != null && companion.hasCameraData) return companion
+        return primary ?: fallbackMetadata(format)
     }
 
-    fun parseFromStream(inputStream: InputStream): ExtractedRawMetadata {
-        val exif = ExifInterface(inputStream)
+    private fun parseDocument(context: Context, uri: Uri): ExtractedRawMetadata? {
+        val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
+            ?: throw FileNotFoundException("No descriptor for $uri")
+        return descriptor.use {
+            runCatching { parseFromDescriptor(it.fileDescriptor) }.getOrNull()
+        }
+    }
 
+    private val ExtractedRawMetadata.hasCameraData: Boolean
+        get() = cameraMake != null || cameraModel != null || dateTaken != null
+
+    fun parseFromDescriptor(descriptor: FileDescriptor): ExtractedRawMetadata =
+        extract(ExifInterface(descriptor))
+
+    fun parseFromStream(inputStream: InputStream): ExtractedRawMetadata =
+        extract(ExifInterface(inputStream))
+
+    private fun extract(exif: ExifInterface): ExtractedRawMetadata {
         val make = exif.getAttribute(ExifInterface.TAG_MAKE)?.trim()
         val model = exif.getAttribute(ExifInterface.TAG_MODEL)?.trim()
         val lens = exif.getAttribute(ExifInterface.TAG_LENS_MODEL)?.trim()
@@ -49,7 +74,6 @@ object RawMetadataParser {
 
         val dateTaken = parseDateTime(exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL))
             ?: parseDateTime(exif.getAttribute(ExifInterface.TAG_DATETIME))
-            ?: System.currentTimeMillis()
 
         var width = exif.getAttributeInt(ExifInterface.TAG_IMAGE_WIDTH, 0)
         var height = exif.getAttributeInt(ExifInterface.TAG_IMAGE_LENGTH, 0)
@@ -144,10 +168,11 @@ object RawMetadataParser {
             iso = null,
             focalLength = null,
             exposureBias = null,
-            dateTaken = System.currentTimeMillis(),
+            dateTaken = null,
             width = 0,
             height = 0,
-            orientation = ExifInterface.ORIENTATION_NORMAL
+            orientation = ExifInterface.ORIENTATION_NORMAL,
+            parsed = false,
         )
     }
 }

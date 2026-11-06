@@ -24,6 +24,8 @@ import dev.shehran.rawcull.data.model.SortOrder
 import dev.shehran.rawcull.data.repository.RawCatalogRepository
 import dev.shehran.rawcull.data.repository.SettingsRepository
 import dev.shehran.rawcull.data.repository.StoredFolder
+import dev.shehran.rawcull.data.scan.ScanCoordinator
+import dev.shehran.rawcull.data.scan.ScanState
 import dev.shehran.rawcull.util.HistogramCalculator
 import dev.shehran.rawcull.util.HistogramData
 import dev.shehran.rawcull.util.RawPreviewLoader
@@ -64,6 +66,7 @@ data class DamUiState(
     val destinationFolderName: String = "Not set",
     val destinationFolderUri: String? = null,
     val isScanning: Boolean = false,
+    val scanProgress: Float? = null, // Null while the total isn't known yet
     val scanStatusText: String = "",
     val selectedPhotoIds: Set<String> = emptySet(),
     val isMultiSelectMode: Boolean = false,
@@ -92,6 +95,7 @@ class RawCullViewModel(
     private val appContext: Context,
     private val repository: RawCatalogRepository,
     private val settings: SettingsRepository,
+    private val scanCoordinator: ScanCoordinator,
 ) : ViewModel() {
     private val currentRootUri = MutableStateFlow<String?>(null)
 
@@ -103,6 +107,7 @@ class RawCullViewModel(
 
     init {
         viewModelScope.launch { restoreSession() }
+        viewModelScope.launch { scanCoordinator.state.collect(::onScanState) }
 
         viewModelScope.launch {
             currentRootUri
@@ -190,6 +195,7 @@ class RawCullViewModel(
                 isLoupeZoomed = false,
                 zoomFactor = 1f
             )
+            scanCoordinator.prioritize(filtered[index].id)
             refreshHistogram()
         }
     }
@@ -353,22 +359,43 @@ class RawCullViewModel(
 
     private fun openSource(uri: Uri, folderName: String) {
         setRoot(uri.toString(), folderName)
-        _uiState.value = _uiState.value.copy(
-            isScanning = true,
-            scanStatusText = "Scanning $folderName for RAW files (ARW, DNG)..."
-        )
+        scanCoordinator.start(uri.toString())
+    }
 
-        viewModelScope.launch {
-            val count = repository.scanSourceFolder(uri) { scanned, fileName ->
-                _uiState.value = _uiState.value.copy(
-                    scanStatusText = "Found $scanned RAW files ($fileName)..."
+    private fun onScanState(state: ScanState) {
+        val root = currentRootUri.value
+        _uiState.update { current ->
+            when (state) {
+                ScanState.Idle -> current.copy(isScanning = false, scanProgress = null, scanStatusText = "")
+                is ScanState.Listing -> if (state.rootUri != root) current else current.copy(
+                    isScanning = true,
+                    scanProgress = null,
+                    scanStatusText = "Scanning: ${state.filesSeen} files in ${state.dirsVisited} folders",
+                )
+                is ScanState.Enriching -> if (state.rootUri != root) current else current.copy(
+                    isScanning = true,
+                    scanProgress = state.done.toFloat() / state.total,
+                    scanStatusText = "Reading metadata ${state.done} / ${state.total}",
+                )
+                is ScanState.Complete -> if (state.rootUri != root) current else current.copy(
+                    isScanning = false,
+                    scanProgress = null,
+                    scanStatusText = foundText(state.photoCount, state.folderCount),
+                )
+                is ScanState.SourceUnavailable -> if (state.rootUri != root) current else current.copy(
+                    isScanning = false,
+                    scanProgress = null,
+                    scanStatusText = "",
+                    isSourceAvailable = false,
                 )
             }
-            _uiState.value = _uiState.value.copy(
-                isScanning = false,
-                scanStatusText = "Loaded $count RAW files from $folderName"
-            )
         }
+    }
+
+    private fun foundText(photos: Int, folders: Int): String {
+        val photoWord = if (photos == 1) "photo" else "photos"
+        val folderWord = if (folders == 1) "folder" else "folders"
+        return "Found $photos $photoWord in $folders $folderWord"
     }
 
     fun onDestinationFolderSelected(uri: Uri) {
@@ -383,6 +410,7 @@ class RawCullViewModel(
     }
 
     fun loadSampleShoot() {
+        scanCoordinator.cancel()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isScanning = true,
@@ -519,7 +547,12 @@ class RawCullViewModel(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as RawCullApp
-                RawCullViewModel(app, app.container.catalogRepository, app.container.settingsRepository)
+                RawCullViewModel(
+                    appContext = app,
+                    repository = app.container.catalogRepository,
+                    settings = app.container.settingsRepository,
+                    scanCoordinator = app.container.scanCoordinator,
+                )
             }
         }
     }

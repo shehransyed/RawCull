@@ -5,6 +5,7 @@ import dev.shehran.rawcull.data.local.AppDatabase
 import dev.shehran.rawcull.data.local.RawPhotoDao
 import dev.shehran.rawcull.data.repository.RawCatalogRepository
 import dev.shehran.rawcull.data.repository.SettingsRepository
+import dev.shehran.rawcull.data.scan.ScanCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,4 +19,5 @@ class AppContainer(context: Context) {
     val photoDao: RawPhotoDao = database.rawPhotoDao()
     val catalogRepository: RawCatalogRepository = RawCatalogRepository(appContext, photoDao)
     val settingsRepository: SettingsRepository = SettingsRepository(appContext)
+    val scanCoordinator: ScanCoordinator = ScanCoordinator(appContext, database, photoDao, applicationScope)
 }
