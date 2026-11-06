@@ -1,6 +1,0 @@
-{
-  "summary": "Comprehensive architectural and product implementation plan for refining RawCull into a production-grade, RapidReady-inspired photography DAM. Features real-time bidirectional XMP sidecar writing, RAW+JPEG intelligent pairing, pre-import OTG card culling, and structured dated ingest directory organization for Lightroom, Snapseed, and RapidRAW workflows.",
-  "updatedAt": "2026-11-05T18:04:53.781995866Z",
-  "requestFeedback": true,
-  "userFacing": true
-}
