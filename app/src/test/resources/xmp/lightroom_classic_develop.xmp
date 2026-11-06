@@ -1,0 +1,113 @@
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 7.0-c000 1.000000, 0000/00/00-00:00:00        ">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+    xmlns:tiff="http://ns.adobe.com/tiff/1.0/"
+    xmlns:exif="http://ns.adobe.com/exif/1.0/"
+    xmlns:aux="http://ns.adobe.com/exif/1.0/aux/"
+    xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/"
+    xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"
+    xmlns:stEvt="http://ns.adobe.com/xap/1.0/sType/ResourceEvent#"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:lr="http://ns.adobe.com/lightroom/1.0/"
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+   xmp:Rating="4"
+   xmp:Label="Blue"
+   xmp:CreatorTool="ILCE-7M4 v2.00"
+   xmp:ModifyDate="2026-05-14T18:22:41.200+05:30"
+   xmp:CreateDate="2026-05-14T18:22:41.200+05:30"
+   xmp:MetadataDate="2026-06-02T09:15:03+05:30"
+   tiff:Make="SONY"
+   tiff:Model="ILCE-7M4"
+   exif:ExposureTime="1/250"
+   exif:FNumber="28/10"
+   exif:GPSLatitude="23,46.1234N"
+   exif:GPSLongitude="90,22.5678E"
+   aux:Lens="FE 24-70mm F2.8 GM II"
+   photoshop:DateCreated="2026-05-14T18:22:41.200+05:30"
+   xmpMM:DocumentID="xmp.did:7f3a9f42-1b1e-4c8e-9c55-2f6f8a1e0d11"
+   xmpMM:OriginalDocumentID="9D4A1B7C33E0F2A6C1D8E5F40B7A6C21"
+   xmpMM:InstanceID="xmp.iid:7f3a9f42-1b1e-4c8e-9c55-2f6f8a1e0d11"
+   crs:Version="16.3"
+   crs:ProcessVersion="15.4"
+   crs:WhiteBalance="Custom"
+   crs:Temperature="5450"
+   crs:Tint="+8"
+   crs:Exposure2012="+0.45"
+   crs:Contrast2012="+12"
+   crs:Highlights2012="-58"
+   crs:Shadows2012="+41"
+   crs:Whites2012="+6"
+   crs:Blacks2012="-14"
+   crs:Texture="+8"
+   crs:Clarity2012="+10"
+   crs:Dehaze="+4"
+   crs:Vibrance="+16"
+   crs:Saturation="-3"
+   crs:Sharpness="40"
+   crs:SharpenRadius="+1.0"
+   crs:SharpenDetail="25"
+   crs:SharpenEdgeMasking="30"
+   crs:LuminanceSmoothing="12"
+   crs:ColorNoiseReduction="25"
+   crs:VignetteAmount="0"
+   crs:ParametricShadows="0"
+   crs:ParametricDarks="0"
+   crs:ParametricLights="0"
+   crs:ParametricHighlights="0"
+   crs:LensProfileEnable="1"
+   crs:AutoLateralCA="1"
+   crs:CameraProfile="Adobe Color"
+   crs:HasSettings="True"
+   crs:HasCrop="True"
+   crs:CropTop="0.04125"
+   crs:CropLeft="0.0325"
+   crs:CropBottom="0.96"
+   crs:CropRight="0.9775"
+   crs:CropAngle="-0.82"
+   crs:AlreadyApplied="False">
+   <crs:ToneCurvePV2012>
+    <rdf:Seq>
+     <rdf:li>0, 0</rdf:li>
+     <rdf:li>62, 54</rdf:li>
+     <rdf:li>128, 134</rdf:li>
+     <rdf:li>196, 208</rdf:li>
+     <rdf:li>255, 255</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012>
+   <crs:ToneCurvePV2012Red>
+    <rdf:Seq>
+     <rdf:li>0, 0</rdf:li>
+     <rdf:li>255, 255</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012Red>
+   <dc:format>image/x-sony-arw</dc:format>
+   <dc:subject>
+    <rdf:Bag>
+     <rdf:li>Wedding</rdf:li>
+     <rdf:li>Dhaka</rdf:li>
+     <rdf:li>Golden Hour</rdf:li>
+    </rdf:Bag>
+   </dc:subject>
+   <lr:hierarchicalSubject>
+    <rdf:Bag>
+     <rdf:li>Events|Wedding</rdf:li>
+     <rdf:li>Places|Bangladesh|Dhaka</rdf:li>
+    </rdf:Bag>
+   </lr:hierarchicalSubject>
+   <xmpMM:History>
+    <rdf:Seq>
+     <rdf:li
+      stEvt:action="derived"
+      stEvt:parameters="converted from image/x-sony-arw to image/dng"/>
+     <rdf:li
+      stEvt:action="saved"
+      stEvt:instanceID="xmp.iid:7f3a9f42-1b1e-4c8e-9c55-2f6f8a1e0d11"
+      stEvt:when="2026-06-02T09:15:03+05:30"
+      stEvt:softwareAgent="Adobe Photoshop Lightroom Classic 14.3 (Windows)"
+      stEvt:changed="/metadata"/>
+    </rdf:Seq>
+   </xmpMM:History>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>

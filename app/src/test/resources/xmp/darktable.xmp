@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="XMP Core 4.4.0-Exiv2">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:exif="http://ns.adobe.com/exif/1.0/"
+    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+    xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:darktable="http://darktable.sf.net/"
+   exif:DateTimeOriginal="2026:05:14 18:22:41"
+   xmp:Rating="-1"
+   xmpMM:DerivedFrom="DSC04121.ARW"
+   darktable:import_timestamp="63890000000000000"
+   darktable:change_timestamp="63890000100000000"
+   darktable:export_timestamp="-1"
+   darktable:print_timestamp="-1"
+   darktable:xmp_version="5"
+   darktable:raw_params="0"
+   darktable:auto_presets_applied="1"
+   darktable:history_end="2"
+   darktable:iop_order_version="4">
+   <dc:subject>
+    <rdf:Bag>
+     <rdf:li>rejected-at-venue</rdf:li>
+     <rdf:li>darktable|styles|none</rdf:li>
+    </rdf:Bag>
+   </dc:subject>
+   <darktable:masks_history>
+    <rdf:Seq/>
+   </darktable:masks_history>
+   <darktable:history>
+    <rdf:Seq>
+     <rdf:li
+      darktable:num="0"
+      darktable:operation="rawprepare"
+      darktable:enabled="1"
+      darktable:modversion="2"
+      darktable:params="gz02eJxjYGBgYAFiBgAAdQAH"
+      darktable:multi_name=""
+      darktable:multi_priority="0"
+      darktable:blendop_version="14"
+      darktable:blendop_params="gz14eJxjYIAAHgYYGAgaAAAA"/>
+     <rdf:li
+      darktable:num="1"
+      darktable:operation="exposure"
+      darktable:enabled="1"
+      darktable:modversion="7"
+      darktable:params="0000000000000000"
+      darktable:multi_name="&amp; again"
+      darktable:multi_priority="0"
+      darktable:blendop_version="14"
+      darktable:blendop_params="gz14eJxjYIAAHgYYGAgaAAAA"/>
+    </rdf:Seq>
+   </darktable:history>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
