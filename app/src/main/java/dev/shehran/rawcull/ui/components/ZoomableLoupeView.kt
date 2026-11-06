@@ -68,6 +68,7 @@ fun ZoomableLoupeView(
     photo: PhotoAsset?,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
+    onSyncChipClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -209,20 +210,7 @@ fun ZoomableLoupeView(
                     )
                 }
 
-                // Live XMP indicator
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xCC064E3B))
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "● XMP LIVE",
-                        color = Color(0xFFA7F3D0),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp
-                    )
-                }
+                SyncChip(status = photo.xmpSyncStatus, onClick = onSyncChipClick)
 
                 // Cull Flag Badge
                 when (photo.cullStatus) {

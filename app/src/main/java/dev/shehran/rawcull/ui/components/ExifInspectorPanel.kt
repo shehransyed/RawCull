@@ -193,7 +193,7 @@ fun ExifInspectorPanel(
                 MetadataRow(
                     icon = Icons.Default.Info,
                     label = "XMP Sidecar",
-                    value = "${photo.sidecarFileName} (Live Sync)"
+                    value = "${photo.sidecarFileName} (${photo.xmpSyncStatus.label})"
                 )
             }
         }

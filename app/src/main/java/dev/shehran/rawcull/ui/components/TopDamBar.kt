@@ -84,6 +84,7 @@ fun TopDamBar(
     onUpdateFilter: ((FilterOptions) -> FilterOptions) -> Unit,
     onOpenExportDialog: () -> Unit,
     onToggleMultiSelect: () -> Unit,
+    onToggleSyncErrors: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -125,7 +126,7 @@ fun TopDamBar(
 
                     Spacer(modifier = Modifier.width(10.dp))
 
-                    Column {
+                    Column(modifier = Modifier.weight(1f, fill = false)) {
                         Text(
                             text = "RAWCULL",
                             style = MaterialTheme.typography.titleSmall,
@@ -135,6 +136,8 @@ fun TopDamBar(
                         )
                         SourceDropdown(uiState = uiState, actions = sourceActions)
                     }
+
+                    SyncCounter(uiState = uiState, onToggleErrors = onToggleSyncErrors)
                 }
 
                 // View Mode Group
@@ -329,6 +332,30 @@ private fun formatChipColor(format: PhotoFormat): Color = when (format) {
     PhotoFormat.ARW -> Color(0xFFF97316)
     PhotoFormat.DNG -> Color(0xFF06B6D4)
     else -> Color(0xFF38BDF8)
+}
+
+/** Shows work in flight; tapping it narrows the view to the errors, which is where action is needed. */
+@Composable
+private fun SyncCounter(uiState: DamUiState, onToggleErrors: () -> Unit) {
+    val filtering = uiState.filterOptions.syncErrorsOnly
+    val text = if (filtering) "Errors only ✕" else syncCounterText(uiState.savingCount, uiState.syncErrorCount)
+    if (text == null) return
+
+    val hasErrors = filtering || uiState.syncErrorCount > 0
+    Spacer(modifier = Modifier.width(8.dp))
+    Text(
+        text = text,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Bold,
+        maxLines = 1,
+        color = if (hasErrors) Color(0xFFFECACA) else Color(0xFF38BDF8),
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(if (hasErrors) Color(0xCC7F1D1D) else Color(0xFF161E28))
+            .clickable(enabled = hasErrors, onClick = onToggleErrors)
+            .padding(horizontal = 6.dp, vertical = 3.dp)
+            .testTag("sync_counter")
+    )
 }
 
 @Composable

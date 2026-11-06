@@ -26,6 +26,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import dev.shehran.rawcull.ui.components.ExportDialog
 import dev.shehran.rawcull.ui.components.SettingsSheet
+import dev.shehran.rawcull.ui.components.SyncDetailsDialog
 import dev.shehran.rawcull.ui.components.TagManagerDialog
 import dev.shehran.rawcull.ui.components.WelcomeScreen
 import dev.shehran.rawcull.ui.components.rememberSourcePicker
@@ -109,6 +110,15 @@ fun MainDamScreen(
                 onAddTag = viewModel::addTagToCurrent,
                 onRemoveTag = viewModel::removeTagFromCurrent,
                 onDismiss = viewModel::dismissTagDialog
+            )
+        }
+
+        uiState.syncDetailsPhoto?.let { photo ->
+            SyncDetailsDialog(
+                photo = photo,
+                onRetry = { viewModel.retrySidecar(photo.id) },
+                onReplaceSidecar = { viewModel.replaceSidecar(photo.id) },
+                onDismiss = viewModel::dismissSyncDetails,
             )
         }
 

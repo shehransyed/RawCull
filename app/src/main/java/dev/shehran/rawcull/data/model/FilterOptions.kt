@@ -9,7 +9,8 @@ data class FilterOptions(
     val pairFilter: PairMode? = null,
     val tagFilter: String? = null,
     val searchQuery: String = "",
-    val sortOrder: SortOrder = SortOrder.DATE_ASC
+    val sortOrder: SortOrder = SortOrder.DATE_ASC,
+    val syncErrorsOnly: Boolean = false
 )
 
 enum class CullFilterMode(val label: String) {

@@ -61,6 +61,7 @@ import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.XmpSyncStatus
 import dev.shehran.rawcull.util.RawPreviewLoader
 
 @Composable
@@ -286,6 +287,10 @@ private fun GridPhotoCard(
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
+            }
+
+            if (photo.xmpSyncStatus == XmpSyncStatus.ERROR) {
+                SyncErrorDot(modifier = Modifier.align(Alignment.TopCenter).padding(top = 6.dp))
             }
 
             // Top-Right: Selection checkbox or Cull Badge
