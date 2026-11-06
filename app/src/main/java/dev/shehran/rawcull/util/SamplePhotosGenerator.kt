@@ -19,6 +19,11 @@ import dev.shehran.rawcull.data.model.DEMO_ROOT_URI
 import dev.shehran.rawcull.data.model.PairMode
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.xmp.XMP_TOOLKIT
+import dev.shehran.rawcull.util.xmp.CullState
+import dev.shehran.rawcull.util.xmp.XmpDocument
+import dev.shehran.rawcull.util.xmp.XmpMapper
+import dev.shehran.rawcull.util.xmp.XmpPrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -248,10 +253,9 @@ object SamplePhotosGenerator {
 
             // Write matching XMP sidecar on disk
             runCatching {
-                val xmpXml = XmpSidecarGenerator.generateXmp(item)
-                FileOutputStream(xmpFile).use { out ->
-                    out.write(xmpXml.toByteArray(Charsets.UTF_8))
-                }
+                val doc = XmpDocument.newEmpty(XMP_TOOLKIT)
+                XmpMapper.apply(doc, CullState(item.rating, item.cullStatus, item.colorLabel, item.tags), XmpPrefs())
+                FileOutputStream(xmpFile).use { out -> out.write(doc.toBytes()) }
             }
 
             resultItems.add(item)

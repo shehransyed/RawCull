@@ -11,6 +11,7 @@ import dev.shehran.rawcull.data.model.EnrichedMetadata
 import dev.shehran.rawcull.data.model.EnrichmentResult
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.XmpSyncStatus
+import dev.shehran.rawcull.data.xmp.XMP_PARSE_ERROR
 import dev.shehran.rawcull.data.xmp.XmpRows
 import dev.shehran.rawcull.util.xmp.CullState
 import dev.shehran.rawcull.util.xmp.XmpField
@@ -37,49 +38,61 @@ interface RawPhotoDao : XmpRows {
     suspend fun deleteByIds(ids: List<String>)
 
     /**
-     * Writes enrichment results. Only metadata columns are touched, and XMP state goes through
-     * [applyXmpIfNewer], so a flag set while enrichment was running is never overwritten.
+     * Writes enrichment results. Only metadata columns are touched, and sidecar state goes through
+     * [applyXmpFromFile], so a flag set while enrichment was running is never overwritten.
      */
     @Transaction
     suspend fun updateMetadataBatch(results: List<EnrichmentResult>) {
         applyMetadata(results.map { it.metadata })
         results.forEach { result ->
             result.xmp?.let { xmp ->
-                applyXmpIfNewer(
+                applyXmpFromFile(
                     id = result.metadata.id,
                     rating = xmp.rating,
                     cullStatus = xmp.cullStatus,
                     colorLabel = xmp.colorLabel,
                     tagsJson = xmp.tagsJson,
-                    xmpLastModified = xmp.lastModified,
+                    mtime = xmp.lastModified,
                 )
             }
+            if (result.sidecarUnreadable) markSidecarUnreadable(result.metadata.id, XMP_PARSE_ERROR)
         }
     }
 
     @Update(entity = PhotoAsset::class)
     suspend fun applyMetadata(metadata: List<EnrichedMetadata>)
 
-    /** XMP wins only when it is newer than the row's last change; new rows have lastModified = 0. */
+    /** The file wins unless the row has edits of its own, which the queue merges into the file. */
     @Query(
         """
         UPDATE photo_assets SET
-            rating = COALESCE(:rating, rating),
+            rating = :rating,
             cullStatus = COALESCE(:cullStatus, cullStatus),
-            colorLabel = COALESCE(:colorLabel, colorLabel),
+            colorLabel = :colorLabel,
             tags = :tagsJson,
-            lastModified = :xmpLastModified
-        WHERE id = :id AND lastModified < :xmpLastModified
+            xmpLastSyncedMtime = :mtime,
+            xmpSyncStatus = 'SYNCED',
+            xmpError = NULL
+        WHERE id = :id AND xmpSyncStatus NOT IN ('PENDING', 'WRITING') AND xmpPendingFields = 0
         """
     )
-    suspend fun applyXmpIfNewer(
+    suspend fun applyXmpFromFile(
         id: String,
-        rating: Int?,
+        rating: Int,
         cullStatus: CullStatus?,
-        colorLabel: ColorLabel?,
+        colorLabel: ColorLabel,
         tagsJson: String,
-        xmpLastModified: Long,
+        mtime: Long,
     )
+
+    /** The queue reports this itself for rows it is about to write. */
+    @Query(
+        """
+        UPDATE photo_assets SET xmpSyncStatus = 'ERROR', xmpError = :error
+        WHERE id = :id AND xmpSyncStatus NOT IN ('PENDING', 'WRITING')
+        """
+    )
+    suspend fun markSidecarUnreadable(id: String, error: String)
 
     @Query(
         """

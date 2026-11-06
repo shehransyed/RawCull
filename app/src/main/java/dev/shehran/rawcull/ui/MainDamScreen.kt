@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import dev.shehran.rawcull.ui.components.ExportDialog
+import dev.shehran.rawcull.ui.components.SettingsSheet
 import dev.shehran.rawcull.ui.components.TagManagerDialog
 import dev.shehran.rawcull.ui.components.WelcomeScreen
 import dev.shehran.rawcull.ui.components.rememberSourcePicker
@@ -108,6 +109,14 @@ fun MainDamScreen(
                 onAddTag = viewModel::addTagToCurrent,
                 onRemoveTag = viewModel::removeTagFromCurrent,
                 onDismiss = viewModel::dismissTagDialog
+            )
+        }
+
+        if (uiState.showSettings) {
+            SettingsSheet(
+                rejectAsNegativeRating = uiState.rejectAsNegativeRating,
+                onRejectAsNegativeRatingChange = viewModel::setRejectAsNegativeRating,
+                onDismiss = viewModel::dismissSettings,
             )
         }
 

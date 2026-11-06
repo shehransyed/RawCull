@@ -7,8 +7,10 @@ import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PairMode
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.PhotoAsset
-import dev.shehran.rawcull.util.XmpSidecarGenerator
-import dev.shehran.rawcull.util.XmpSidecarManager
+import dev.shehran.rawcull.util.xmp.CullState
+import dev.shehran.rawcull.util.xmp.XmpDocument
+import dev.shehran.rawcull.util.xmp.XmpMapper
+import dev.shehran.rawcull.util.xmp.XmpPrefs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -52,10 +54,12 @@ class ExampleRobolectricTest {
             tags = listOf("Landscape", "Golden Hour")
         )
 
-        val xmp = XmpSidecarGenerator.generateXmp(photo)
+        val doc = XmpDocument.newEmpty("RawCull test")
+        XmpMapper.apply(doc, CullState(photo.rating, photo.cullStatus, photo.colorLabel, photo.tags), XmpPrefs())
+        val xmp = doc.toBytes().toString(Charsets.UTF_8)
         assertTrue(xmp.contains("xmp:Rating=\"5\""))
         assertTrue(xmp.contains("xmp:Label=\"Green\""))
-        assertTrue(xmp.contains("crs:Pick=\"1\""))
+        assertTrue(xmp.contains("rawcull:Pick=\"1\""))
         assertTrue(xmp.contains("<rdf:li>Landscape</rdf:li>"))
         assertTrue(xmp.contains("<rdf:li>Golden Hour</rdf:li>"))
     }
@@ -85,7 +89,7 @@ class ExampleRobolectricTest {
             <?xpacket end="w"?>
         """.trimIndent()
 
-        val parsed = XmpSidecarManager.parseXmpString(sampleXmp)
+        val parsed = XmpMapper.read(XmpDocument.parse(sampleXmp.toByteArray()).getOrThrow())
         assertEquals(4, parsed.rating)
         assertEquals(CullStatus.PICK, parsed.cullStatus)
         assertEquals(ColorLabel.RED, parsed.colorLabel)

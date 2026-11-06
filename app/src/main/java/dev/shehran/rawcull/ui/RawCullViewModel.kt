@@ -84,6 +84,8 @@ data class DamUiState(
     val isMultiSelectMode: Boolean = false,
     val showExportDialog: Boolean = false,
     val showTagDialog: Boolean = false,
+    val showSettings: Boolean = false,
+    val rejectAsNegativeRating: Boolean = true,
     val exportProgress: ExportProgress = ExportProgress(),
     val currentHistogram: HistogramData? = null,
     val isLoupeZoomed: Boolean = false,
@@ -138,6 +140,11 @@ class RawCullViewModel(
             }
         }
         viewModelScope.launch { scanCoordinator.state.collect(::onScanState) }
+        viewModelScope.launch {
+            settings.xmpPrefs.collect { prefs ->
+                _uiState.update { it.copy(rejectAsNegativeRating = prefs.rejectAsNegativeRating) }
+            }
+        }
 
         viewModelScope.launch {
             currentRootUri
@@ -576,6 +583,18 @@ class RawCullViewModel(
 
     fun dismissTagDialog() {
         _uiState.value = _uiState.value.copy(showTagDialog = false)
+    }
+
+    fun openSettings() {
+        _uiState.update { it.copy(showSettings = true) }
+    }
+
+    fun dismissSettings() {
+        _uiState.update { it.copy(showSettings = false) }
+    }
+
+    fun setRejectAsNegativeRating(enabled: Boolean) {
+        viewModelScope.launch { settings.setRejectAsNegativeRating(enabled) }
     }
 
     fun startBatchExport(config: ExportConfig) {

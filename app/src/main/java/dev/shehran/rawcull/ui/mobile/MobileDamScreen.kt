@@ -69,6 +69,7 @@ fun MobileDamScreen(
                 onRescan = viewModel::rescan,
                 onCloseSource = viewModel::closeSource,
                 onRetry = viewModel::retrySource,
+                onOpenSettings = viewModel::openSettings,
             ),
             onSetViewMode = viewModel::setViewMode,
             onUpdateFilter = viewModel::updateFilter,

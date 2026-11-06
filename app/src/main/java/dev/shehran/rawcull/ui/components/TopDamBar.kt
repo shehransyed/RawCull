@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -70,6 +71,7 @@ data class SourceActions(
     val onRescan: () -> Unit,
     val onCloseSource: () -> Unit,
     val onRetry: () -> Unit,
+    val onOpenSettings: () -> Unit,
 )
 
 private val CompactWidth = 600.dp
@@ -403,6 +405,13 @@ private fun SourceDropdown(uiState: DamUiState, actions: SourceActions) {
                 text = { Text("Close source") },
                 onClick = { choose(actions.onCloseSource) },
                 modifier = Modifier.testTag("close_source_button")
+            )
+            HorizontalDivider(color = Color(0x22FFFFFF))
+            DropdownMenuItem(
+                text = { Text("Settings") },
+                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                onClick = { choose(actions.onOpenSettings) },
+                modifier = Modifier.testTag("settings_button")
             )
         }
     }

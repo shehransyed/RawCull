@@ -15,11 +15,14 @@ import dev.shehran.rawcull.data.model.ExportProgress
 import dev.shehran.rawcull.data.model.IngestFileSelection
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.xmp.SidecarReconciler
+import dev.shehran.rawcull.data.xmp.SidecarStores
+import dev.shehran.rawcull.data.xmp.XMP_TOOLKIT
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
 import dev.shehran.rawcull.util.SamplePhotosGenerator
-import dev.shehran.rawcull.util.XmpSidecarGenerator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
@@ -36,6 +39,8 @@ class RawCatalogRepository(
     private val database: AppDatabase,
     private val dao: RawPhotoDao,
     private val writeQueue: XmpWriteQueue,
+    private val stores: SidecarStores,
+    private val settings: SettingsRepository,
 ) {
     private val converters = Converters()
 
@@ -112,6 +117,7 @@ class RawCatalogRepository(
             return@flow
         }
 
+        val prefs = settings.xmpPrefs.first()
         val destUri = config.destinationFolderUri.toUri()
         val destDoc = DocumentFile.fromTreeUri(context, destUri)
         if (destDoc == null || !destDoc.canWrite()) {
@@ -219,14 +225,17 @@ class RawCatalogRepository(
                 }
             }
 
-            // 3. Generate and copy matching Adobe XMP sidecar
+            // 3. Merge the source sidecar with the current state, so develop settings travel too
             if (config.generateXmpSidecars) {
+                val source = photo.xmpFileUri?.let { uri ->
+                    runCatching { stores.forRoot(photo.rootUri).read(uri) }.getOrNull()
+                }
                 val xmpDoc = targetDirectoryDoc.createFile("application/octet-stream", photo.sidecarFileName)
                 if (xmpDoc != null) {
                     runCatching {
+                        val bytes = SidecarReconciler.exportBytes(photo, source?.bytes, prefs, XMP_TOOLKIT, Date())
                         context.contentResolver.openOutputStream(xmpDoc.uri)?.use { output ->
-                            val xmpContent = XmpSidecarGenerator.generateXmp(photo)
-                            output.write(xmpContent.toByteArray(Charsets.UTF_8))
+                            output.write(bytes)
                             output.flush()
                         }
                     }

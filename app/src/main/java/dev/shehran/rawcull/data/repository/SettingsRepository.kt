@@ -3,11 +3,13 @@ package dev.shehran.rawcull.data.repository
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dev.shehran.rawcull.data.model.RecentSource
 import dev.shehran.rawcull.data.model.RecentSources
+import dev.shehran.rawcull.util.xmp.XmpPrefs
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -25,6 +27,14 @@ class SettingsRepository(context: Context) {
 
     val recentSources: Flow<List<RecentSource>> =
         dataStore.data.map { decodeRecents(it[KEY_RECENT_SOURCES]) }
+
+    val xmpPrefs: Flow<XmpPrefs> = dataStore.data.map {
+        XmpPrefs(rejectAsNegativeRating = it[KEY_REJECT_AS_NEGATIVE_RATING] ?: true)
+    }
+
+    suspend fun setRejectAsNegativeRating(enabled: Boolean) {
+        dataStore.edit { it[KEY_REJECT_AS_NEGATIVE_RATING] = enabled }
+    }
 
     suspend fun lastSource(): StoredFolder? = dataStore.data.first().folder(KEY_LAST_SOURCE_URI, KEY_LAST_SOURCE_NAME)
 
@@ -75,6 +85,7 @@ class SettingsRepository(context: Context) {
 
     internal companion object {
         val KEY_RECENT_SOURCES = stringPreferencesKey("recent_sources")
+        val KEY_REJECT_AS_NEGATIVE_RATING = booleanPreferencesKey("reject_as_negative_rating")
         val KEY_LAST_SOURCE_URI = stringPreferencesKey("last_source_uri")
         val KEY_LAST_SOURCE_NAME = stringPreferencesKey("last_source_name")
         val KEY_LAST_DESTINATION_URI = stringPreferencesKey("last_destination_uri")

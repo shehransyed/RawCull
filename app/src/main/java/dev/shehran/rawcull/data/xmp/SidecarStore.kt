@@ -1,7 +1,11 @@
 package dev.shehran.rawcull.data.xmp
 
+import dev.shehran.rawcull.BuildConfig
 import dev.shehran.rawcull.data.model.PhotoAsset
 import java.io.IOException
+
+/** Recorded in sidecars RawCull creates. */
+const val XMP_TOOLKIT = "RawCull ${BuildConfig.VERSION_NAME}"
 
 /** A sidecar's bytes, with the modification time they were read at (null if the store has none). */
 class SidecarContent(val bytes: ByteArray, val lastModified: Long?)
