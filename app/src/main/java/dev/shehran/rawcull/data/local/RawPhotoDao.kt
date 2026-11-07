@@ -88,6 +88,21 @@ interface RawPhotoDao : XmpRows {
     @Query("DELETE FROM photo_assets WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<String>)
 
+    @Query("DELETE FROM photo_assets WHERE rootUri = :rootUri AND id LIKE :idPattern")
+    suspend fun deleteByRootAndIdPrefix(rootUri: String, idPattern: String)
+
+    /** Rows of roots that are no longer anything. Unsaved work stays until its card comes back. */
+    @Query(
+        """
+        DELETE FROM photo_assets
+        WHERE rootUri NOT IN (:keepRoots) AND xmpSyncStatus = 'SYNCED' AND xmpPendingFields = 0
+        """
+    )
+    suspend fun deleteOrphans(keepRoots: List<String>): Int
+
+    @Query("SELECT COUNT(*) FROM photo_assets WHERE rootUri NOT IN (:keepRoots)")
+    suspend fun countOrphans(keepRoots: List<String>): Int
+
     /**
      * Writes enrichment results. Only metadata columns are touched, and sidecar state goes through
      * [applyXmpFromFile], so a flag set while enrichment was running is never overwritten.

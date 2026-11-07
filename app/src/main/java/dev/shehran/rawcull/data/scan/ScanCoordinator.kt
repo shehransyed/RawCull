@@ -81,6 +81,9 @@ class ScanCoordinator(
     @Volatile
     private var focusId: String? = null
 
+    @Volatile
+    private var visibleOrder: List<String> = emptyList()
+
     /** Starts scanning [rootUri], cancelling any scan already running. */
     @Synchronized
     fun start(rootUri: String) {
@@ -114,6 +117,12 @@ class ScanCoordinator(
     fun prioritize(id: String) {
         focusId = id
         queue?.prioritize(id)
+    }
+
+    /** Enrichment follows what's on screen; a scan starting later picks this up too. */
+    fun setVisibleOrder(ids: List<String>) {
+        visibleOrder = ids
+        queue?.reorder(ids)
     }
 
     private suspend fun scan(rootUri: String, subtree: String = "") {
@@ -200,6 +209,7 @@ class ScanCoordinator(
         val started = SystemClock.elapsedRealtime()
         val rowsById = pending.associateBy { it.id }
         val workQueue = EnrichmentQueue(rows.map { it.id }, rowsById.keys)
+        workQueue.reorder(visibleOrder)
         focusId?.let(workQueue::prioritize)
         queue = workQueue
 

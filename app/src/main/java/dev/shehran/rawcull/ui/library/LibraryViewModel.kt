@@ -2,6 +2,7 @@ package dev.shehran.rawcull.ui.library
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -20,16 +21,24 @@ import dev.shehran.rawcull.data.model.SortOrder
 import dev.shehran.rawcull.data.model.XmpSyncStatus
 import dev.shehran.rawcull.data.repository.LocationChange
 import dev.shehran.rawcull.data.repository.LocationRepository
-import dev.shehran.rawcull.data.repository.RawCatalogRepository
+import dev.shehran.rawcull.data.repository.PhotoCatalog
 import dev.shehran.rawcull.data.repository.SettingsRepository
 import dev.shehran.rawcull.data.scan.ScanCoordinator
 import dev.shehran.rawcull.data.scan.ScanState
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
+import dev.shehran.rawcull.library.AutoAdvance
+import dev.shehran.rawcull.library.CullChange
+import dev.shehran.rawcull.library.CullEdit
+import dev.shehran.rawcull.library.CullEdits
+import dev.shehran.rawcull.library.FilterCounts
 import dev.shehran.rawcull.library.FolderNode
+import dev.shehran.rawcull.library.FolderSection
 import dev.shehran.rawcull.library.FolderTree
 import dev.shehran.rawcull.library.LibraryFilter
 import dev.shehran.rawcull.library.LibraryRestore
 import dev.shehran.rawcull.library.LibraryScope
+import dev.shehran.rawcull.library.LibraryView
+import dev.shehran.rawcull.library.UndoStack
 import dev.shehran.rawcull.ui.SelectionLogic
 import dev.shehran.rawcull.util.HistogramCalculator
 import dev.shehran.rawcull.util.HistogramData
@@ -46,8 +55,12 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.io.IOException
 
 enum class DamViewMode {
@@ -87,6 +100,13 @@ data class LibraryUiState(
     val showTagDialog: Boolean = false,
     val syncDetailsPhotoId: String? = null,
     val currentHistogram: HistogramData? = null,
+    val sections: List<FolderSection> = emptyList(),
+    val counts: FilterCounts = FilterCounts(),
+    val filtersEnabled: Boolean = true,
+    val canUndo: Boolean = false,
+    val canRedo: Boolean = false,
+    val autoAdvance: Boolean = false,
+    val swipeToFlag: Boolean = true,
 ) {
     /** Derived, not stored: enrichment re-sorts the list, and the selection must follow the photo. */
     val selectedIndex: Int by lazy(LazyThreadSafetyMode.NONE) {
@@ -104,13 +124,12 @@ data class LibraryUiState(
         get() = filteredPhotos.getOrNull(compareIndex)
 
     val totalCount: Int get() = photos.size
-    val picksCount: Int get() = photos.count { it.cullStatus == CullStatus.PICK }
-    val rejectsCount: Int get() = photos.count { it.cullStatus == CullStatus.REJECT }
-    val unflaggedCount: Int get() = photos.count { it.cullStatus == CullStatus.UNFLAGGED }
-    val pairedCount: Int get() = photos.count { it.hasCompanion }
-    val savingCount: Int
-        get() = photos.count { it.xmpSyncStatus == XmpSyncStatus.PENDING || it.xmpSyncStatus == XmpSyncStatus.WRITING }
-    val syncErrorCount: Int get() = photos.count { it.xmpSyncStatus == XmpSyncStatus.ERROR }
+    val picksCount: Int get() = counts.flags[CullStatus.PICK] ?: 0
+    val rejectsCount: Int get() = counts.flags[CullStatus.REJECT] ?: 0
+    val unflaggedCount: Int get() = counts.flags[CullStatus.UNFLAGGED] ?: 0
+    val pairedCount: Int get() = counts.paired
+    val savingCount: Int get() = counts.saving
+    val syncErrorCount: Int get() = counts.syncErrors
     val syncDetailsPhoto: PhotoAsset? get() = photos.firstOrNull { it.id == syncDetailsPhotoId }
     val isDemo: Boolean get() = activeLocation?.isDemo == true
     val rootUri: String? get() = activeLocation?.treeUri
@@ -127,13 +146,14 @@ data class LibraryUiState(
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryViewModel(
     private val appContext: Context,
-    private val repository: RawCatalogRepository,
+    private val repository: PhotoCatalog,
     private val settings: SettingsRepository,
     private val locations: LocationRepository,
     private val jobs: ImportJobDao,
     private val scanCoordinator: ScanCoordinator,
     private val writeQueue: XmpWriteQueue,
     private val startupFinished: suspend () -> Unit,
+    private val log: (String) -> Unit = { Log.i("RawCull.Library", it) },
 ) : ViewModel() {
     private val currentLocation = MutableStateFlow<LibraryLocation?>(null)
     private val scope = MutableStateFlow<LibraryScope>(LibraryScope.All)
@@ -146,6 +166,19 @@ class LibraryViewModel(
     private var saveSelectionJob: Job? = null
     private var pendingSelectionId: String? = null
     private var knownLocations: List<LibraryLocation> = emptyList()
+
+    private val rows = MutableStateFlow<List<PhotoAsset>>(emptyList())
+    private val filter = MutableStateFlow(FilterOptions())
+    private val filtersEnabled = MutableStateFlow(true)
+    @Volatile
+    private var visibleIds: List<String> = emptyList()
+    private var visibleIdSet: Set<String> = emptySet()
+    private var saveFilterJob: Job? = null
+
+    private val undoStack = UndoStack()
+
+    /** Fair, so edits reach Room in the order they were made and an undo can't overtake its edit. */
+    private val writeOrder = Mutex()
 
     init {
         viewModelScope.launch { restoreSession() }
@@ -163,7 +196,18 @@ class LibraryViewModel(
                 .flatMapLatest { (root, activeScope) ->
                     root?.let { repository.observeScope(it, activeScope) } ?: flowOf(emptyList())
                 }
-                .collect(::updatePhotosList)
+                .collect { rows.value = it }
+        }
+        viewModelScope.launch {
+            // mapLatest drops a run the next change has made pointless.
+            combine(rows, filter, filtersEnabled, ::FilterRun)
+                .mapLatest { run -> withContext(Dispatchers.Default) { computeView(run) } }
+                .collect(::publish)
+        }
+        viewModelScope.launch {
+            settings.cullingPrefs.collect { prefs ->
+                _uiState.update { it.copy(autoAdvance = prefs.autoAdvance, swipeToFlag = prefs.swipeToFlag) }
+            }
         }
         viewModelScope.launch {
             currentLocation
@@ -189,25 +233,43 @@ class LibraryViewModel(
         }
     }
 
-    private fun updatePhotosList(photoList: List<PhotoAsset>) {
-        applyVisiblePhotos(photoList, _uiState.value.filterOptions)
+    private class FilterRun(val rows: List<PhotoAsset>, val filter: FilterOptions, val enabled: Boolean)
+
+    private class ComputedView(
+        val source: List<PhotoAsset>,
+        val view: LibraryView,
+        val ids: List<String>,
+        val idSet: Set<String>,
+    )
+
+    private fun computeView(run: FilterRun): ComputedView {
+        val started = System.nanoTime()
+        val active = if (run.enabled) run.filter else run.filter.cleared()
+        val spansFolders = run.rows.asSequence().map { it.relativeDir }.distinct().take(2).count() > 1
+        val view = LibraryFilter.apply(run.rows, active, run.filter.sortOrder, spansFolders)
+        val ids = view.rows.map { it.id }
+        val idSet = ids.toHashSet()
+        if (ids != visibleIds) scanCoordinator.setVisibleOrder(ids) // O9
+        log("filter rows=${run.rows.size} visible=${ids.size} ms=${(System.nanoTime() - started) / NANOS_PER_MILLI}")
+        return ComputedView(run.rows, view, ids, idSet)
     }
 
     /** Publishes a new visible list, carrying the selection over by id. */
-    private fun applyVisiblePhotos(photoList: List<PhotoAsset>, filter: FilterOptions) {
+    private fun publish(computed: ComputedView) {
         val current = _uiState.value
-        val spansFolders = photoList.asSequence().map { it.relativeDir }.distinct().take(2).count() > 1
-        val filtered = LibraryFilter.apply(photoList, filter, filter.sortOrder, spansFolders).rows
-        val previousIds = current.filteredPhotos.map { it.id }
-        val nextIds = filtered.map { it.id }
-        val restored = pendingSelectionId?.takeIf { it in nextIds }
+        val nextIds = computed.ids
+        val restored = pendingSelectionId?.takeIf { it in computed.idSet }
         if (nextIds.isNotEmpty()) pendingSelectionId = null
-        val selectedId = restored ?: SelectionLogic.reconcile(previousIds, nextIds, current.selectedPhotoId)
+        val selectedId = restored ?: current.selectedPhotoId?.takeIf { it in computed.idSet }
+            ?: SelectionLogic.reconcile(visibleIds, nextIds, current.selectedPhotoId)
+        visibleIds = nextIds
+        visibleIdSet = computed.idSet
 
         _uiState.value = current.copy(
-            photos = photoList,
-            filteredPhotos = filtered,
-            filterOptions = filter,
+            photos = computed.source,
+            filteredPhotos = computed.view.rows,
+            sections = computed.view.sections,
+            counts = computed.view.counts,
             selectedPhotoId = selectedId,
             comparePhotoId = SelectionLogic.reconcileCompare(nextIds, current.comparePhotoId, selectedId),
         )
@@ -227,12 +289,13 @@ class LibraryViewModel(
     }
 
     fun selectPhotoIndex(index: Int) {
-        val filtered = _uiState.value.filteredPhotos
-        if (index in filtered.indices) {
-            _uiState.update { it.copy(selectedPhotoId = filtered[index].id) }
-            onSelectionChanged()
-            refreshHistogram()
-        }
+        _uiState.value.filteredPhotos.getOrNull(index)?.let { selectPhoto(it.id) }
+    }
+
+    private fun selectPhoto(id: String) {
+        _uiState.update { it.copy(selectedPhotoId = id) }
+        onSelectionChanged()
+        refreshHistogram()
     }
 
     fun nextPhoto() {
@@ -262,53 +325,82 @@ class LibraryViewModel(
     }
 
     // --- CULLING ---
-    fun togglePick() {
+    /** The one way culling edits happen: on the selection if there is one, else on the current photo. */
+    fun apply(edit: CullEdit, advance: Boolean = false) {
         if (!canEdit()) return
-        val photo = _uiState.value.currentPhoto ?: return
-        val newStatus = if (photo.cullStatus == CullStatus.PICK) CullStatus.UNFLAGGED else CullStatus.PICK
-        viewModelScope.launch { repository.setCullStatus(photo.id, newStatus) }
+        val state = _uiState.value
+        val isBatch = state.selectedPhotoIds.isNotEmpty()
+        val targets = if (isBatch) {
+            state.photos.filter { it.id in state.selectedPhotoIds }
+        } else {
+            listOfNotNull(state.currentPhoto)
+        }
+        if (targets.isEmpty()) return
+
+        val change = CullEdits.resolve(edit, targets)
+        if (change != null) {
+            undoStack.push(change)
+            publishUndoState()
+            write(change)
+            if (isBatch) showMessage(change.summary)
+        }
+        val tagging = edit is CullEdit.AddTag || edit is CullEdit.RemoveTag
+        if (!isBatch && !tagging && (advance || state.autoAdvance)) advanceFrom(targets.single(), change)
     }
 
-    fun toggleReject() {
-        if (!canEdit()) return
-        val photo = _uiState.value.currentPhoto ?: return
-        val newStatus = if (photo.cullStatus == CullStatus.REJECT) CullStatus.UNFLAGGED else CullStatus.REJECT
-        viewModelScope.launch { repository.setCullStatus(photo.id, newStatus) }
+    private fun advanceFrom(photo: PhotoAsset, change: CullChange?) {
+        val edited = change?.after?.get(photo.id)?.let {
+            photo.copy(rating = it.rating, cullStatus = it.cullStatus, colorLabel = it.colorLabel, tags = it.tags)
+        } ?: photo
+        val active = if (filtersEnabled.value) filter.value else filter.value.cleared()
+        val visibleAfter = if (LibraryFilter.matches(edited, active)) visibleIds else visibleIds - photo.id
+        AutoAdvance.next(visibleIds, visibleAfter, photo.id)?.let(::selectPhoto)
     }
 
-    fun setCullStatus(status: CullStatus) {
-        if (!canEdit()) return
-        val photo = _uiState.value.currentPhoto ?: return
-        viewModelScope.launch { repository.setCullStatus(photo.id, status) }
+    private fun write(change: CullChange) {
+        viewModelScope.launch { writeOrder.withLock { repository.applyChange(change) } }
     }
 
-    fun setRating(rating: Int) {
-        if (!canEdit()) return
-        val photo = _uiState.value.currentPhoto ?: return
-        val newRating = if (photo.rating == rating) 0 else rating
-        viewModelScope.launch { repository.setRating(photo.id, newRating) }
+    private fun publishUndoState() {
+        _uiState.update { it.copy(canUndo = undoStack.canUndo, canRedo = undoStack.canRedo) }
     }
+
+    fun undo() {
+        if (!canEdit()) return
+        val change = undoStack.undo() ?: return
+        replay(change, "Undid")
+    }
+
+    fun redo() {
+        if (!canEdit()) return
+        val change = undoStack.redo() ?: return
+        replay(change, "Redid")
+    }
+
+    private fun replay(change: CullChange, verb: String) {
+        publishUndoState()
+        write(change)
+        change.ids.firstOrNull { it in visibleIdSet }?.let(::selectPhoto)
+        showMessage("$verb: ${change.summary}")
+    }
+
+    fun togglePick() = apply(CullEdit.Flag(CullStatus.PICK))
+
+    fun toggleReject() = apply(CullEdit.Flag(CullStatus.REJECT))
+
+    fun setCullStatus(status: CullStatus) = apply(CullEdit.Flag(status, toggle = false))
+
+    fun setRating(rating: Int) = apply(CullEdit.Rating(rating))
 
     fun setColorLabel(label: ColorLabel) {
-        if (!canEdit()) return
-        val photo = _uiState.value.currentPhoto ?: return
-        val newLabel = if (photo.colorLabel == label) ColorLabel.NONE else label
-        viewModelScope.launch { repository.setColorLabel(photo.id, newLabel) }
+        val current = _uiState.value.currentPhoto?.colorLabel
+        // The clear button sends NONE, which means "take the label off", not a label of its own.
+        apply(CullEdit.LabelToggle(if (label == ColorLabel.NONE) current ?: label else label))
     }
 
-    fun addTagToCurrent(tag: String) {
-        if (!canEdit()) return
-        val photo = _uiState.value.currentPhoto ?: return
-        val trimmed = tag.trim()
-        if (trimmed.isEmpty() || photo.tags.contains(trimmed)) return
-        viewModelScope.launch { repository.batchAddTag(listOf(photo.id), trimmed) }
-    }
+    fun addTagToCurrent(tag: String) = apply(CullEdit.AddTag(tag))
 
-    fun removeTagFromCurrent(tag: String) {
-        if (!canEdit()) return
-        val photo = _uiState.value.currentPhoto ?: return
-        viewModelScope.launch { repository.removeTag(photo.id, tag) }
-    }
+    fun removeTagFromCurrent(tag: String) = apply(CullEdit.RemoveTag(tag))
 
     /** With the volume gone there's nowhere to write sidecars, so the catalog is read-only. */
     private fun canEdit(): Boolean {
@@ -319,7 +411,31 @@ class LibraryViewModel(
 
     // --- FILTERS ---
     fun updateFilter(filterModifier: (FilterOptions) -> FilterOptions) {
-        applyVisiblePhotos(_uiState.value.photos, filterModifier(_uiState.value.filterOptions))
+        val next = filterModifier(filter.value)
+        filter.value = next
+        _uiState.update { it.copy(filterOptions = next) }
+        val location = _uiState.value.activeLocation ?: return
+        // Typing in the search field shouldn't mean a disk write per letter.
+        saveFilterJob?.cancel()
+        saveFilterJob = viewModelScope.launch {
+            delay(SAVE_FILTER_DELAY_MS)
+            settings.setFilters(location.id, next)
+        }
+    }
+
+    /** Ctrl+L: everything off and back on, without forgetting what was set. */
+    fun toggleFilters() {
+        val enabled = !filtersEnabled.value
+        filtersEnabled.value = enabled
+        _uiState.update { it.copy(filtersEnabled = enabled) }
+        val location = _uiState.value.activeLocation ?: return
+        viewModelScope.launch { settings.setFiltersEnabled(location.id, enabled) }
+    }
+
+    fun clearFilters() = updateFilter { it.cleared() }
+
+    fun setAutoAdvance(enabled: Boolean) {
+        viewModelScope.launch { settings.setAutoAdvance(enabled) }
     }
 
     fun toggleSyncErrorFilter() {
@@ -351,6 +467,15 @@ class LibraryViewModel(
         val available = locations.isAvailable(location)
         val switching = _uiState.value.activeLocation?.id != location.id
         histogramKey = null
+        if (switching) {
+            undoStack.clear()
+            saveFilterJob?.cancel()
+            filter.value = settings.filters(location.id)
+            filtersEnabled.value = settings.filtersEnabled(location.id)
+            rows.value = emptyList()
+            visibleIds = emptyList()
+            visibleIdSet = emptySet()
+        }
         _uiState.update {
             it.copy(
                 activeLocation = location,
@@ -362,7 +487,10 @@ class LibraryViewModel(
                 currentHistogram = null,
                 selectedPhotoId = if (switching) null else it.selectedPhotoId,
                 comparePhotoId = if (switching) null else it.comparePhotoId,
-                filterOptions = if (switching) FilterOptions() else it.filterOptions,
+                filterOptions = filter.value,
+                filtersEnabled = filtersEnabled.value,
+                canUndo = undoStack.canUndo,
+                canRedo = undoStack.canRedo,
                 selectedPhotoIds = emptySet(),
                 isMultiSelectMode = false,
             )
@@ -624,16 +752,9 @@ class LibraryViewModel(
         }
     }
 
-    fun batchPickSelected() = batchEdit { repository.batchSetCullStatus(it, CullStatus.PICK) }
+    fun batchPickSelected() = apply(CullEdit.Flag(CullStatus.PICK, toggle = false))
 
-    fun batchRejectSelected() = batchEdit { repository.batchSetCullStatus(it, CullStatus.REJECT) }
-
-    private fun batchEdit(edit: suspend (List<String>) -> Unit) {
-        if (!canEdit()) return
-        val ids = _uiState.value.selectedPhotoIds.toList()
-        if (ids.isEmpty()) return
-        viewModelScope.launch { edit(ids) }
-    }
+    fun batchRejectSelected() = apply(CullEdit.Flag(CullStatus.REJECT, toggle = false))
 
     /** Keyed on the photo's version, so enrichment batches don't restart it on every emission. */
     private fun refreshHistogram() {
@@ -659,6 +780,8 @@ class LibraryViewModel(
 
     companion object {
         private const val SAVE_SELECTION_DELAY_MS = 500L
+        private const val SAVE_FILTER_DELAY_MS = 400L
+        private const val NANOS_PER_MILLI = 1_000_000L
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {

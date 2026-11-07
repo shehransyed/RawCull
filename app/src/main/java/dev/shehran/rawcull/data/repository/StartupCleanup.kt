@@ -1,5 +1,6 @@
 package dev.shehran.rawcull.data.repository
 
+import dev.shehran.rawcull.data.model.DEMO_ROOT_URI
 import java.net.URLDecoder
 
 /** Folders remembered from before Locations existed. */
@@ -40,6 +41,7 @@ class StartupCleanup(
     private val unfinishedJobSources: suspend () -> List<String>,
     private val persistedGrants: () -> Set<String>,
     private val release: (String) -> Unit,
+    private val removeOrphanRows: suspend (keepRoots: List<String>) -> Unit,
 ) {
     suspend fun run() {
         val persisted = persistedGrants()
@@ -50,5 +52,6 @@ class StartupCleanup(
 
         val inUse = locations.getAll().map { it.treeUri }.toSet() + volumeGrants() + unfinishedJobSources()
         LegacySources.grantsToRelease(persisted, inUse).forEach(release)
+        removeOrphanRows(locations.getAll().map { it.treeUri } + DEMO_ROOT_URI)
     }
 }

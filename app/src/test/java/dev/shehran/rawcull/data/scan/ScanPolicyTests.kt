@@ -87,4 +87,28 @@ class EnrichmentQueueTest {
     fun `an empty queue returns null`() {
         assertNull(EnrichmentQueue(emptyList(), emptySet()).next())
     }
+
+    @Test
+    fun `reorder puts what is visible first and keeps what is done`() {
+        val queue = EnrichmentQueue(listOf("a", "b", "c", "d"), setOf("a", "b", "c", "d"))
+        assertEquals("a", queue.next())
+        queue.reorder(listOf("d", "c", "a"))
+        assertEquals(listOf("d", "c", "b"), queue.drain())
+    }
+
+    @Test
+    fun `reorder works outward from the selection, and hidden photos wait for the visible ones`() {
+        val ids = listOf("a", "b", "c", "d", "e")
+        val queue = EnrichmentQueue(ids, ids.toSet())
+        queue.prioritize("d")
+        queue.reorder(listOf("b", "c", "d"))
+        assertEquals(listOf("d", "c", "b", "a", "e"), queue.drain())
+    }
+
+    @Test
+    fun `reorder ignores ids the queue never had`() {
+        val queue = EnrichmentQueue(listOf("a", "b"), setOf("a", "b"))
+        queue.reorder(listOf("x", "b"))
+        assertEquals(listOf("b", "a"), queue.drain())
+    }
 }

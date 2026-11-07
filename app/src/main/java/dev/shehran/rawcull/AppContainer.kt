@@ -69,6 +69,11 @@ class AppContainer(context: Context) {
             unfinishedJobSources = { database.importJobDao().getUnfinishedSources() },
             persistedGrants = { SafPermissions.persistedUris(appContext) },
             release = { SafPermissions.release(appContext, Uri.parse(it)) },
+            removeOrphanRows = { keep ->
+                val orphans = photoDao.countOrphans(keep)
+                val removed = photoDao.deleteOrphans(keep)
+                Log.i("RawCull.Library", "orphanRows removed=$removed keptPending=${orphans - removed}")
+            },
         ).run()
     }
     val cardVolumes: CardVolumes = CardVolumes(appContext)

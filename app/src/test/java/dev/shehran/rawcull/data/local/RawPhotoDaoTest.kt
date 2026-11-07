@@ -1,5 +1,8 @@
 package dev.shehran.rawcull.data.local
 
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertNotNull
+import dev.shehran.rawcull.data.model.DEMO_ROOT_URI
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -199,4 +202,35 @@ class RawPhotoDaoTest {
         assertNull(dao.getPhotoById("a"))
         assertEquals("b", dao.getPhotoById("b")?.id)
     }
+
+    @Test
+    fun `orphan rows go unless they have unsaved work`() = runBlocking<Unit> {
+        dao.upsertAll(
+            listOf(
+                orphanRow("kept", "root-kept"),
+                orphanRow("gone", "old-card"),
+                orphanRow("pending", "old-card").copy(xmpSyncStatus = XmpSyncStatus.PENDING, xmpPendingFields = 1),
+                orphanRow("failed", "old-card").copy(xmpSyncStatus = XmpSyncStatus.ERROR),
+            ),
+        )
+        val keep = listOf("root-kept", DEMO_ROOT_URI)
+
+        assertEquals(3, dao.countOrphans(keep))
+        assertEquals(1, dao.deleteOrphans(keep))
+        assertEquals(2, dao.countOrphans(keep))
+        assertNotNull(dao.getPhotoById("kept"))
+        assertNotNull(dao.getPhotoById("pending"))
+        assertNotNull(dao.getPhotoById("failed"))
+        assertNull(dao.getPhotoById("gone"))
+    }
+
+    private fun orphanRow(id: String, root: String) = PhotoAsset(
+        id = id,
+        rootUri = root,
+        fileName = "$id.ARW",
+        fileUri = "uri/$id",
+        format = PhotoFormat.ARW,
+        fileSizeBytes = 1,
+        dateTaken = 0,
+    )
 }

@@ -18,6 +18,9 @@ data class FilterCounts(
     val ratings: Map<Int, Int> = emptyMap(),
     val colors: Map<ColorLabel, Int> = emptyMap(),
     val tags: Map<String, Int> = emptyMap(),
+    val paired: Int = 0,
+    val saving: Int = 0,
+    val syncErrors: Int = 0,
 )
 
 data class LibraryView(
@@ -100,13 +103,22 @@ object LibraryFilter {
         val ratings = HashMap<Int, Int>()
         val colors = HashMap<ColorLabel, Int>()
         val tags = HashMap<String, Int>()
+        var paired = 0
+        var saving = 0
+        var syncErrors = 0
         rows.forEach { photo ->
             flags.merge(photo.cullStatus, 1, Int::plus)
             ratings.merge(photo.rating, 1, Int::plus)
             colors.merge(photo.colorLabel, 1, Int::plus)
             photo.tags.forEach { tags.merge(it, 1, Int::plus) }
+            if (photo.hasCompanion) paired++
+            when (photo.xmpSyncStatus) {
+                XmpSyncStatus.PENDING, XmpSyncStatus.WRITING -> saving++
+                XmpSyncStatus.ERROR -> syncErrors++
+                else -> Unit
+            }
         }
-        return FilterCounts(rows.size, flags, ratings, colors, tags)
+        return FilterCounts(rows.size, flags, ratings, colors, tags, paired, saving, syncErrors)
     }
 
     private val SortOrder.groupsByFolder: Boolean

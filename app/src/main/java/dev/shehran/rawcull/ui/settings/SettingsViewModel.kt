@@ -14,6 +14,7 @@ import dev.shehran.rawcull.data.model.VerifyMode
 import dev.shehran.rawcull.data.repository.ImportPrefs
 import dev.shehran.rawcull.data.repository.LocationChange
 import dev.shehran.rawcull.data.repository.LocationRepository
+import dev.shehran.rawcull.data.repository.RawCatalogRepository
 import dev.shehran.rawcull.data.repository.SettingsRepository
 import dev.shehran.rawcull.ui.library.LocationUi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +35,7 @@ class SettingsViewModel(
     private val settings: SettingsRepository,
     private val locations: LocationRepository,
     private val presets: ImportPresetDao,
+    private val catalog: RawCatalogRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -111,6 +113,21 @@ class SettingsViewModel(
         viewModelScope.launch { presets.delete(preset) }
     }
 
+    /** Debug builds only; see D12. */
+    fun addSyntheticPhotos() {
+        viewModelScope.launch {
+            catalog.addSyntheticPhotos(SYNTHETIC_COUNT)
+            showMessage("Added 50,000 synthetic photos to the demo library")
+        }
+    }
+
+    fun removeSyntheticPhotos() {
+        viewModelScope.launch {
+            catalog.removeSyntheticPhotos()
+            showMessage("Removed the synthetic photos")
+        }
+    }
+
     private fun showMessage(message: String) {
         _uiState.update { it.copy(message = message) }
     }
@@ -120,6 +137,8 @@ class SettingsViewModel(
     }
 
     companion object {
+        private const val SYNTHETIC_COUNT = 50_000
+
         /** Takes [container] directly: Nav3's entry store has no application in its creation extras. */
         fun factory(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -127,6 +146,7 @@ class SettingsViewModel(
                     settings = container.settingsRepository,
                     locations = container.locationRepository,
                     presets = container.database.importPresetDao(),
+                    catalog = container.catalogRepository,
                 )
             }
         }

@@ -179,6 +179,16 @@ fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) 
                     onCheckedChange = viewModel::setRejectAsNegativeRating,
                 )
 
+                if (BuildConfig.DEBUG) {
+                    SectionHeader("DEVELOPER")
+                    TextButton(onClick = viewModel::addSyntheticPhotos, modifier = Modifier.testTag("settings_add_synthetic")) {
+                        Text("Add 50,000 synthetic photos to the demo library", color = PrimaryCyan)
+                    }
+                    TextButton(onClick = viewModel::removeSyntheticPhotos, modifier = Modifier.testTag("settings_remove_synthetic")) {
+                        Text("Remove the synthetic photos", color = PrimaryCyan)
+                    }
+                }
+
                 SectionHeader("ABOUT")
                 Text("RawCull ${BuildConfig.VERSION_NAME}", color = Color.White, style = MaterialTheme.typography.bodyMedium)
                 TextButton(

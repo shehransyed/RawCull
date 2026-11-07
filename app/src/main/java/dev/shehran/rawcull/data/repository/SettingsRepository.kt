@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.VerifyMode
 import dev.shehran.rawcull.util.xmp.XmpPrefs
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +26,9 @@ data class LibrarySession(
     val activeFolder: String = "",
     val selectedAssetId: String? = null,
 )
+
+/** How culling behaves on this device. */
+data class CullingPrefs(val autoAdvance: Boolean = false, val swipeToFlag: Boolean = true)
 
 data class ImportPrefs(
     val verifyMode: VerifyMode = VerifyMode.FULL,
@@ -47,6 +51,13 @@ class SettingsRepository(context: Context) {
             deleteFromCardAfterImport = prefs[KEY_DELETE_FROM_CARD] ?: false,
             hideAlreadyImported = prefs[KEY_HIDE_ALREADY_IMPORTED] ?: true,
             lastPresetId = prefs[KEY_LAST_PRESET_ID],
+        )
+    }
+
+    val cullingPrefs: Flow<CullingPrefs> = dataStore.data.map { prefs ->
+        CullingPrefs(
+            autoAdvance = prefs[KEY_AUTO_ADVANCE] ?: false,
+            swipeToFlag = prefs[KEY_SWIPE_TO_FLAG] ?: true,
         )
     }
 
@@ -89,6 +100,33 @@ class SettingsRepository(context: Context) {
     }
 
     private fun expandedKey(locationId: Long) = stringSetPreferencesKey("expanded_folders_$locationId")
+
+    /** Filters are remembered per Location, since each library is culled differently. */
+    suspend fun filters(locationId: Long): FilterOptions =
+        FilterOptionsCodec.decode(dataStore.data.first()[filtersKey(locationId)])
+
+    suspend fun setFilters(locationId: Long, filter: FilterOptions) {
+        dataStore.edit { it[filtersKey(locationId)] = FilterOptionsCodec.encode(filter) }
+    }
+
+    suspend fun filtersEnabled(locationId: Long): Boolean =
+        dataStore.data.first()[filtersEnabledKey(locationId)] ?: true
+
+    suspend fun setFiltersEnabled(locationId: Long, enabled: Boolean) {
+        dataStore.edit { it[filtersEnabledKey(locationId)] = enabled }
+    }
+
+    private fun filtersKey(locationId: Long) = stringPreferencesKey("library_filters_$locationId")
+
+    private fun filtersEnabledKey(locationId: Long) = booleanPreferencesKey("library_filters_enabled_$locationId")
+
+    suspend fun setAutoAdvance(enabled: Boolean) {
+        dataStore.edit { it[KEY_AUTO_ADVANCE] = enabled }
+    }
+
+    suspend fun setSwipeToFlag(enabled: Boolean) {
+        dataStore.edit { it[KEY_SWIPE_TO_FLAG] = enabled }
+    }
 
     suspend fun setVerifyMode(mode: VerifyMode) {
         dataStore.edit { it[KEY_VERIFY_MODE] = mode.name }
@@ -153,6 +191,8 @@ class SettingsRepository(context: Context) {
         val KEY_HIDE_ALREADY_IMPORTED = booleanPreferencesKey("hide_already_imported")
         val KEY_LAST_PRESET_ID = longPreferencesKey("last_preset_id")
         val KEY_VOLUME_GRANTS = stringPreferencesKey("volume_grants")
+        val KEY_AUTO_ADVANCE = booleanPreferencesKey("auto_advance")
+        val KEY_SWIPE_TO_FLAG = booleanPreferencesKey("swipe_to_flag")
 
         fun encodeGrants(grants: Map<String, String>): String {
             val json = JSONObject()
