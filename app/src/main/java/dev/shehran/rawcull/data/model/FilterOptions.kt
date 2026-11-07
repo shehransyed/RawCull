@@ -1,24 +1,33 @@
 package dev.shehran.rawcull.data.model
 
+enum class RatingOperator(val symbol: String) {
+    AT_LEAST("≥"),
+    EXACTLY("="),
+    AT_MOST("≤"),
+}
+
+/** An empty set means that dimension isn't filtered. */
 data class FilterOptions(
-    val cullFilter: CullFilterMode = CullFilterMode.ALL,
-    val minRating: Int = 0, // 0 = all, 1..5
-    val exactRating: Int? = null,
-    val colorFilter: ColorLabel? = null,
+    val flags: Set<CullStatus> = emptySet(),
+    val ratingOperator: RatingOperator = RatingOperator.AT_LEAST,
+    val rating: Int = 0,
+    val colors: Set<ColorLabel> = emptySet(), // ColorLabel.NONE is "No label"
+    val tags: Set<String> = emptySet(),
     val formatFilter: PhotoFormat? = null,
     val pairFilter: PairMode? = null,
-    val tagFilter: String? = null,
     val searchQuery: String = "",
     val sortOrder: SortOrder = SortOrder.DATE_ASC,
-    val syncErrorsOnly: Boolean = false
-)
+    val syncErrorsOnly: Boolean = false,
+) {
+    val filtersRating: Boolean get() = ratingOperator != RatingOperator.AT_LEAST || rating > 0
 
-enum class CullFilterMode(val label: String) {
-    ALL("All Photos"),
-    PICKS_ONLY("Picks Only"),
-    UNFLAGGED_ONLY("Unflagged"),
-    REJECTS_ONLY("Rejects"),
-    PICKS_AND_UNFLAGGED("Picks & Unflagged")
+    /** Whether anything can hide a photo. Sorting can't. */
+    val isActive: Boolean
+        get() = flags.isNotEmpty() || filtersRating || colors.isNotEmpty() || tags.isNotEmpty() ||
+            formatFilter != null || pairFilter != null || searchQuery.isNotBlank() || syncErrorsOnly
+
+    /** The same sort with nothing filtered. */
+    fun cleared(): FilterOptions = FilterOptions(sortOrder = sortOrder)
 }
 
 enum class SortOrder(val label: String) {

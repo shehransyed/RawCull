@@ -53,7 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.shehran.rawcull.data.model.CullFilterMode
+import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.PairMode
 import dev.shehran.rawcull.data.model.PhotoFormat
@@ -283,25 +283,25 @@ private fun FilterChipsRow(uiState: LibraryUiState, onUpdateFilter: ((FilterOpti
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        fun cull(mode: CullFilterMode): () -> Unit = { onUpdateFilter { it.copy(cullFilter = mode) } }
+        fun flags(vararg status: CullStatus): () -> Unit = { onUpdateFilter { it.copy(flags = status.toSet()) } }
 
-        DamFilterChip("All (${uiState.totalCount})", filter.cullFilter == CullFilterMode.ALL, onClick = cull(CullFilterMode.ALL))
+        DamFilterChip("All (${uiState.totalCount})", filter.flags.isEmpty(), onClick = flags())
         DamFilterChip(
             "Picks (${uiState.picksCount})",
-            filter.cullFilter == CullFilterMode.PICKS_ONLY,
+            filter.flags == setOf(CullStatus.PICK),
             RawCullTheme.colors.pick,
-            cull(CullFilterMode.PICKS_ONLY),
+            flags(CullStatus.PICK),
         )
         DamFilterChip(
             "Unflagged (${uiState.unflaggedCount})",
-            filter.cullFilter == CullFilterMode.UNFLAGGED_ONLY,
-            onClick = cull(CullFilterMode.UNFLAGGED_ONLY),
+            filter.flags == setOf(CullStatus.UNFLAGGED),
+            onClick = flags(CullStatus.UNFLAGGED),
         )
         DamFilterChip(
             "Rejects (${uiState.rejectsCount})",
-            filter.cullFilter == CullFilterMode.REJECTS_ONLY,
+            filter.flags == setOf(CullStatus.REJECT),
             RawCullTheme.colors.reject,
-            cull(CullFilterMode.REJECTS_ONLY),
+            flags(CullStatus.REJECT),
         )
 
         ChipDivider()
@@ -325,11 +325,11 @@ private fun FilterChipsRow(uiState: LibraryUiState, onUpdateFilter: ((FilterOpti
 
         ChipDivider()
 
-        DamFilterChip("★ 5 Only", filter.minRating == 5, RawCullTheme.colors.star) {
-            onUpdateFilter { it.copy(minRating = if (it.minRating == 5) 0 else 5) }
+        DamFilterChip("★ 5 Only", filter.rating == 5, RawCullTheme.colors.star) {
+            onUpdateFilter { it.copy(rating = if (it.rating == 5) 0 else 5) }
         }
-        DamFilterChip("★ 3+ Stars", filter.minRating == 3, RawCullTheme.colors.star) {
-            onUpdateFilter { it.copy(minRating = if (it.minRating == 3) 0 else 3) }
+        DamFilterChip("★ 3+ Stars", filter.rating == 3, RawCullTheme.colors.star) {
+            onUpdateFilter { it.copy(rating = if (it.rating == 3) 0 else 3) }
         }
     }
 }

@@ -11,7 +11,6 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.shehran.rawcull.RawCullApp
 import dev.shehran.rawcull.data.local.ImportJobDao
 import dev.shehran.rawcull.data.model.ColorLabel
-import dev.shehran.rawcull.data.model.CullFilterMode
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.ImportJob
@@ -28,6 +27,7 @@ import dev.shehran.rawcull.data.scan.ScanState
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
 import dev.shehran.rawcull.library.FolderNode
 import dev.shehran.rawcull.library.FolderTree
+import dev.shehran.rawcull.library.LibraryFilter
 import dev.shehran.rawcull.library.LibraryRestore
 import dev.shehran.rawcull.library.LibraryScope
 import dev.shehran.rawcull.ui.SelectionLogic
@@ -196,7 +196,8 @@ class LibraryViewModel(
     /** Publishes a new visible list, carrying the selection over by id. */
     private fun applyVisiblePhotos(photoList: List<PhotoAsset>, filter: FilterOptions) {
         val current = _uiState.value
-        val filtered = applyFilterAndSort(photoList, filter)
+        val spansFolders = photoList.asSequence().map { it.relativeDir }.distinct().take(2).count() > 1
+        val filtered = LibraryFilter.apply(photoList, filter, filter.sortOrder, spansFolders).rows
         val previousIds = current.filteredPhotos.map { it.id }
         val nextIds = filtered.map { it.id }
         val restored = pendingSelectionId?.takeIf { it in nextIds }
@@ -222,44 +223,6 @@ class LibraryViewModel(
         saveSelectionJob = viewModelScope.launch {
             delay(SAVE_SELECTION_DELAY_MS)
             settings.setSelectedAsset(id)
-        }
-    }
-
-    private fun applyFilterAndSort(list: List<PhotoAsset>, filter: FilterOptions): List<PhotoAsset> {
-        val filtered = list.filter { photo ->
-            val cullMatch = when (filter.cullFilter) {
-                CullFilterMode.ALL -> true
-                CullFilterMode.PICKS_ONLY -> photo.cullStatus == CullStatus.PICK
-                CullFilterMode.UNFLAGGED_ONLY -> photo.cullStatus == CullStatus.UNFLAGGED
-                CullFilterMode.REJECTS_ONLY -> photo.cullStatus == CullStatus.REJECT
-                CullFilterMode.PICKS_AND_UNFLAGGED -> photo.cullStatus != CullStatus.REJECT
-            }
-            val ratingMatch = if (filter.exactRating != null) {
-                photo.rating == filter.exactRating
-            } else {
-                photo.rating >= filter.minRating
-            }
-            val colorMatch = filter.colorFilter == null || photo.colorLabel == filter.colorFilter
-            val formatMatch = filter.formatFilter == null || photo.format == filter.formatFilter
-            val pairMatch = filter.pairFilter == null || photo.pairMode == filter.pairFilter
-            val tagMatch = filter.tagFilter.isNullOrBlank() || photo.tags.contains(filter.tagFilter)
-            val searchMatch = filter.searchQuery.isBlank() ||
-                photo.fileName.contains(filter.searchQuery, ignoreCase = true) ||
-                (photo.cameraModel?.contains(filter.searchQuery, ignoreCase = true) == true) ||
-                (photo.lensModel?.contains(filter.searchQuery, ignoreCase = true) == true) ||
-                photo.tags.any { it.contains(filter.searchQuery, ignoreCase = true) }
-            val syncMatch = !filter.syncErrorsOnly || photo.xmpSyncStatus == XmpSyncStatus.ERROR
-
-            cullMatch && ratingMatch && colorMatch && formatMatch && pairMatch && tagMatch && searchMatch && syncMatch
-        }
-
-        return when (filter.sortOrder) {
-            SortOrder.DATE_ASC -> filtered.sortedBy { it.dateTaken }
-            SortOrder.DATE_DESC -> filtered.sortedByDescending { it.dateTaken }
-            SortOrder.NAME_ASC -> filtered.sortedBy { it.fileName }
-            SortOrder.NAME_DESC -> filtered.sortedByDescending { it.fileName }
-            SortOrder.RATING_DESC -> filtered.sortedByDescending { it.rating }
-            SortOrder.SIZE_DESC -> filtered.sortedByDescending { it.fileSizeBytes }
         }
     }
 
