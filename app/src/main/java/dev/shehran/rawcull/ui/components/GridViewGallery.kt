@@ -1,8 +1,6 @@
 package dev.shehran.rawcull.ui.components
 
-import android.graphics.Bitmap
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -56,11 +54,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.onLongClick
@@ -71,7 +66,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toIntRect
-import androidx.core.net.toUri
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PhotoAsset
@@ -92,7 +86,6 @@ import dev.shehran.rawcull.ui.theme.RejectBorder
 import dev.shehran.rawcull.ui.theme.ScrimStronger
 import dev.shehran.rawcull.ui.theme.TextMuted
 import dev.shehran.rawcull.ui.theme.TextSecondary
-import dev.shehran.rawcull.util.RawPreviewLoader
 
 /** Key of a folder header; photo tiles use the photo id. */
 private const val HEADER_KEY_PREFIX = "header:"
@@ -295,23 +288,8 @@ private fun GridPhotoCard(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    var bitmap by remember(photo.id) { mutableStateOf<Bitmap?>(null) }
-    var isLoading by remember(photo.id) { mutableStateOf(value = true) }
-
-    LaunchedEffect(photo.id) {
-        isLoading = true
-        val jpegUri = photo.companionFileUri?.toUri()
-        bitmap = RawPreviewLoader.loadThumbnail(
-            context = context,
-            uri = photo.fileUri.toUri(),
-            id = photo.previewCacheKey,
-            format = photo.format,
-            maxDimension = 360,
-            companionUri = jpegUri,
-        )
-        isLoading = false
-    }
+    // Adaptive cells are narrower than twice their minimum, so this always covers the tile.
+    val thumbnailPx = with(LocalDensity.current) { (Dimens.TileMinSize * 2).roundToPx() }
 
     val borderColor = when {
         isChecked -> RawCullTheme.colors.pick
@@ -343,16 +321,13 @@ private fun GridPhotoCard(
                 .background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap!!.asImageBitmap(),
-                    contentDescription = photo.fileName,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else if (isLoading) {
-                CircularProgressIndicator(color = PrimaryCyan, modifier = Modifier.size(24.dp))
-            }
+            PhotoThumbnail(
+                photo = photo,
+                sizePx = thumbnailPx,
+                contentDescription = photo.fileName,
+                modifier = Modifier.fillMaxSize(),
+                placeholder = { CircularProgressIndicator(color = PrimaryCyan, modifier = Modifier.size(24.dp)) },
+            )
 
             // Top-Left: RAW format badge
             Box(

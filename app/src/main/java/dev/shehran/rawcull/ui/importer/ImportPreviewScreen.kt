@@ -2,8 +2,6 @@ package dev.shehran.rawcull.ui.importer
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Build
 import android.text.format.DateUtils
 import android.text.format.Formatter
@@ -11,7 +9,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -63,7 +60,6 @@ import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,15 +67,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.isShiftPressed
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.state.ToggleableState
@@ -105,9 +100,9 @@ import dev.shehran.rawcull.ui.theme.ScrimHeavy
 import dev.shehran.rawcull.ui.theme.ScrimStrong
 import dev.shehran.rawcull.ui.theme.TextMuted
 import dev.shehran.rawcull.ui.theme.TextSecondary
-import dev.shehran.rawcull.util.RawPreviewLoader
+import dev.shehran.rawcull.ui.components.PhotoThumbnail
 
-private const val THUMBNAIL_SIZE = 320
+private val TILE_MIN_SIZE = 120.dp
 private const val DIMMED_ALPHA = 0.45f
 
 private sealed interface PreviewRow {
@@ -254,7 +249,7 @@ private fun PreviewGrid(uiState: ImportUiState, viewModel: ImportViewModel, modi
 
     LazyVerticalGrid(
         state = gridState,
-        columns = GridCells.Adaptive(minSize = 120.dp),
+        columns = GridCells.Adaptive(minSize = TILE_MIN_SIZE),
         contentPadding = PaddingValues(12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -345,18 +340,8 @@ private fun PreviewTile(
     onLongPress: () -> Unit,
     onToggle: () -> Unit,
 ) {
-    val context = LocalContext.current
     val asset = remember(candidate.id) { candidate.toPreviewAsset() }
-    val bitmap by produceState<Bitmap?>(null, candidate.id) {
-        value = RawPreviewLoader.loadThumbnail(
-            context,
-            Uri.parse(asset.fileUri),
-            asset.previewCacheKey,
-            asset.format,
-            maxDimension = THUMBNAIL_SIZE,
-            companionUri = asset.companionFileUri?.let(Uri::parse),
-        )
-    }
+    val thumbnailPx = with(LocalDensity.current) { (TILE_MIN_SIZE * 2).roundToPx() }
 
     Box(
         modifier = Modifier
@@ -366,15 +351,13 @@ private fun PreviewTile(
             .combinedClickable(onClick = onOpen, onLongClick = onLongPress)
             .testTag("preview_tile"),
     ) {
-        bitmap?.let {
-            Image(
-                bitmap = it.asImageBitmap(),
-                contentDescription = candidate.files.first().name,
-                contentScale = ContentScale.Crop,
-                alpha = if (selected) 1f else DIMMED_ALPHA,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
+        PhotoThumbnail(
+            photo = asset,
+            sizePx = thumbnailPx,
+            contentDescription = candidate.files.first().name,
+            alpha = if (selected) 1f else DIMMED_ALPHA,
+            modifier = Modifier.fillMaxSize(),
+        )
         Checkbox(
             checked = selected,
             onCheckedChange = { onToggle() },

@@ -104,6 +104,8 @@ class SafPreviewFiles(context: Context) : PreviewFiles {
             DecodedImage(bitmap, width, height)
         } catch (e: IOException) {
             null
+        } catch (e: RuntimeException) {
+            null // Decoders throw more than IOException for files they don't understand
         }
     }
 
@@ -123,6 +125,9 @@ class SafPreviewFiles(context: Context) : PreviewFiles {
     } catch (e: IOException) {
         descriptor?.close()
         null // Some JPEGs, progressive ones among them, can't be region-decoded
+    } catch (e: RuntimeException) {
+        descriptor?.close()
+        null
     }
 
     @Suppress("DEPRECATION") // The replacements are API 31; minSdk is 24
@@ -140,7 +145,11 @@ private class PlatformRegionDecoder(
 ) : RegionDecoder {
     override fun decode(rect: SourceRect, sampleSize: Int): Bitmap? {
         val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
-        return decoder.decodeRegion(Rect(rect.left, rect.top, rect.right, rect.bottom), options)
+        return try {
+            decoder.decodeRegion(Rect(rect.left, rect.top, rect.right, rect.bottom), options)
+        } catch (e: IllegalArgumentException) {
+            null // The rectangle fell outside the image, or the decoder was recycled
+        }
     }
 
     override fun close() {

@@ -7,6 +7,7 @@ import android.content.IntentSender
 import androidx.lifecycle.viewModelScope
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import dev.shehran.rawcull.data.preview.FakePreviewRepository
 import dev.shehran.rawcull.data.deletion.DeletionGateway
 import dev.shehran.rawcull.data.local.AppDatabase
 import dev.shehran.rawcull.data.model.CullStatus
@@ -178,6 +179,7 @@ class LibraryViewModelTest {
             scanCoordinator = ScanCoordinator(context, database, dao, noScans, stores, queue),
             writeQueue = queue,
             deletions = gateway,
+            previews = FakePreviewRepository(),
             startupFinished = { awaitCancellation() }, // Restoring a session isn't what's tested here
             log = {},
         )

@@ -1,7 +1,5 @@
 package dev.shehran.rawcull.ui.components
 
-import android.graphics.Bitmap
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,23 +33,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PhotoAsset
@@ -69,7 +61,8 @@ import dev.shehran.rawcull.ui.theme.RejectBorder
 import dev.shehran.rawcull.ui.theme.ScrimMedium
 import dev.shehran.rawcull.ui.theme.ScrimStrong
 import dev.shehran.rawcull.ui.theme.TextChip
-import dev.shehran.rawcull.util.RawPreviewLoader
+
+private val FILMSTRIP_TILE_WIDTH = 110.dp
 
 @Composable
 fun FilmstripBar(
@@ -137,23 +130,7 @@ private fun FilmstripThumbnailItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    var thumbBitmap by remember(photo.id) { mutableStateOf<Bitmap?>(null) }
-    var isLoading by remember(photo.id) { mutableStateOf(value = true) }
-
-    LaunchedEffect(photo.id) {
-        isLoading = true
-        val jpegUri = photo.companionFileUri?.toUri()
-        thumbBitmap = RawPreviewLoader.loadThumbnail(
-            context = context,
-            uri = photo.fileUri.toUri(),
-            id = photo.previewCacheKey,
-            format = photo.format,
-            maxDimension = 240,
-            companionUri = jpegUri,
-        )
-        isLoading = false
-    }
+    val thumbnailPx = with(LocalDensity.current) { FILMSTRIP_TILE_WIDTH.roundToPx() }
 
     val borderColor = when {
         isCurrent -> PrimaryCyan
@@ -167,7 +144,7 @@ private fun FilmstripThumbnailItem(
 
     Column(
         modifier = modifier
-            .width(110.dp)
+            .width(FILMSTRIP_TILE_WIDTH)
             .fillMaxHeight()
             .clip(RoundedCornerShape(8.dp))
             .background(DarkroomSurfaceVariant)
@@ -181,20 +158,19 @@ private fun FilmstripThumbnailItem(
                 .background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
-            if (thumbBitmap != null) {
-                Image(
-                    bitmap = thumbBitmap!!.asImageBitmap(),
-                    contentDescription = photo.fileName,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = PrimaryCyan
-                )
-            }
+            PhotoThumbnail(
+                photo = photo,
+                sizePx = thumbnailPx,
+                contentDescription = photo.fileName,
+                modifier = Modifier.fillMaxSize(),
+                placeholder = {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = PrimaryCyan
+                    )
+                },
+            )
 
             // Top-left: Format badge (RAW+JPG or ARW/DNG)
             Box(

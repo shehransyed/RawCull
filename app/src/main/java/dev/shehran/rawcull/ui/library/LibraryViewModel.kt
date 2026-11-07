@@ -48,7 +48,10 @@ import dev.shehran.rawcull.library.UndoStack
 import dev.shehran.rawcull.ui.SelectionLogic
 import dev.shehran.rawcull.util.HistogramCalculator
 import dev.shehran.rawcull.util.HistogramData
-import dev.shehran.rawcull.util.RawPreviewLoader
+import dev.shehran.rawcull.data.preview.PreviewKeys
+import dev.shehran.rawcull.data.preview.PreviewLane
+import dev.shehran.rawcull.data.preview.PreviewRepository
+import dev.shehran.rawcull.data.preview.PreviewResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -182,6 +185,7 @@ class LibraryViewModel(
     private val scanCoordinator: ScanCoordinator,
     private val writeQueue: XmpWriteQueue,
     private val deletions: DeletionGateway,
+    private val previews: PreviewRepository,
     private val startupFinished: suspend () -> Unit,
     private val log: (String) -> Unit = { Log.i("RawCull.Library", it) },
 ) : ViewModel() {
@@ -1021,17 +1025,17 @@ class LibraryViewModel(
         histogramKey = photo.previewCacheKey
         histogramJob?.cancel()
         histogramJob = viewModelScope.launch {
-            val bitmap = RawPreviewLoader.loadThumbnail(
-                appContext,
-                Uri.parse(photo.fileUri),
-                photo.previewCacheKey,
-                photo.format,
-                maxDimension = 320,
-                companionUri = photo.companionFileUri?.let { Uri.parse(it) },
-            )
-            if (bitmap != null) {
-                val histogram = HistogramCalculator.compute(bitmap)
-                _uiState.update { it.copy(currentHistogram = histogram) }
+            // Thumbnails are software bitmaps, so their pixels can be read.
+            val result = previews.thumbnail(PreviewKeys.source(photo), HISTOGRAM_SIZE_PX, PreviewLane.VISIBLE)
+            if (result is PreviewResult.Ready) {
+                // Only decoration: pixels that can't be read mean no histogram, not a crash.
+                val histogram = try {
+                    HistogramCalculator.compute(result.image.bitmap)
+                } catch (e: RuntimeException) {
+                    log("No histogram for ${photo.fileName}: $e")
+                    null
+                }
+                if (histogram != null) _uiState.update { it.copy(currentHistogram = histogram) }
             }
         }
     }
@@ -1040,6 +1044,7 @@ class LibraryViewModel(
         private const val SAVE_SELECTION_DELAY_MS = 500L
         private const val SAVE_FILTER_DELAY_MS = 400L
         private const val NANOS_PER_MILLI = 1_000_000L
+        private const val HISTOGRAM_SIZE_PX = 320
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -1053,6 +1058,7 @@ class LibraryViewModel(
                     scanCoordinator = app.container.scanCoordinator,
                     writeQueue = app.container.xmpWriteQueue,
                     deletions = app.container.deletionGateway,
+                    previews = app.container.previewRepository,
                     startupFinished = { app.container.startup.await() },
                 )
             }

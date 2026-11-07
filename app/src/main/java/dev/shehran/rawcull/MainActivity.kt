@@ -9,10 +9,12 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import dev.shehran.rawcull.data.importer.ImportNotifications
+import dev.shehran.rawcull.ui.components.LocalPreviewRepository
 import dev.shehran.rawcull.ui.library.LibraryViewModel
-import dev.shehran.rawcull.ui.shell.RawCullApp
+import dev.shehran.rawcull.ui.shell.RawCullApp as RawCullScreen
 import dev.shehran.rawcull.ui.shell.ShellViewModel
 import dev.shehran.rawcull.ui.theme.RawCullTheme
 
@@ -27,7 +29,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             RawCullTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    RawCullApp(libraryViewModel = viewModel, shellViewModel = shellViewModel)
+                    CompositionLocalProvider(LocalPreviewRepository provides (application as RawCullApp).container.previewRepository) {
+                        RawCullScreen(libraryViewModel = viewModel, shellViewModel = shellViewModel)
+                    }
                 }
             }
         }
