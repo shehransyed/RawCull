@@ -3,6 +3,7 @@ package dev.shehran.rawcull
 import android.content.Context
 import android.util.Log
 import dev.shehran.rawcull.data.importer.CardVolumes
+import dev.shehran.rawcull.data.importer.SafDocumentIo
 import dev.shehran.rawcull.data.importer.SafImportSourceReader
 import dev.shehran.rawcull.data.local.AppDatabase
 import dev.shehran.rawcull.data.local.RawPhotoDao
@@ -16,6 +17,7 @@ import dev.shehran.rawcull.data.xmp.SafSidecarStore
 import dev.shehran.rawcull.data.xmp.SidecarStores
 import dev.shehran.rawcull.data.xmp.XMP_TOOLKIT
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
+import dev.shehran.rawcull.importer.DocumentIo
 import dev.shehran.rawcull.importer.ImportSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +51,7 @@ class AppContainer(context: Context) {
         isGrantInUse = { treeUri -> treeUri in settingsRepository.volumeGrants.first().values },
     )
     val cardVolumes: CardVolumes = CardVolumes(appContext)
+    val documentIo: DocumentIo = SafDocumentIo(appContext)
     val importSession: ImportSession = ImportSession(
         reader = SafImportSourceReader(appContext),
         knownSizes = { database.importedFileDao().knownSizes().toSet() },

@@ -18,11 +18,16 @@ import dev.shehran.rawcull.data.model.LibraryLocation
 import dev.shehran.rawcull.data.repository.LocationChange
 import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.SettingsRepository
+import dev.shehran.rawcull.importer.DocumentIo
 import dev.shehran.rawcull.importer.ImportCandidate
 import dev.shehran.rawcull.importer.ImportDestination
+import dev.shehran.rawcull.importer.ImportPreview
 import dev.shehran.rawcull.importer.ImportSession
 import dev.shehran.rawcull.importer.ImportSessionState
 import dev.shehran.rawcull.importer.ImportSource
+import dev.shehran.rawcull.importer.PreviewDay
+import dev.shehran.rawcull.importer.PreviewOptions
+import dev.shehran.rawcull.importer.PreviewSummary
 import dev.shehran.rawcull.ui.library.LocationUi
 import dev.shehran.rawcull.util.SafPermissions
 import kotlinx.coroutines.Dispatchers
@@ -44,8 +49,24 @@ data class ImportUiState(
     val message: String? = null,
     val pendingCardPick: CardVolume? = null, // Waiting for the user to read the DCIM hint
     val session: ImportSessionState = ImportSessionState.Idle,
+    val options: PreviewOptions = PreviewOptions(),
+    val overrides: Set<String> = emptySet(), // See ImportPreview
+    val collapsedDays: Set<String> = emptySet(),
+    val days: List<PreviewDay> = emptyList(),
+    val summary: PreviewSummary = PreviewSummary(),
+    val anchorId: String? = null, // Where a range selection starts
+    val viewerId: String? = null,
+    val inspectedId: String? = null,
+    val destinationFreeBytes: Long? = null,
+    val deleteFromCard: Boolean = false,
 ) {
     val candidates: List<ImportCandidate> get() = session.candidateList
+    val viewerCandidate: ImportCandidate? get() = viewerId?.let { id -> candidates.firstOrNull { it.id == id } }
+    val inspected: ImportCandidate? get() = inspectedId?.let { id -> candidates.firstOrNull { it.id == id } }
+    val isShortOfSpace: Boolean get() = ImportPreview.isShortOfSpace(summary.bytes, destinationFreeBytes)
+    val canStart: Boolean
+        get() = summary.selectedPhotos > 0 && hasDestination && !isShortOfSpace &&
+            session != ImportSessionState.SourceLost
     val selectedPreset: ImportPreset? get() = presets.firstOrNull { it.id == selectedPresetId }
     val isDraftModified: Boolean get() = selectedPreset?.sameSettingsAs(draft) == false
     val destination: LibraryLocation?
@@ -66,15 +87,27 @@ class ImportViewModel(
     private val presets: ImportPresetDao,
     private val volumes: CardVolumes,
     private val session: ImportSession,
+    private val documents: DocumentIo,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ImportUiState())
     val uiState: StateFlow<ImportUiState> = _uiState.asStateFlow()
 
     private var knownLocations: List<LibraryLocation> = emptyList()
+    private var hideImportedTouched = false
 
     init {
         refreshCards()
-        viewModelScope.launch { session.state.collect { state -> _uiState.update { it.copy(session = state) } } }
+        viewModelScope.launch {
+            session.state.collect { state -> updatePreview { it.copy(session = state) } }
+        }
+        viewModelScope.launch {
+            settings.importPrefs.collect { prefs ->
+                _uiState.update { it.copy(deleteFromCard = prefs.deleteFromCardAfterImport) }
+                if (!hideImportedTouched) {
+                    updatePreview { it.copy(options = it.options.copy(hideImported = prefs.hideAlreadyImported)) }
+                }
+            }
+        }
         viewModelScope.launch {
             locations.observeAll().collect {
                 knownLocations = it
@@ -216,8 +249,103 @@ class ImportViewModel(
     }
 
     private fun selectSource(source: ImportSource) {
-        _uiState.update { it.copy(source = source, pendingCardPick = null) }
+        // Ticks belong to what's on a source, so a different one starts clean.
+        val sameSource = _uiState.value.source?.treeUri == source.treeUri
+        updatePreview {
+            it.copy(
+                source = source,
+                pendingCardPick = null,
+                overrides = if (sameSource) it.overrides else emptySet(),
+                collapsedDays = if (sameSource) it.collapsedDays else emptySet(),
+                viewerId = null,
+                inspectedId = null,
+                anchorId = null,
+            )
+        }
         session.start(source)
+    }
+
+    /** Applies [edit] and recomputes what follows from candidates, toggles and ticks. */
+    private fun updatePreview(edit: (ImportUiState) -> ImportUiState) {
+        _uiState.update { current ->
+            val next = edit(current)
+            next.copy(
+                days = ImportPreview.days(next.candidates, next.options),
+                summary = ImportPreview.summary(next.candidates, next.options, next.overrides),
+            )
+        }
+    }
+
+    fun setIncludeRaw(include: Boolean) = updatePreview { it.copy(options = it.options.copy(includeRaw = include)) }
+
+    fun setIncludeRaster(include: Boolean) = updatePreview { it.copy(options = it.options.copy(includeRaster = include)) }
+
+    fun setHideImported(hide: Boolean) {
+        hideImportedTouched = true
+        updatePreview { it.copy(options = it.options.copy(hideImported = hide)) }
+    }
+
+    fun selectAll(selected: Boolean) = updatePreview {
+        it.copy(overrides = ImportPreview.setSelected(ImportPreview.visible(it.candidates, it.options), selected, it.options, it.overrides))
+    }
+
+    fun setDaySelected(day: PreviewDay, selected: Boolean) = updatePreview {
+        it.copy(overrides = ImportPreview.setSelected(day.candidates, selected, it.options, it.overrides))
+    }
+
+    fun toggleSelected(candidate: ImportCandidate) = updatePreview {
+        val selected = ImportPreview.isSelected(candidate, it.options, it.overrides)
+        it.copy(
+            overrides = ImportPreview.setSelected(listOf(candidate), !selected, it.options, it.overrides),
+            anchorId = candidate.id,
+        )
+    }
+
+    /** Long-press or Shift+click: ticks everything between the last tile touched and this one. */
+    fun extendSelection(id: String) = updatePreview { state ->
+        val ordered = state.days.flatMap { it.candidates }
+        val anchor = state.anchorId
+        val targets = if (anchor == null) {
+            ordered.filter { it.id == id }
+        } else {
+            ImportPreview.range(ordered, anchor, id)
+        }
+        state.copy(overrides = ImportPreview.setSelected(targets, true, state.options, state.overrides), anchorId = id)
+    }
+
+    fun toggleDayCollapsed(key: String) {
+        _uiState.update {
+            it.copy(collapsedDays = if (key in it.collapsedDays) it.collapsedDays - key else it.collapsedDays + key)
+        }
+    }
+
+    fun openViewer(id: String) {
+        _uiState.update { it.copy(viewerId = id, inspectedId = id) }
+    }
+
+    fun closeViewer() {
+        _uiState.update { it.copy(viewerId = null) }
+    }
+
+    fun stepViewer(delta: Int) {
+        _uiState.update { state ->
+            val ordered = state.days.flatMap { it.candidates }
+            val index = ordered.indexOfFirst { it.id == state.viewerId }
+            val next = ordered.getOrNull(index + delta) ?: return@update state
+            state.copy(viewerId = next.id, inspectedId = next.id)
+        }
+    }
+
+    fun refreshFreeSpace() {
+        val treeUri = _uiState.value.destination?.treeUri ?: return
+        viewModelScope.launch {
+            val free = withContext(Dispatchers.IO) { documents.availableBytes(treeUri) }
+            _uiState.update { it.copy(destinationFreeBytes = free) }
+        }
+    }
+
+    fun startImport() {
+        showMessage("Import starts in the next step of this round.")
     }
 
     private fun showMessage(message: String) {
@@ -239,6 +367,7 @@ class ImportViewModel(
                     presets = app.container.database.importPresetDao(),
                     volumes = app.container.cardVolumes,
                     session = app.container.importSession,
+                    documents = app.container.documentIo,
                 )
             }
         }

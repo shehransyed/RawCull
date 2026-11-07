@@ -40,6 +40,7 @@ import androidx.navigation3.runtime.rememberDecoratedNavEntries
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import dev.shehran.rawcull.data.model.ImportJob
+import dev.shehran.rawcull.ui.importer.ImportPreviewScreen
 import dev.shehran.rawcull.ui.importer.ImportSourceScreen
 import dev.shehran.rawcull.ui.importer.ImportViewModel
 import dev.shehran.rawcull.ui.library.LibraryScreen
@@ -135,7 +136,12 @@ private fun AppNavDisplay(
                     viewModel = importViewModel,
                     onNext = { stacks.push(AppKey.ImportPreview, TopLevelTab.IMPORT) },
                 )
-                AppKey.ImportPreview, is AppKey.ImportProgress -> ComingNext("Import")
+                AppKey.ImportPreview -> ImportPreviewScreen(
+                    viewModel = importViewModel,
+                    onBack = { stacks.back() },
+                    onBackToSource = { stacks.resetTo(TopLevelTab.IMPORT) },
+                )
+                is AppKey.ImportProgress -> ComingNext("Import")
                 AppKey.Settings -> ComingNext("Settings")
             }
         }
