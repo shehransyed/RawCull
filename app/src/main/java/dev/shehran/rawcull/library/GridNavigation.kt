@@ -1,6 +1,19 @@
 package dev.shehran.rawcull.library
 
 object GridNavigation {
+    /** Position in the grid of the photo at [index]: each section before it adds a header. */
+    fun gridItemIndex(index: Int, sections: List<FolderSection>): Int =
+        index + sections.count { it.firstIndex <= index }
+
+    /** Everything from [from] to [to], whichever comes first; just [to] if [from] has gone. */
+    fun range(ids: List<String>, from: String, to: String): Set<String> {
+        val start = ids.indexOf(from)
+        val end = ids.indexOf(to)
+        if (end < 0) return emptySet()
+        if (start < 0) return setOf(to)
+        return ids.subList(minOf(start, end), maxOf(start, end) + 1).toSet()
+    }
+
     /**
      * The index one row above or below [index] in a grid of [columns], keeping the column where it
      * can. Each section starts a new row, so positions are worked out inside the section.

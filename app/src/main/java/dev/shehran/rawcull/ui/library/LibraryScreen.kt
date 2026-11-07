@@ -66,6 +66,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
@@ -166,6 +169,7 @@ fun LibraryScreen(
 
     // Innermost state first: each back press undoes one thing.
     BackHandler(enabled = viewingPhoto && !drawerState.isOpen) { viewModel.setViewMode(DamViewMode.GRID) }
+    BackHandler(enabled = uiState.isSelecting && !drawerState.isOpen) { viewModel.clearSelection() }
     BackHandler(enabled = drawerState.isOpen) { coroutines.launch { drawerState.close() } }
 
     val folderActions = FolderPaneActions(
@@ -238,6 +242,7 @@ fun LibraryScreen(
             .focusable()
             // Only this screen listens, so typing anywhere else in the app is left alone.
             .onPreviewKeyEvent { event ->
+                viewModel.onKeyboardModifiers(event.isCtrlPressed || event.isMetaPressed, event.isShiftPressed)
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val capsLock = event.isCapsLockOn
                 viewModel.onCapsLock(capsLock)
@@ -329,7 +334,7 @@ fun LibraryScreen(
     }
     if (uiState.showTagDialog) {
         TagManagerDialog(
-            currentTags = uiState.currentPhoto?.tags.orEmpty(),
+            currentTags = uiState.tagDialogTags,
             onAddTag = viewModel::addTagToCurrent,
             onRemoveTag = viewModel::removeTagFromCurrent,
             onDismiss = viewModel::dismissTagDialog,
@@ -384,6 +389,19 @@ private fun LibraryContent(
     Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(insets)) {
         if (showPanes) {
             LibraryTopBar(
+                selectionRow = if (uiState.isSelecting) {
+                    {
+                        SelectionTopBar(
+                            count = uiState.selectedPhotoIds.size,
+                            onClose = viewModel::clearSelection,
+                            onSelectAll = viewModel::selectAll,
+                            onEdit = { viewModel.apply(it) },
+                            onEditTags = viewModel::openTagDialog,
+                        )
+                    }
+                } else {
+                    null
+                },
                 uiState = uiState,
                 filterBarVisible = filterBarVisible,
                 filterActions = filterActions,
@@ -397,7 +415,6 @@ private fun LibraryContent(
                     onToggleSyncErrors = viewModel::toggleSyncErrorFilter,
                     onShowShortcuts = onShowShortcuts,
                     onRescan = viewModel::rescan,
-                    onToggleMultiSelect = viewModel::toggleMultiSelectMode,
                     onRetryLocation = viewModel::retryLocation,
                     onRelinkLocation = onRelink,
                 ),
@@ -443,7 +460,7 @@ private fun LibraryContent(
                 photos = uiState.filteredPhotos,
                 selectedPhotoId = uiState.selectedPhotoId,
                 selectedPhotoIds = uiState.selectedPhotoIds,
-                isMultiSelectMode = uiState.isMultiSelectMode,
+                isSelecting = uiState.isSelecting,
                 onSelectIndex = viewModel::selectPhotoIndex,
                 onToggleSelectPhoto = viewModel::togglePhotoSelection,
                 modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
@@ -473,16 +490,12 @@ private fun LibraryMainView(
         ) {
             GridViewGallery(
                 photos = uiState.filteredPhotos,
+                sections = uiState.sections,
                 selectedPhotoId = uiState.selectedPhotoId,
                 selectedIds = uiState.selectedPhotoIds,
-                isMultiSelectMode = uiState.isMultiSelectMode,
-                onSelectIndex = {
-                    viewModel.selectPhotoIndex(it)
-                    viewModel.setViewMode(DamViewMode.LOUPE)
-                },
-                onToggleSelectId = viewModel::togglePhotoSelection,
-                onBatchPick = viewModel::batchPickSelected,
-                onBatchReject = viewModel::batchRejectSelected,
+                onPhotoClick = viewModel::clickPhoto,
+                onDragSelectStart = viewModel::beginDragSelection,
+                onDragSelectTo = viewModel::extendDragSelection,
                 onColumnsChanged = viewModel::setGridColumns,
                 onClearFilters = viewModel::clearFilters.takeIf { uiState.totalCount > 0 },
                 modifier = Modifier.fillMaxSize(),

@@ -97,7 +97,6 @@ data class LibraryUiState(
     val scanProgress: Float? = null, // Null while the total isn't known yet
     val scanStatusText: String = "",
     val selectedPhotoIds: Set<String> = emptySet(),
-    val isMultiSelectMode: Boolean = false,
     val showTagDialog: Boolean = false,
     val syncDetailsPhotoId: String? = null,
     val currentHistogram: HistogramData? = null,
@@ -133,8 +132,16 @@ data class LibraryUiState(
     val pairedCount: Int get() = counts.paired
     val savingCount: Int get() = counts.saving
     val syncErrorCount: Int get() = counts.syncErrors
+    /** What the tag dialog lists: the current photo's tags, or every tag across the selection. */
+    val tagDialogTags: List<String>
+        get() = if (isSelecting) {
+            photos.filter { it.id in selectedPhotoIds }.flatMap { it.tags }.distinct()
+        } else {
+            currentPhoto?.tags.orEmpty()
+        }
     val syncDetailsPhoto: PhotoAsset? get() = photos.firstOrNull { it.id == syncDetailsPhotoId }
     val isDemo: Boolean get() = activeLocation?.isDemo == true
+    val isSelecting: Boolean get() = selectedPhotoIds.isNotEmpty()
 
     /** Caps Lock counts as well as the toggle, as in Lightroom. */
     val advancesAfterEdits: Boolean get() = autoAdvance || capsLock
@@ -183,6 +190,10 @@ class LibraryViewModel(
 
     private val undoStack = UndoStack()
     private var gridColumns = 1
+    private var ctrlHeld = false
+    private var shiftHeld = false
+    private var selectionAnchor: String? = null
+    private var dragBaseline: Set<String> = emptySet()
 
     /** Fair, so edits reach Room in the order they were made and an undo can't overtake its edit. */
     private val writeOrder = Mutex()
@@ -279,6 +290,9 @@ class LibraryViewModel(
             counts = computed.view.counts,
             selectedPhotoId = selectedId,
             comparePhotoId = SelectionLogic.reconcileCompare(nextIds, current.comparePhotoId, selectedId),
+            // What the filter hides can't stay selected: an edit shouldn't land on photos out of sight.
+            selectedPhotoIds = current.selectedPhotoIds.takeIf { computed.idSet.containsAll(it) }
+                ?: current.selectedPhotoIds.filterTo(HashSet()) { it in computed.idSet },
         )
         if (selectedId != current.selectedPhotoId) onSelectionChanged()
         refreshHistogram()
@@ -351,7 +365,7 @@ class LibraryViewModel(
         when {
             state.showTagDialog -> dismissTagDialog()
             state.syncDetailsPhotoId != null -> dismissSyncDetails()
-            state.selectedPhotoIds.isNotEmpty() || state.isMultiSelectMode -> clearSelection()
+            state.isSelecting -> clearSelection()
             state.viewMode != DamViewMode.GRID -> setViewMode(DamViewMode.GRID)
             state.scope != LibraryScope.All -> setScope(LibraryScope.All)
         }
@@ -541,7 +555,6 @@ class LibraryViewModel(
                 canUndo = undoStack.canUndo,
                 canRedo = undoStack.canRedo,
                 selectedPhotoIds = emptySet(),
-                isMultiSelectMode = false,
             )
         }
         currentLocation.value = location
@@ -788,30 +801,59 @@ class LibraryViewModel(
     }
 
     // --- MULTI-SELECT ---
-    fun toggleMultiSelectMode() {
-        _uiState.update {
-            val selecting = !it.isMultiSelectMode
-            it.copy(isMultiSelectMode = selecting, selectedPhotoIds = if (selecting) it.selectedPhotoIds else emptySet())
+    /** Tracked from key events: a touch or mouse click can't say what's held on the keyboard. */
+    fun onKeyboardModifiers(ctrl: Boolean, shift: Boolean) {
+        ctrlHeld = ctrl
+        shiftHeld = shift
+    }
+
+    /** Taps open the photo, unless a selection is under way or a modifier says otherwise. */
+    fun clickPhoto(index: Int) {
+        val state = _uiState.value
+        val id = state.filteredPhotos.getOrNull(index)?.id ?: return
+        when {
+            shiftHeld -> {
+                val anchor = selectionAnchor ?: state.selectedPhotoId ?: id
+                _uiState.update { it.copy(selectedPhotoIds = it.selectedPhotoIds + GridNavigation.range(visibleIds, anchor, id)) }
+            }
+            ctrlHeld || state.isSelecting -> togglePhotoSelection(id)
+            else -> {
+                selectPhoto(id)
+                setViewMode(DamViewMode.LOUPE)
+            }
         }
     }
 
+    /** A long press: the start of a selection, which dragging then extends. */
+    fun beginDragSelection(id: String) {
+        selectionAnchor = id
+        dragBaseline = _uiState.value.selectedPhotoIds
+        _uiState.update { it.copy(selectedPhotoIds = it.selectedPhotoIds + id) }
+    }
+
+    /** Dragging back gives photos up again, so this is always the baseline plus the current range. */
+    fun extendDragSelection(id: String) {
+        val anchor = selectionAnchor ?: return
+        val selected = dragBaseline + GridNavigation.range(visibleIds, anchor, id)
+        if (selected != _uiState.value.selectedPhotoIds) _uiState.update { it.copy(selectedPhotoIds = selected) }
+    }
+
     fun selectAll() {
-        _uiState.update { it.copy(selectedPhotoIds = visibleIdSet, isMultiSelectMode = true) }
+        _uiState.update { it.copy(selectedPhotoIds = visibleIdSet) }
     }
 
     fun clearSelection() {
-        _uiState.update { it.copy(selectedPhotoIds = emptySet(), isMultiSelectMode = false) }
+        selectionAnchor = null
+        dragBaseline = emptySet()
+        _uiState.update { it.copy(selectedPhotoIds = emptySet()) }
     }
 
     fun togglePhotoSelection(id: String) {
+        selectionAnchor = id
         _uiState.update {
             it.copy(selectedPhotoIds = if (id in it.selectedPhotoIds) it.selectedPhotoIds - id else it.selectedPhotoIds + id)
         }
     }
-
-    fun batchPickSelected() = apply(CullEdit.Flag(CullStatus.PICK, toggle = false))
-
-    fun batchRejectSelected() = apply(CullEdit.Flag(CullStatus.REJECT, toggle = false))
 
     /** Keyed on the photo's version, so enrichment batches don't restart it on every emission. */
     private fun refreshHistogram() {

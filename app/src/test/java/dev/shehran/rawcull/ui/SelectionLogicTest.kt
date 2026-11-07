@@ -6,9 +6,7 @@ import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.SortOrder
 import dev.shehran.rawcull.library.LibraryFilter
-import dev.shehran.rawcull.ui.components.GridRow
 import dev.shehran.rawcull.ui.components.badgeText
-import dev.shehran.rawcull.ui.components.buildGridRows
 import dev.shehran.rawcull.ui.components.pairChipLabel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -139,31 +137,5 @@ class PhotoBadgeTest {
             "RAW+Raster",
             pairChipLabel(setOf(PhotoFormat.JPEG, PhotoFormat.HEIF)),
         )
-    }
-
-    @Test
-    fun `a single folder gets no headers`() {
-        val rows = buildGridRows(listOf(photo("a", dir = "DCIM"), photo("b", dir = "DCIM")))
-
-        assertEquals(2, rows.size)
-    }
-
-    @Test
-    fun `headers appear at each change of folder and keep the photo index`() {
-        val rows = buildGridRows(listOf(photo("a", dir = "100"), photo("b", dir = "101"), photo("c", dir = "100")))
-
-        assertEquals(
-            listOf("100", "a", "101", "b", "100", "c"),
-            rows.map { if (it is GridRow.Header) it.title else (it as GridRow.Photo).photo.id },
-        )
-        assertEquals(2, rows.filterIsInstance<GridRow.Photo>().last().index)
-        assertEquals("row keys must be unique", rows.size, rows.map { it.key }.toSet().size)
-    }
-
-    @Test
-    fun `files at the root get a readable header`() {
-        val rows = buildGridRows(listOf(photo("a", dir = ""), photo("b", dir = "DCIM")))
-
-        assertEquals("Top level", (rows.first() as GridRow.Header).title)
     }
 }

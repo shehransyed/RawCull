@@ -33,6 +33,25 @@ class GridNavigationTest {
     }
 
     @Test
+    fun `headers shift grid positions`() {
+        val sections = listOf(FolderSection("a", 0, 2), FolderSection("b", 2, 2))
+        assertEquals(1, GridNavigation.gridItemIndex(0, sections))
+        assertEquals(2, GridNavigation.gridItemIndex(1, sections))
+        assertEquals(4, GridNavigation.gridItemIndex(2, sections))
+        assertEquals(3, GridNavigation.gridItemIndex(3, emptyList()))
+    }
+
+    @Test
+    fun `a range runs either way`() {
+        val ids = listOf("a", "b", "c", "d")
+        assertEquals(setOf("b", "c", "d"), GridNavigation.range(ids, "b", "d"))
+        assertEquals(setOf("b", "c", "d"), GridNavigation.range(ids, "d", "b"))
+        assertEquals(setOf("c"), GridNavigation.range(ids, "c", "c"))
+        assertEquals(setOf("c"), GridNavigation.range(ids, "gone", "c"))
+        assertEquals(emptySet<String>(), GridNavigation.range(ids, "a", "gone"))
+    }
+
+    @Test
     fun `odd input stays put`() {
         assertEquals(3, GridNavigation.rowStep(3, 1, columns = 0, sections = emptyList(), size = 10))
         assertEquals(-1, step(-1, 1))

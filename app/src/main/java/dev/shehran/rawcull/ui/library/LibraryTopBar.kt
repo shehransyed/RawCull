@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -72,7 +71,6 @@ class LibraryTopBarActions(
     val onToggleSyncErrors: () -> Unit,
     val onShowShortcuts: () -> Unit,
     val onRescan: () -> Unit,
-    val onToggleMultiSelect: () -> Unit,
     val onRetryLocation: () -> Unit,
     val onRelinkLocation: () -> Unit,
 )
@@ -86,6 +84,7 @@ fun LibraryTopBar(
     focusSearch: Boolean,
     onOpenFilterSheet: () -> Unit,
     modifier: Modifier = Modifier,
+    selectionRow: (@Composable () -> Unit)? = null,
 ) {
     val layout = LocalWindowLayout.current
 
@@ -94,7 +93,7 @@ fun LibraryTopBar(
         color = MaterialTheme.colorScheme.surface,
     ) {
         Column {
-            Row(
+            if (selectionRow != null) selectionRow() else Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -261,14 +260,6 @@ private fun OverflowMenu(uiState: LibraryUiState, actions: LibraryTopBarActions)
                 leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
                 onClick = { choose(actions.onRescan) },
                 modifier = Modifier.testTag("rescan_button"),
-            )
-            DropdownMenuItem(
-                text = {
-                    Text(if (uiState.isMultiSelectMode) "Select (${uiState.selectedPhotoIds.size})" else "Select")
-                },
-                leadingIcon = { Icon(Icons.Default.SelectAll, contentDescription = null) },
-                onClick = { choose(actions.onToggleMultiSelect) },
-                modifier = Modifier.testTag("multi_select_toggle_button"),
             )
             DropdownMenuItem(
                 text = { Text("Keyboard shortcuts") },

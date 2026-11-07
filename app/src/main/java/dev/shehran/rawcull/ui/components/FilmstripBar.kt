@@ -76,7 +76,7 @@ fun FilmstripBar(
     photos: List<PhotoAsset>,
     selectedPhotoId: String?,
     selectedPhotoIds: Set<String>,
-    isMultiSelectMode: Boolean,
+    isSelecting: Boolean,
     onSelectIndex: (Int) -> Unit,
     onToggleSelectPhoto: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -113,9 +113,9 @@ fun FilmstripBar(
                     photo = photo,
                     isCurrent = isCurrent,
                     isChecked = isChecked,
-                    isMultiSelectMode = isMultiSelectMode,
+                    isSelecting = isSelecting,
                     onClick = {
-                        if (isMultiSelectMode) {
+                        if (isSelecting) {
                             onToggleSelectPhoto(photo.id)
                         } else {
                             onSelectIndex(index)
@@ -133,7 +133,7 @@ private fun FilmstripThumbnailItem(
     photo: PhotoAsset,
     isCurrent: Boolean,
     isChecked: Boolean,
-    isMultiSelectMode: Boolean,
+    isSelecting: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -218,7 +218,7 @@ private fun FilmstripThumbnailItem(
             }
 
             // Top-right: Checkbox in multi-select mode or Cull badge
-            if (isMultiSelectMode) {
+            if (isSelecting) {
                 Icon(
                     imageVector = if (isChecked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
                     contentDescription = "Select",
