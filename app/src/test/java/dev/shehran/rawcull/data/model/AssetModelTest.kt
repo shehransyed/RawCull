@@ -97,33 +97,3 @@ class SidecarFileNameTest {
         assertEquals("DSC001.DNG.xmp", photo.sidecarFileName)
     }
 }
-
-class RecentSourcesTest {
-    private fun source(uri: String, at: Long = 0L) = RecentSource(uri, uri, at)
-
-    @Test
-    fun `the newest entry comes first`() {
-        val update = RecentSources.add(listOf(source("a")), source("b"))
-
-        assertEquals(listOf("b", "a"), update.recents.map { it.uri })
-    }
-
-    @Test
-    fun `reopening a source moves it to the front without duplicating it`() {
-        val update = RecentSources.add(listOf(source("a"), source("b", 1L)), source("b", 2L))
-
-        assertEquals(listOf("b", "a"), update.recents.map { it.uri })
-        assertEquals(2L, update.recents.first().lastOpenedAt)
-        assertTrue(update.evicted.isEmpty())
-    }
-
-    @Test
-    fun `the ninth source evicts the oldest`() {
-        val full = (1..8).map { source("s$it") }
-
-        val update = RecentSources.add(full, source("new"))
-
-        assertEquals(RecentSources.MAX_ENTRIES, update.recents.size)
-        assertEquals(listOf("s8"), update.evicted.map { it.uri })
-    }
-}

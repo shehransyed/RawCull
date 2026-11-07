@@ -1,6 +1,7 @@
 package dev.shehran.rawcull
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import dev.shehran.rawcull.data.importer.CardVolumes
 import dev.shehran.rawcull.data.importer.ImportController
@@ -14,6 +15,7 @@ import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.RawCatalogRepository
 import dev.shehran.rawcull.data.repository.SafLocationAccess
 import dev.shehran.rawcull.data.repository.SettingsRepository
+import dev.shehran.rawcull.data.repository.StartupCleanup
 import dev.shehran.rawcull.data.scan.ScanCoordinator
 import dev.shehran.rawcull.data.xmp.LocalSidecarStore
 import dev.shehran.rawcull.data.xmp.SafSidecarStore
@@ -22,9 +24,12 @@ import dev.shehran.rawcull.data.xmp.XMP_TOOLKIT
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
 import dev.shehran.rawcull.importer.DocumentIo
 import dev.shehran.rawcull.importer.ImportSession
+import dev.shehran.rawcull.util.SafPermissions
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 
 /** Manual dependency container; one instance lives on [RawCullApp]. */
@@ -45,7 +50,7 @@ class AppContainer(context: Context) {
         log = { Log.i("RawCull.Xmp", it) },
     )
     val catalogRepository: RawCatalogRepository =
-        RawCatalogRepository(appContext, database, photoDao, xmpWriteQueue, sidecarStores, settingsRepository)
+        RawCatalogRepository(appContext, database, photoDao, xmpWriteQueue)
     val locationRepository: LocationRepository = LocationRepository(
         locations = database.locationDao(),
         photos = photoDao,
@@ -53,6 +58,19 @@ class AppContainer(context: Context) {
         flushXmp = { xmpWriteQueue.flushNow() },
         isGrantInUse = { treeUri -> treeUri in settingsRepository.volumeGrants.first().values },
     )
+
+    /** Awaited before the Library restores itself; see [StartupCleanup]. */
+    val startup: Deferred<Unit> = applicationScope.async(Dispatchers.IO) {
+        StartupCleanup(
+            legacyFolders = settingsRepository::legacyFolders,
+            clearLegacyFolders = settingsRepository::clearLegacyFolders,
+            locations = locationRepository,
+            volumeGrants = { settingsRepository.volumeGrants.first().values },
+            unfinishedJobSources = { database.importJobDao().getUnfinishedSources() },
+            persistedGrants = { SafPermissions.persistedUris(appContext) },
+            release = { SafPermissions.release(appContext, Uri.parse(it)) },
+        ).run()
+    }
     val cardVolumes: CardVolumes = CardVolumes(appContext)
     val documentIo: DocumentIo = SafDocumentIo(appContext)
     val importSession: ImportSession = ImportSession(

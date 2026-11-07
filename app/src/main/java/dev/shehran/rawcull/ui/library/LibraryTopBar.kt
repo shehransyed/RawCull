@@ -18,7 +18,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Compare
-import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Image
@@ -83,7 +82,6 @@ class LibraryTopBarActions(
     val onToggleMultiSelect: () -> Unit,
     val onRetryLocation: () -> Unit,
     val onRelinkLocation: () -> Unit,
-    val onOpenExport: () -> Unit,
 )
 
 @Composable
@@ -261,11 +259,6 @@ private fun OverflowMenu(uiState: LibraryUiState, actions: LibraryTopBarActions)
                 leadingIcon = { Icon(Icons.Default.SelectAll, contentDescription = null) },
                 onClick = { choose(actions.onToggleMultiSelect) },
                 modifier = Modifier.testTag("multi_select_toggle_button"),
-            )
-            DropdownMenuItem(
-                text = { Text("Export (${uiState.picksCount})") },
-                leadingIcon = { Icon(Icons.Default.FileUpload, contentDescription = null) },
-                onClick = { choose(actions.onOpenExport) },
             )
         }
     }

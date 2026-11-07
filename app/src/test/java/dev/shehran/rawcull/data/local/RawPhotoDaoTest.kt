@@ -12,8 +12,6 @@ import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.XmpSyncStatus
 import dev.shehran.rawcull.data.xmp.XMP_PARSE_ERROR
-import dev.shehran.rawcull.data.repository.SettingsRepository
-import dev.shehran.rawcull.data.model.RecentSource
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -200,19 +198,5 @@ class RawPhotoDaoTest {
 
         assertNull(dao.getPhotoById("a"))
         assertEquals("b", dao.getPhotoById("b")?.id)
-    }
-
-    @Test
-    fun `recent sources survive the JSON round trip`() {
-        val recents = listOf(RecentSource("content://a", "Card \"A\"", 123L))
-
-        val decoded = SettingsRepository.decodeRecents(SettingsRepository.encodeRecents(recents))
-
-        assertEquals(recents, decoded)
-    }
-
-    @Test
-    fun `corrupt recents decode to an empty list`() {
-        assertEquals(emptyList<RecentSource>(), SettingsRepository.decodeRecents("not json"))
     }
 }

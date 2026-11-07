@@ -82,7 +82,6 @@ import dev.shehran.rawcull.ui.LibraryKeys
 import dev.shehran.rawcull.ui.components.CompareLoupeView
 import dev.shehran.rawcull.ui.components.CullingActionBar
 import dev.shehran.rawcull.ui.components.CullingSideBar
-import dev.shehran.rawcull.ui.components.ExportDialog
 import dev.shehran.rawcull.ui.components.FilmstripBar
 import dev.shehran.rawcull.ui.components.GridViewGallery
 import dev.shehran.rawcull.ui.components.StorageChangeEffect
@@ -271,20 +270,6 @@ fun LibraryScreen(
             onDismiss = viewModel::dismissSyncDetails,
         )
     }
-    if (uiState.showExportDialog) {
-        ExportDialog(
-            photos = uiState.photos,
-            filteredPhotos = uiState.filteredPhotos,
-            selectedIds = uiState.selectedPhotoIds,
-            destinationFolderUri = uiState.destinationFolderUri,
-            destinationFolderName = uiState.destinationFolderName,
-            exportProgress = uiState.exportProgress,
-            onPickDestinationFolder = viewModel::onDestinationFolderSelected,
-            onStartExport = viewModel::startBatchExport,
-            onCancelExport = viewModel::cancelExport,
-            onDismiss = viewModel::dismissExportDialog,
-        )
-    }
 }
 
 @Composable
@@ -329,7 +314,6 @@ private fun LibraryContent(
                     onToggleMultiSelect = viewModel::toggleMultiSelectMode,
                     onRetryLocation = viewModel::retryLocation,
                     onRelinkLocation = onRelink,
-                    onOpenExport = viewModel::openExportDialog,
                 ),
             )
         }
@@ -411,7 +395,6 @@ private fun LibraryMainView(
                 onToggleSelectId = viewModel::togglePhotoSelection,
                 onBatchPick = viewModel::batchPickSelected,
                 onBatchReject = viewModel::batchRejectSelected,
-                onOpenExport = viewModel::openExportDialog,
                 modifier = Modifier.fillMaxSize(),
             )
         }

@@ -13,9 +13,6 @@ import dev.shehran.rawcull.data.local.ImportJobDao
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullFilterMode
 import dev.shehran.rawcull.data.model.CullStatus
-import dev.shehran.rawcull.data.model.ExportConfig
-import dev.shehran.rawcull.data.model.ExportMode
-import dev.shehran.rawcull.data.model.ExportProgress
 import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.ImportJob
 import dev.shehran.rawcull.data.model.LibraryLocation
@@ -37,7 +34,6 @@ import dev.shehran.rawcull.ui.SelectionLogic
 import dev.shehran.rawcull.util.HistogramCalculator
 import dev.shehran.rawcull.util.HistogramData
 import dev.shehran.rawcull.util.RawPreviewLoader
-import dev.shehran.rawcull.util.SafPermissions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -88,12 +84,8 @@ data class LibraryUiState(
     val scanStatusText: String = "",
     val selectedPhotoIds: Set<String> = emptySet(),
     val isMultiSelectMode: Boolean = false,
-    val showExportDialog: Boolean = false,
     val showTagDialog: Boolean = false,
     val syncDetailsPhotoId: String? = null,
-    val destinationFolderName: String = "Not set",
-    val destinationFolderUri: String? = null,
-    val exportProgress: ExportProgress = ExportProgress(),
     val currentHistogram: HistogramData? = null,
 ) {
     /** Derived, not stored: enrichment re-sorts the list, and the selection must follow the photo. */
@@ -141,6 +133,7 @@ class LibraryViewModel(
     private val jobs: ImportJobDao,
     private val scanCoordinator: ScanCoordinator,
     private val writeQueue: XmpWriteQueue,
+    private val startupFinished: suspend () -> Unit,
 ) : ViewModel() {
     private val currentLocation = MutableStateFlow<LibraryLocation?>(null)
     private val scope = MutableStateFlow<LibraryScope>(LibraryScope.All)
@@ -148,7 +141,6 @@ class LibraryViewModel(
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
 
-    private var exportJob: Job? = null
     private var histogramJob: Job? = null
     private var histogramKey: String? = null
     private var saveSelectionJob: Job? = null
@@ -374,6 +366,7 @@ class LibraryViewModel(
     // --- LOCATIONS AND SCOPE ---
     private suspend fun restoreSession() {
         try {
+            startupFinished()
             val session = settings.librarySession()
             val restored = LibraryRestore.resolve(
                 locations.getAll(),
@@ -654,51 +647,6 @@ class LibraryViewModel(
         }
     }
 
-    // --- BATCH EXPORT (retired in R3.12) ---
-    fun openExportDialog() {
-        if (!_uiState.value.isLocationAvailable) {
-            showMessage("Location disconnected. Reconnect it to export photos.")
-            return
-        }
-        _uiState.update { it.copy(showExportDialog = true) }
-    }
-
-    fun dismissExportDialog() {
-        _uiState.update { it.copy(showExportDialog = false) }
-    }
-
-    fun onDestinationFolderSelected(uri: Uri) {
-        SafPermissions.takePersistable(appContext, uri)
-        _uiState.update { it.copy(destinationFolderUri = uri.toString(), destinationFolderName = uri.lastPathSegment.orEmpty()) }
-    }
-
-    fun startBatchExport(config: ExportConfig) {
-        exportJob?.cancel()
-        val state = _uiState.value
-        val photosToExport = when (config.exportMode) {
-            ExportMode.PICKS_ONLY -> state.photos.filter { it.cullStatus == CullStatus.PICK }
-            ExportMode.PICKS_OR_RATED -> state.photos.filter {
-                it.cullStatus == CullStatus.PICK || it.rating >= config.minRating
-            }
-            ExportMode.ALL_FLAGGED -> state.photos.filter {
-                it.cullStatus != CullStatus.UNFLAGGED || it.rating > 0 || it.colorLabel != ColorLabel.NONE
-            }
-            ExportMode.CUSTOM_FILTER -> state.filteredPhotos
-        }
-        exportJob = viewModelScope.launch {
-            repository.exportCulledFiles(photosToExport, config).collect { progress ->
-                _uiState.update { it.copy(exportProgress = progress) }
-            }
-        }
-    }
-
-    fun cancelExport() {
-        exportJob?.cancel()
-        _uiState.update {
-            it.copy(exportProgress = ExportProgress(isExporting = false, errorMessage = "Export canceled by user"))
-        }
-    }
-
     // --- MULTI-SELECT ---
     fun toggleMultiSelectMode() {
         _uiState.update {
@@ -760,6 +708,7 @@ class LibraryViewModel(
                     jobs = app.container.database.importJobDao(),
                     scanCoordinator = app.container.scanCoordinator,
                     writeQueue = app.container.xmpWriteQueue,
+                    startupFinished = { app.container.startup.await() },
                 )
             }
         }

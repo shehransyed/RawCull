@@ -75,7 +75,6 @@ fun GridViewGallery(
     onToggleSelectId: (String) -> Unit,
     onBatchPick: () -> Unit,
     onBatchReject: () -> Unit,
-    onOpenExport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val gridState = rememberLazyGridState()
@@ -201,15 +200,6 @@ fun GridViewGallery(
                         Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Reject", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
-
-                    Button(
-                        onClick = onOpenExport,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.height(36.dp).testTag("batch_export_selection_button")
-                    ) {
-                        Text("Export (${selectedIds.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 }
             }

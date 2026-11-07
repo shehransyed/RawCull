@@ -52,6 +52,10 @@ interface ImportJobDao {
     @Query("SELECT * FROM import_jobs WHERE status IN ('QUEUED', 'RUNNING') ORDER BY id DESC LIMIT 1")
     suspend fun getActiveJob(): ImportJob?
 
+    /** Sources a job may still need: running ones, and ones the user can resume. */
+    @Query("SELECT DISTINCT sourceTreeUri FROM import_jobs WHERE status IN ('QUEUED', 'RUNNING', 'PAUSED', 'SOURCE_LOST')")
+    suspend fun getUnfinishedSources(): List<String>
+
     /** The newest job that brought something into [locationId]: what *Latest Import* shows. */
     @Query("SELECT * FROM import_jobs WHERE locationId = :locationId AND doneFiles > 0 ORDER BY id DESC LIMIT 1")
     fun observeLatestJob(locationId: Long): Flow<ImportJob?>
