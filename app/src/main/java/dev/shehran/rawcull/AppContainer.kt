@@ -13,6 +13,8 @@ import dev.shehran.rawcull.data.importer.SafImportSourceReader
 import dev.shehran.rawcull.data.importer.WorkManagerImportScheduler
 import dev.shehran.rawcull.data.local.AppDatabase
 import dev.shehran.rawcull.data.local.RawPhotoDao
+import dev.shehran.rawcull.data.preview.PreviewRepository
+import dev.shehran.rawcull.data.repository.LegacyPreviewCache
 import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.RawCatalogRepository
 import dev.shehran.rawcull.data.repository.SafLocationAccess
@@ -26,6 +28,7 @@ import dev.shehran.rawcull.data.xmp.XMP_TOOLKIT
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
 import dev.shehran.rawcull.importer.DocumentIo
 import dev.shehran.rawcull.importer.ImportSession
+import dev.shehran.rawcull.util.RawPreviewLoader
 import dev.shehran.rawcull.util.SafPermissions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -33,6 +36,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import java.io.File
+
+private const val LEGACY_PREVIEW_CACHE_DIR = "rawcull_preview_cache"
 
 /** Manual dependency container; one instance lives on [RawCullApp]. */
 class AppContainer(context: Context) {
@@ -76,6 +82,11 @@ class AppContainer(context: Context) {
                 val removed = photoDao.deleteOrphans(keep)
                 Log.i("RawCull.Library", "orphanRows removed=$removed keptPending=${orphans - removed}")
             },
+            legacyPreviewCache = LegacyPreviewCache(
+                isCleared = settingsRepository::legacyPreviewCacheCleared,
+                markCleared = settingsRepository::setLegacyPreviewCacheCleared,
+                delete = { File(appContext.cacheDir, LEGACY_PREVIEW_CACHE_DIR).deleteRecursively() },
+            ),
         ).run()
     }
     val cardVolumes: CardVolumes = CardVolumes(appContext)
@@ -104,4 +115,5 @@ class AppContainer(context: Context) {
     val deletionGateway: DeletionGateway = SafDeletionGateway(appContext)
     val scanCoordinator: ScanCoordinator =
         ScanCoordinator(appContext, database, photoDao, applicationScope, sidecarStores, xmpWriteQueue)
+    val previewRepository: PreviewRepository = RawPreviewLoader.repository(appContext)
 }

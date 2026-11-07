@@ -160,6 +160,12 @@ class SettingsRepository(context: Context) {
         dataStore.edit { it[KEY_REJECT_AS_NEGATIVE_RATING] = enabled }
     }
 
+    suspend fun legacyPreviewCacheCleared(): Boolean = dataStore.data.first()[KEY_LEGACY_PREVIEW_CACHE_CLEARED] ?: false
+
+    suspend fun setLegacyPreviewCacheCleared() {
+        dataStore.edit { it[KEY_LEGACY_PREVIEW_CACHE_CLEARED] = true }
+    }
+
     /** What older versions remembered, or null once it has been dealt with. */
     suspend fun legacyFolders(): LegacyFolders? {
         val prefs = dataStore.data.first()
@@ -193,6 +199,7 @@ class SettingsRepository(context: Context) {
         val KEY_VOLUME_GRANTS = stringPreferencesKey("volume_grants")
         val KEY_AUTO_ADVANCE = booleanPreferencesKey("auto_advance")
         val KEY_SWIPE_TO_FLAG = booleanPreferencesKey("swipe_to_flag")
+        val KEY_LEGACY_PREVIEW_CACHE_CLEARED = booleanPreferencesKey("legacy_preview_cache_cleared")
 
         fun encodeGrants(grants: Map<String, String>): String {
             val json = JSONObject()

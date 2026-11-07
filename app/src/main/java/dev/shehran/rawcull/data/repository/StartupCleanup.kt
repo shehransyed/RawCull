@@ -32,6 +32,7 @@ object LegacySources {
  * into Locations, then lets go of grants nothing needs any more.
  *
  * @param unfinishedJobSources sources a job may still have to read when it resumes.
+ * @param legacyPreviewCache the folder the old preview loader filled without any limit.
  */
 class StartupCleanup(
     private val legacyFolders: suspend () -> LegacyFolders?,
@@ -42,6 +43,7 @@ class StartupCleanup(
     private val persistedGrants: () -> Set<String>,
     private val release: (String) -> Unit,
     private val removeOrphanRows: suspend (keepRoots: List<String>) -> Unit,
+    private val legacyPreviewCache: LegacyPreviewCache,
 ) {
     suspend fun run() {
         val persisted = persistedGrants()
@@ -53,5 +55,19 @@ class StartupCleanup(
         val inUse = locations.getAll().map { it.treeUri }.toSet() + volumeGrants() + unfinishedJobSources()
         LegacySources.grantsToRelease(persisted, inUse).forEach(release)
         removeOrphanRows(locations.getAll().map { it.treeUri } + DEMO_ROOT_URI)
+        legacyPreviewCache.clearOnce()
+    }
+}
+
+/** Deleted once, on the first start of 0.7.0. It's a cache, so nothing the user sees is lost. */
+class LegacyPreviewCache(
+    private val isCleared: suspend () -> Boolean,
+    private val markCleared: suspend () -> Unit,
+    private val delete: () -> Unit,
+) {
+    suspend fun clearOnce() {
+        if (isCleared()) return
+        delete()
+        markCleared()
     }
 }
