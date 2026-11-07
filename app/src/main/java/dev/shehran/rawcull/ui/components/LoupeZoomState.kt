@@ -130,14 +130,14 @@ fun rememberLoupeZoomState(): LoupeZoomState = remember { LoupeZoomState() }
  * camera's full resolution: the source is no larger than fit, or clearly smaller than the sensor
  * ([sensorLongEdge], 0 if unknown), as with Sony's 1616 px embedded previews.
  */
-fun zoomPillText(zoom: LoupeZoomState, sensorLongEdge: Int = 0): String {
+fun zoomPillText(zoom: LoupeZoomState, sensorLongEdge: Int = 0): String =
+    listOfNotNull("${zoom.percent}%", previewOnlyText(zoom, sensorLongEdge)).joinToString(" · ")
+
+/** The second half of [zoomPillText], which the loupe shows under its pill; null at full resolution. */
+fun previewOnlyText(zoom: LoupeZoomState, sensorLongEdge: Int = 0): String? {
     val fullLongEdge = maxOf(zoom.fullWidth, zoom.fullHeight)
     val smallerThanSensor = zoom.isKnown && sensorLongEdge > 0 && fullLongEdge < sensorLongEdge * SENSOR_MATCH
-    return if (zoom.isPreviewOnly || smallerThanSensor) {
-        "${zoom.percent}% · Preview only ${zoom.fullWidth} × ${zoom.fullHeight}"
-    } else {
-        "${zoom.percent}%"
-    }
+    return if (zoom.isPreviewOnly || smallerThanSensor) "Preview only ${zoom.fullWidth} × ${zoom.fullHeight}" else null
 }
 
 /** Camera JPEGs can be a few pixels short of the sensor's size; that's still full resolution. */

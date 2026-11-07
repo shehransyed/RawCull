@@ -5,6 +5,7 @@ Android photo culling + import-first DAM (tablets and phones, any orientation or
 ## Build & test
 - `./gradlew testDebugUnitTest assembleDebug` (Windows: `gradlew.bat ...`). Every commit must build and pass unit tests.
 - Pure logic (grouping, merging, XMP, path building, selection) lives in Android-free classes with plain JUnit tests. Use Robolectric only where Android types are unavoidable.
+- Real RAW samples live outside the repo (`C:\Users\shehr\RawCullSamples\`); never commit one. `gradlew.bat testDebugUnitTest -PrawSamples=<dir> --tests "*RawSampleReportTest*"` reports what the parsers find in each file. The fixtures in the repo are synthetic.
 - `XmpDocumentDeviceTest` runs the XMP fixtures on Android's own XML stack. With a phone or tablet attached, set `ANDROID_SERIAL` first, because connected tests install on every device.
 
 ## Architecture (single Activity, manual DI)
@@ -21,7 +22,10 @@ Android photo culling + import-first DAM (tablets and phones, any orientation or
 - `data/importer/` — `ImportEngine` (all the copy, verify, resume and delete rules), `ImportWorker` (thin WorkManager foreground shell), `ImportController` (start, resume, retry, cancel), `SafDocumentIo`. The card never enters `photo_assets`; the worker inserts library rows itself.
 - `data/scan/` — `SafTreeWalker` (DocumentsContract cursor walk), `AssetGrouper` (RAW+JPEG/HEIF pairing, pure), `ScanMerger` (pure), `ScanCoordinator` (phase A listing, phase B lazy EXIF/XMP enrichment; `rescanSubtree` for one folder).
 - `data/model/PhotoAsset` (Room entity `photo_assets`), `PhotoFormat`, `PairMode`, `CullStatus`, `ColorLabel`.
-- `util/RawPreviewLoader` (previews/thumbnails), `util/RawMetadataParser` (ExifInterface via FileDescriptor), `util/xmp/` (`XmpDocument`, `XmpMapper`: pure sidecar model and mapping).
+- `preview/` — Android-free preview extraction: `ByteSource` (header slice, 64 KB block cache, stream tiers for pipes), `JpegProbe`, `TiffReader`, the scanners (TIFF family incl. Olympus MakerNote, CR3, RAF, JPEG with MPF), `PreviewChooser` (one pool from RAW and companion; fewest bytes that are big enough), `RegionMath` (orientation, fit, 100 %, tiles), `PrefetchWindows`.
+- `data/preview/` — `PreviewRepository` (`DefaultPreviewRepository`: RAM → disk → file, four lanes in `PreviewScheduler`, merged duplicates), `PreviewMemory` (RAM caches), `ThumbnailStore` + `preview_cache.db` (512 px thumbnails and cached scans, LRU-bounded by `preview_cache_limit_mb`), `PreviewPlatform` (SAF descriptors, `BitmapFactory`, region decoder), `PrefetchController`, `PreviewWarmup`, `PreviewBenchmark`.
+- UI: `PhotoThumbnail` for every thumbnail, `LoupeImage` + `LoupeZoomState` for the loupe and compare (fit at the view's real size, true 100 %, one region tile). Both reach the repository through `LocalPreviewRepository`.
+- `util/RawMetadataParser` (ExifInterface via FileDescriptor), `util/xmp/` (`XmpDocument`, `XmpMapper`: pure sidecar model and mapping).
 - `data/xmp/` — `SidecarStore` (SAF and local), `XmpWriteQueue` (debounced writes; only a row's `xmpPendingFields` are written), `SidecarReconciler` (catalog vs file, export merge).
 
 ## Rules
@@ -30,6 +34,9 @@ Android photo culling + import-first DAM (tablets and phones, any orientation or
 - Create sidecar documents with MIME `application/octet-stream` so providers don't append extensions; verify the returned display name.
 - Any change to a Room entity bumps the DB version and commits the exported schema in `app/schemas/`.
 - Room uses real migrations from v5; never add a destructive fallback. The catalog holds the duplicate index and pending XMP writes, which can't be rebuilt.
+- The one exception is `preview_cache.db`: it's a cache that can always be rebuilt from the photos, so it may use a destructive migration. The catalog rule above is unchanged.
+- All image loading goes through `PreviewRepository`; don't decode photos anywhere else.
+- Previews are the JPEGs the camera embedded (or the companion JPEG), never a RAW sensor decode. The one exception is a DNG with no usable preview, which goes through `ImageDecoder` as a last resort.
 - Every screen must work at Compact, Medium and Expanded widths, in portrait and landscape, and in freely resized windows: see the window size spec in `docs/plans/R3_shell_library_import.md`. Don't lock orientation. Keep screen state in ViewModels or `rememberSaveable`, apply insets per screen, and keep touch targets at 48 dp or more.
 - An import never overwrites, never deletes what it can't prove it made, and only deletes from a detected card after a whole group has verified.
 - I/O runs on `Dispatchers.IO`; nothing blocks the main thread; long work is cancellable.

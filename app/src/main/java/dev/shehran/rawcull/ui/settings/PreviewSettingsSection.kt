@@ -4,6 +4,7 @@ import android.text.format.Formatter
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -56,9 +57,9 @@ fun PreviewSettingsSection(uiState: SettingsUiState, viewModel: SettingsViewMode
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.testTag("settings_preview_cache_used"),
         )
-        Row(
+        FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
+            modifier = Modifier.padding(vertical = 4.dp),
         ) {
             SettingsRepository.PREVIEW_CACHE_LIMITS_MB.forEach { mb ->
                 FilterChip(

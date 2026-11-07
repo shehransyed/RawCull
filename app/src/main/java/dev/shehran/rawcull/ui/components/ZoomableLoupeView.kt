@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -264,10 +265,15 @@ fun ZoomableLoupeView(
         }
 
         // Top-Right: Zoom control pill & 100% 1:1 Pixel loupe button
-        Row(
+        val sensorLongEdge = photo?.let { maxOf(it.width, it.height) } ?: 0
+        Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(14.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+        Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -306,7 +312,7 @@ fun ZoomableLoupeView(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = zoomPillText(zoom, sensorLongEdge = photo?.let { maxOf(it.width, it.height) } ?: 0),
+                        text = "${zoom.percent}%",
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
@@ -333,6 +339,20 @@ fun ZoomableLoupeView(
                         modifier = Modifier.size(18.dp)
                     )
                 }
+            }
+        }
+            // Under the pill rather than in it, so it never covers the badges on a phone (D10)
+            previewOnlyText(zoom, sensorLongEdge)?.let { text ->
+                Text(
+                    text = text,
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(PillSurface)
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .testTag("zoom_preview_only"),
+                )
             }
         }
 

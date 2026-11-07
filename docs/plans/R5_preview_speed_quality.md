@@ -159,3 +159,92 @@ The RapidReady source at `C:\Users\shehr\Desktop\rapidready` (v0.6.1, commit `0e
 7. **Debug:** run *Benchmark previews in this folder* on one folder per camera and paste the table into the next planning chat.
 8. **Culling is unchanged:** R4's checklist items 1–3 still pass (keys, swipes, auto-advance).
 9. Rotate and resize in the loupe at 100 %: nothing crashes; the zoom resets or holds sensibly.
+
+---
+
+## Implementation notes
+
+Branch `feature/r5-previews`, from `feature/r4-culling-ux` at `309f6d0` (no R4 commits arrived while R5 was in progress, so there was nothing to merge). One commit per task, R5.0 through R5.10. Every commit passed `gradlew.bat testDebugUnitTest assembleDebug`; the final run is 708 tests, 0 failures, 1 skipped (the opt-in sample report). RapidReady's source at `C:\Users\shehr\Desktop\rapidready` was read and ported: header slice, tiers, CR3 and RAF parsing, and the block cache.
+
+### Deviations (the code's patterns won, or the plan needed a decision)
+- **Compare zoom (D11).** The plan says zoom per pane. R4's compare synchronised zoom, so the gestures and `Z` still act on both panes together, but each pane has its own `LoupeZoomState` and goes to *its own* 100 % (a pinch zooms each around its own centre). Per-pane gestures are still backlog.
+- **Preview key (D6).** The v6 catalog stores no modification time for the companion file, so the companion's size stands in for it. The catalog schema is unchanged (D1).
+- **"Preview only" (D10).** The label also shows when the 100 % source is clearly smaller than the sensor (under 90 % of `PhotoAsset` width/height), not only when it's no larger than fit. Without this, a Sony's 1616 px preview on a tablet loupe would never say so, which the acceptance checklist expects. It sits as its own small label under the zoom pill, because inside the pill it covered the format and sync badges on a 360 dp phone.
+- **Toggle focus (D10).** Fit ↔ 100 % keeps the point under the pointer or tap where it is, rather than moving it to the centre. This is also how R4's double tap behaved.
+- **Prefetch (D9).** One photo behind at every width; R5.6 says "and 1 behind" with no width condition. The grid window counts ±3 rows in photo-index space; folder headers break rows, so near a header it's off by up to a row.
+- **Parsers.** The Exif IFD is opened only to reach an Olympus MakerNote. CR3 walks the ISO-BMFF boxes instead of RapidReady's search for lowercase box names. For RW2, `JpgFromRaw` is read from tag `0x002E`; RapidReady's reading of that entry was wrong for the G9 sample.
+- **Warm-up "for this Location" (D12).** It uses the Location the Library has open (or the only one), skipping the demo library.
+- **Settings.** The limit choices wrap (`FlowRow`) instead of scrolling sideways. Inside a horizontal scroll the chips had zero bounds under Robolectric, and wrapping also reads better on a phone.
+- **Robustness.** Platform decoders throw more than `IOException` for files they don't understand, so any decoder exception now means *No preview*. A histogram whose pixels can't be read is skipped, since it's only decoration.
+- **D16.** No new catalog observers were added. There are one-shot reads (`photosIn`, `photosInFolder`, and the finished job's photos via `observeByImportJob(...).first()`). The warm-up's import check collects `observeActiveJob`, which reads `import_jobs`, not the catalog.
+
+### Open questions
+- The **Pixel 2 XL DNG** has no embedded JPEG, so it takes the `ImageDecoder` path labelled *Decoded RAW (slow)*, as D2 allows. It has no region source, so 100 % on it is 2× fit of that decode.
+- **HEIF** has no region tile yet: `regionSource` can't learn the size cheaply. The loupe zooms the base preview.
+- In **compare at 360 dp**, R4's *Pick This* / *Reject* buttons are squeezed and their text wraps one letter per line. That layout isn't R5's, and was left alone.
+- `LibraryViewModelTest` "filters are remembered per Location" failed once under load during R5.4, then passed in every later run. It looks like an existing timing flake.
+- The cold loupe fit of a **RAW+JPEG pair** takes 252 ms at a full 2560 × 1600 window on the emulator (target 250 ms). At that size the 6000 px companion is the smallest big-enough source. The tablet's real loupe is smaller than the window, so the tablet run should come in under target.
+
+### Per-format sample results (`RawSampleReportTest`)
+**Shehran's samples** (`C:\Users\shehr\RawCullSamples\`): 15 ARW (ILCE-6400) and 2 JPG.
+- Every ARW has a 1616 × 1080 preview (TIFF IFD) and a 160 × 120 thumbnail. Parsing takes about 1 ms (the first file 23 ms while classes load) and reads 320–384 KB.
+- Orientations 6 and 8 are present and come out upright in the grid and loupe.
+- The camera JPEGs carry a 1616 × 1080 MPF preview and a 160 thumbnail next to the 6000 × 4000 image. Thumbnails and fit therefore read about 0.5 MB, and only 100 % uses the full JPEG.
+
+**raw.pixls.us CC0 samples** (kept in the session scratchpad, never committed):
+
+| Format | Camera | Largest preview | Where |
+|---|---|---|---|
+| CR3 | EOS R5 II | 5088 × 3392 | CR3 full preview (plus 1620 PRVW, 160 THMB) |
+| NEF | D750 | 6016 × 4016 | TIFF IFD |
+| NRW | COOLPIX P1100 | 4608 × 3456 | TIFF IFD |
+| CR2 | 5D Mark III | 5760 × 3840 | TIFF strip |
+| PEF | K-1 | 7360 × 4912 | TIFF IFD near the end of the file |
+| SRW | NX1 | 6480 × 4320 | TIFF IFD |
+| DNG | Leica SL2 | 8368 × 5584 | TIFF strip (plus 1620 and 720) |
+| ORF | E-M5 III | 3200 × 2400 | Olympus MakerNote |
+| RW2 | G9 | 1920 × 1440 | `JpgFromRaw` |
+| RAF | X-T30 III | 4416 × 2944 | RAF JPEG |
+| DNG | Pixel 2 XL | none | `ImageDecoder` fallback (see open questions) |
+
+### D13 benchmark (emulator, not the tablet)
+The Medium_Tablet emulator (API 36, SwiftShader, Windows host) ran *Benchmark previews in this folder* over Shehran's 15 samples on internal storage, with fit at the full window. These are emulator numbers; the tablet run belongs to the acceptance checklist.
+
+| Stage | Format | n | p50 ms | p90 ms | target |
+|---|---|---|---|---|---|
+| Cold thumbnail (file) | ARW | 13 | 48.2 | 69.9 | p50 ≤ 80 |
+| Cold thumbnail (file) | ARW+JPEG | 2 | 43.0 | 45.8 | p50 ≤ 80 |
+| Cached thumbnail (disk) | ARW | 13 | 5.3 | 14.5 | p90 ≤ 16 |
+| Cached thumbnail (disk) | ARW+JPEG | 2 | 5.1 | 8.5 | p90 ≤ 16 |
+| Cold loupe fit | ARW | 13 | 53.7 | 70.2 | p50 ≤ 250 |
+| Cold loupe fit | ARW+JPEG | 2 | 252.0 | 283.8 | p50 ≤ 250 |
+| Next loupe photo (prefetched) | ARW | 13 | 0.0 | 0.1 | ≤ 50 |
+| Next loupe photo (prefetched) | ARW+JPEG | 2 | 0.0 | 0.0 | ≤ 50 |
+| 100 % tile | ARW | 13 | 77.4 | 95.5 | ≤ 300 |
+| 100 % tile | ARW+JPEG | 2 | 238.4 | 257.7 | ≤ 300 |
+
+The "next loupe photo" stage times a RAM hit straight after its fetch. That's how a prefetched photo is shown, and the RAM cache only holds the prefetch window. The app's own table also breaks each stage into open, scan, read and decode times.
+
+### Loupe memory
+Measured with `dumpsys meminfo` on the emulator, flicking through 50 photos and zooming to 100 % every fifth one:
+
+| | Java heap | Native heap | Total PSS |
+|---|---|---|---|
+| Before | 26 MB | 60 MB | 182 MB |
+| After | 30 MB | 70 MB | 200 MB |
+| Then holding 100 % | 25 MB | 69 MB | 195 MB |
+
+No `OutOfMemoryError`, and nothing grew across the run. The emulator's SwiftShader GPU reports 0 for *Graphics*, so hardware bitmaps don't show there; the tablet's own `dumpsys meminfo` is the place to read that number. Only one region decoder exists at a time, and it's closed when the photo changes.
+
+### Verified on emulators
+The Medium_Tablet emulator (API 36) was resized with `wm size` at density 320:
+- **360 × 640 dp:** grid, loupe fit and 100 % (portrait photo), compare at fit and 100 %. This size caught the pill and compare-toolbar overlaps fixed in R5.10.
+- **640 × 360 dp:** compare and loupe fit and 100 % on the RAW+JPEG pair. Resizing while in compare refits.
+- **600 × 960 dp:** loupe fit, grid.
+- **840 × 1280 dp:** loupe 100 % with the *Preview only* label.
+- **1280 × 800 dp:** grid and filmstrip; loupe fit, 100 % and region tiles (portrait ARW and the pair); compare at 100 %; inspector; Settings → Previews (limit change, clear, build); the benchmark; the timing overlay.
+- **Import** at 1280 × 800 dp, from the virtual SD card: the preview grid fills in, and after the import the warm-up started on its own (3 built, 321 ms). The notification permission prompt was declined; the import still ran.
+- **API 26 or lower (O11):** not checked. Only API 36 system images are installed and there's no `sdkmanager` here, so the software-bitmap and no-`ImageDecoder` paths are covered by code review only.
+
+### Update check
+On the emulator: installed the saved R4 build (`309f6d0`), added the `R5Samples` Location, picked one photo, rejected one, gave one 5 stars, and set import verification to *Quick*. Then installed R5 over it with `adb install -r`, with no uninstall. The result was `versionCode 7` / `0.7.0`, with the library, flags, rating and setting all kept, and `cacheDir/rawcull_preview_cache` gone. Each later R5 build went on with `install -r` and kept them too. That check used the build from R5.7; later commits only add DataStore keys (`preview_cache_limit_mb`, `show_preview_timing`) and change no catalog data.

@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.shehran.rawcull.data.model.CullStatus
@@ -114,12 +115,17 @@ fun CompareLoupeView(
                 style = MaterialTheme.typography.labelSmall,
                 color = PrimaryCyan,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
+                letterSpacing = 1.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "${zoomA.percent}% · ${zoomB.percent}%",
+                    maxLines = 1,
+                    softWrap = false,
                     color = Color.White,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
