@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.shehran.rawcull.RawCullApp
 import dev.shehran.rawcull.data.local.ImportJobDao
 import dev.shehran.rawcull.data.model.ImportJob
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -17,6 +18,9 @@ import kotlinx.coroutines.flow.stateIn
 class ShellViewModel(jobs: ImportJobDao) : ViewModel() {
     val activeJob: StateFlow<ImportJob?> = jobs.observeActiveJob()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    /** A job a notification asked to show, until the shell has opened it. */
+    val pendingJobId = MutableStateFlow<Long?>(null)
 
     companion object {
         private const val STOP_TIMEOUT_MS = 5_000L

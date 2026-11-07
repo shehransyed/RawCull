@@ -42,6 +42,8 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import dev.shehran.rawcull.data.model.ImportJob
 import dev.shehran.rawcull.ui.importer.ImportPreviewScreen
+import dev.shehran.rawcull.ui.importer.ImportProgressScreen
+import dev.shehran.rawcull.ui.importer.ImportProgressViewModel
 import dev.shehran.rawcull.ui.importer.ImportSourceScreen
 import dev.shehran.rawcull.ui.importer.ImportViewModel
 import dev.shehran.rawcull.ui.library.LibraryScreen
@@ -69,6 +71,13 @@ fun RawCullApp(
     val stacks = rememberSaveable(saver = TabStacks.Saver) { TabStacks() }
     val activeJob by shellViewModel.activeJob.collectAsStateWithLifecycle()
     var immersive by remember { mutableStateOf(false) }
+    val pendingJobId by shellViewModel.pendingJobId.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingJobId) {
+        pendingJobId?.let { jobId ->
+            stacks.resetTo(TopLevelTab.IMPORT, AppKey.ImportProgress(jobId))
+            shellViewModel.pendingJobId.value = null
+        }
+    }
     val importState by importViewModel.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(importState.startedJobId) {
         importState.startedJobId?.let { jobId ->
@@ -149,7 +158,22 @@ private fun AppNavDisplay(
                     onBack = { stacks.back() },
                     onBackToSource = { stacks.resetTo(TopLevelTab.IMPORT) },
                 )
-                is AppKey.ImportProgress -> ComingNext("Import")
+                is AppKey.ImportProgress -> ImportProgressScreen(
+                    viewModel = viewModel(
+                        key = "import-progress-${key.jobId}",
+                        factory = ImportProgressViewModel.factory(key.jobId),
+                    ),
+                    onCullInLibrary = { job ->
+                        libraryViewModel.openImport(job)
+                        importViewModel.newImport()
+                        stacks.resetTo(TopLevelTab.IMPORT)
+                        stacks.select(TopLevelTab.LIBRARY)
+                    },
+                    onNewImport = {
+                        importViewModel.newImport()
+                        stacks.resetTo(TopLevelTab.IMPORT)
+                    },
+                )
                 AppKey.Settings -> ComingNext("Settings")
             }
         }

@@ -383,6 +383,14 @@ class ImportViewModel(
         }
     }
 
+    /** Back to an empty wizard. The destination settings stay: they rarely change between cards. */
+    fun newImport() {
+        session.clear()
+        updatePreview {
+            it.copy(source = null, overrides = emptySet(), collapsedDays = emptySet(), viewerId = null, inspectedId = null, anchorId = null)
+        }
+    }
+
     fun onProgressOpened() {
         _uiState.update { it.copy(startedJobId = null) }
     }
