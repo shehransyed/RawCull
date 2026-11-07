@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dev.shehran.rawcull.data.model.RecentSource
 import dev.shehran.rawcull.data.model.RecentSources
@@ -86,6 +87,16 @@ class SettingsRepository(context: Context) {
             if (id == null) prefs.remove(KEY_SELECTED_ASSET_ID) else prefs[KEY_SELECTED_ASSET_ID] = id
         }
     }
+
+    /** Which folder tree nodes are open, remembered per Location. */
+    suspend fun expandedFolders(locationId: Long): Set<String> =
+        dataStore.data.first()[expandedKey(locationId)].orEmpty()
+
+    suspend fun setExpandedFolders(locationId: Long, folders: Set<String>) {
+        dataStore.edit { it[expandedKey(locationId)] = folders }
+    }
+
+    private fun expandedKey(locationId: Long) = stringSetPreferencesKey("expanded_folders_$locationId")
 
     suspend fun setVerifyMode(mode: VerifyMode) {
         dataStore.edit { it[KEY_VERIFY_MODE] = mode.name }

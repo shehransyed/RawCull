@@ -39,7 +39,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.shehran.rawcull.ui.RecentSourceUi
+
+/** A recent source plus whether its volume is connected right now. */
+data class RecentSourceUi(
+    val uri: String,
+    val displayName: String,
+    val lastOpenedAt: Long,
+    val isAvailable: Boolean,
+)
 
 @Composable
 fun WelcomeScreen(

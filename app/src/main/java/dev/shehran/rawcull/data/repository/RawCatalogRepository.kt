@@ -55,6 +55,8 @@ class RawCatalogRepository(
 
     fun observeFolderCounts(rootUri: String): Flow<Map<String, Int>> = dao.observeFolderCounts(rootUri)
 
+    fun observeImportPhotoCount(jobId: Long): Flow<Int> = dao.observeImportPhotoCount(jobId)
+
     /** Generates the demo shoot once, so flags set on it survive reopening it. */
     suspend fun loadSampleShoot() = withContext(Dispatchers.IO) {
         if (dao.getIdsByRoot(DEMO_ROOT_URI).isEmpty()) {

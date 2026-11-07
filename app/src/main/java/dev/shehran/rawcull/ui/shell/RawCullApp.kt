@@ -23,7 +23,10 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,8 +40,8 @@ import androidx.navigation3.runtime.rememberDecoratedNavEntries
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import dev.shehran.rawcull.data.model.ImportJob
-import dev.shehran.rawcull.ui.MainDamScreen
-import dev.shehran.rawcull.ui.RawCullViewModel
+import dev.shehran.rawcull.ui.library.LibraryScreen
+import dev.shehran.rawcull.ui.library.LibraryViewModel
 
 val LocalWindowLayout = staticCompositionLocalOf { WindowLayout(WidthClass.COMPACT, isHeightCompact = false) }
 
@@ -53,14 +56,16 @@ private val TAB_ITEMS = listOf(
 /** The app shell: top-level navigation that follows the window size, and one back stack per tab. */
 @Composable
 fun RawCullApp(
-    libraryViewModel: RawCullViewModel,
+    libraryViewModel: LibraryViewModel,
     modifier: Modifier = Modifier,
     shellViewModel: ShellViewModel = viewModel(factory = ShellViewModel.Factory),
 ) {
     val layout = rememberWindowLayout()
     val stacks = rememberSaveable(saver = TabStacks.Saver) { TabStacks() }
     val activeJob by shellViewModel.activeJob.collectAsStateWithLifecycle()
+    var immersive by remember { mutableStateOf(false) }
     val suiteType = when {
+        immersive -> NavigationSuiteType.None
         layout.usesBottomBar -> NavigationSuiteType.NavigationBar
         layout.usesWideRail -> NavigationSuiteType.WideNavigationRailExpanded
         else -> NavigationSuiteType.NavigationRail
@@ -89,7 +94,7 @@ fun RawCullApp(
                 }
             },
         ) {
-            AppNavDisplay(stacks, activeJob, libraryViewModel)
+            AppNavDisplay(stacks, activeJob, libraryViewModel, onImmersiveChange = { immersive = it })
         }
     }
 }
@@ -102,7 +107,12 @@ private val TopLevelTab.icon
     }
 
 @Composable
-private fun AppNavDisplay(stacks: TabStacks, activeJob: ImportJob?, libraryViewModel: RawCullViewModel) {
+private fun AppNavDisplay(
+    stacks: TabStacks,
+    activeJob: ImportJob?,
+    libraryViewModel: LibraryViewModel,
+    onImmersiveChange: (Boolean) -> Unit,
+) {
     val entryProvider: (AppKey) -> NavEntry<AppKey> = { key ->
         NavEntry(key) {
             when (key) {
@@ -110,7 +120,12 @@ private fun AppNavDisplay(stacks: TabStacks, activeJob: ImportJob?, libraryViewM
                     activeJob?.let { job ->
                         ImportRunningRow(job, onClick = { stacks.push(AppKey.ImportProgress(job.id), TopLevelTab.IMPORT) })
                     }
-                    MainDamScreen(viewModel = libraryViewModel, modifier = Modifier.weight(1f))
+                    LibraryScreen(
+                        viewModel = libraryViewModel,
+                        onImportFromCard = { stacks.select(TopLevelTab.IMPORT) },
+                        onImmersiveChange = onImmersiveChange,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
                 AppKey.ImportSource, AppKey.ImportPreview, is AppKey.ImportProgress -> ComingNext("Import")
                 AppKey.Settings -> ComingNext("Settings")

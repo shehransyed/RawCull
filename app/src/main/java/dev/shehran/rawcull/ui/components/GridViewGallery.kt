@@ -43,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,8 +83,13 @@ fun GridViewGallery(
     val selectedRow = remember(rows, selectedPhotoId) {
         rows.indexOfFirst { it is GridRow.Photo && it.photo.id == selectedPhotoId }
     }
+    // Saved, so rotating keeps the scroll position instead of jumping back to the selection.
+    var followedPhotoId by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(selectedPhotoId, selectedRow) {
-        if (selectedRow >= 0) gridState.scrollToItem(selectedRow)
+        if (selectedRow >= 0 && selectedPhotoId != followedPhotoId) {
+            followedPhotoId = selectedPhotoId
+            gridState.scrollToItem(selectedRow)
+        }
     }
 
     Box(

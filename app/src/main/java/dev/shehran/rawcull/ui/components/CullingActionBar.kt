@@ -9,13 +9,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -50,6 +53,7 @@ fun CullingActionBar(
     onSetRating: (Int) -> Unit,
     onSetColorLabel: (ColorLabel) -> Unit,
     modifier: Modifier = Modifier,
+    dense: Boolean = false, // Drops the labels, which don't fit a 360 dp phone next to 48 dp targets
 ) {
     Surface(
         modifier = modifier
@@ -59,16 +63,18 @@ fun CullingActionBar(
         color = Color(0xFF13181F),
         tonalElevation = 3.dp,
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = "CULLING & RATING",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF94A3B8),
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
+        Column(modifier = Modifier.padding(if (dense) 8.dp else 12.dp)) {
+            if (!dense) {
+                Text(
+                    text = "CULLING & RATING",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF94A3B8),
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
 
-            Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+            }
 
             // Primary Pick / Reject / Unflag Buttons
             Row(
@@ -152,7 +158,7 @@ fun CullingActionBar(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(if (dense) 2.dp else 14.dp))
 
             // 0 - 5 Star Rating Row
             Row(
@@ -160,14 +166,15 @@ fun CullingActionBar(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Rating:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF94A3B8)
-                )
+                if (!dense) {
+                    Text(
+                        text = "Rating:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF94A3B8)
+                    )
+                }
 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     for (star in 1..5) {
@@ -175,7 +182,7 @@ fun CullingActionBar(
                         IconButton(
                             onClick = { onSetRating(star) },
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(48.dp)
                                 .testTag("star_rating_$star")
                         ) {
                             Icon(
@@ -190,7 +197,7 @@ fun CullingActionBar(
                     if (rating > 0) {
                         IconButton(
                             onClick = { onSetRating(0) },
-                            modifier = Modifier.size(32.dp).testTag("clear_rating_button")
+                            modifier = Modifier.size(48.dp).testTag("clear_rating_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.RemoveCircleOutline,
@@ -203,7 +210,7 @@ fun CullingActionBar(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            if (!dense) Spacer(modifier = Modifier.height(10.dp))
 
             // Color Labels Row
             Row(
@@ -211,14 +218,15 @@ fun CullingActionBar(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Label:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF94A3B8)
-                )
+                if (!dense) {
+                    Text(
+                        text = "Label:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF94A3B8)
+                    )
+                }
 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val colors = listOf(
@@ -231,25 +239,13 @@ fun CullingActionBar(
 
                     colors.forEach { (label, color) ->
                         val isSelected = colorLabel == label
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .background(color)
-                                .border(
-                                    width = if (isSelected) 3.dp else 1.dp,
-                                    color = if (isSelected) Color.White else Color(0x44FFFFFF),
-                                    shape = CircleShape
-                                )
-                                .clickable { onSetColorLabel(label) }
-                                .testTag("color_label_${label.name.lowercase()}")
-                        )
+                        ColorLabelDot(color, isSelected, label) { onSetColorLabel(label) }
                     }
 
                     if (colorLabel != ColorLabel.NONE) {
                         IconButton(
                             onClick = { onSetColorLabel(ColorLabel.NONE) },
-                            modifier = Modifier.size(24.dp).testTag("clear_color_label")
+                            modifier = Modifier.size(48.dp).testTag("clear_color_label")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.RemoveCircleOutline,
@@ -261,6 +257,93 @@ fun CullingActionBar(
                     }
                 }
             }
+        }
+    }
+}
+
+/** The dot is small, but the touch target around it is the full 48 dp. */
+@Composable
+private fun ColorLabelDot(color: Color, isSelected: Boolean, label: ColorLabel, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clickable(onClick = onClick)
+            .testTag("color_label_${label.name.lowercase()}"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(color)
+                .border(
+                    width = if (isSelected) 3.dp else 1.dp,
+                    color = if (isSelected) Color.White else Color(0x44FFFFFF),
+                    shape = CircleShape,
+                ),
+        )
+    }
+}
+
+/** The same controls as a narrow column, for a phone on its side where height is what's short. */
+@Composable
+fun CullingSideBar(
+    cullStatus: CullStatus,
+    rating: Int,
+    colorLabel: ColorLabel,
+    onTogglePick: () -> Unit,
+    onToggleReject: () -> Unit,
+    onSetRating: (Int) -> Unit,
+    onSetColorLabel: (ColorLabel) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .width(56.dp)
+            .fillMaxHeight()
+            .background(Color(0xFF13181F))
+            .verticalScroll(rememberScrollState())
+            .testTag("culling_side_bar"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        IconButton(onClick = onTogglePick, modifier = Modifier.size(48.dp).testTag("pick_button")) {
+            Icon(
+                Icons.Default.Check,
+                contentDescription = "Pick Photo",
+                tint = if (cullStatus == CullStatus.PICK) Color.White else Color(0xFF10B981),
+                modifier = Modifier
+                    .background(if (cullStatus == CullStatus.PICK) Color(0xFF10B981) else Color.Transparent, CircleShape)
+                    .padding(4.dp),
+            )
+        }
+        IconButton(onClick = onToggleReject, modifier = Modifier.size(48.dp).testTag("reject_button")) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Reject Photo",
+                tint = if (cullStatus == CullStatus.REJECT) Color.White else Color(0xFFEF4444),
+                modifier = Modifier
+                    .background(if (cullStatus == CullStatus.REJECT) Color(0xFFEF4444) else Color.Transparent, CircleShape)
+                    .padding(4.dp),
+            )
+        }
+        for (star in 1..5) {
+            IconButton(onClick = { onSetRating(star) }, modifier = Modifier.size(48.dp).testTag("star_rating_$star")) {
+                Icon(
+                    imageVector = if (star <= rating) Icons.Default.Star else Icons.Outlined.Star,
+                    contentDescription = "$star Stars",
+                    tint = if (star <= rating) Color(0xFFFBBF24) else Color(0xFF475569),
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+        listOf(
+            ColorLabel.RED to Color(0xFFEF4444),
+            ColorLabel.YELLOW to Color(0xFFF59E0B),
+            ColorLabel.GREEN to Color(0xFF10B981),
+            ColorLabel.BLUE to Color(0xFF3B82F6),
+            ColorLabel.PURPLE to Color(0xFF8B5CF6),
+        ).forEach { (label, color) ->
+            ColorLabelDot(color, colorLabel == label, label) { onSetColorLabel(label) }
         }
     }
 }

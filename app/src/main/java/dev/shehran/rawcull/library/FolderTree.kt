@@ -15,7 +15,18 @@ data class FolderNode(
     val children: List<FolderNode> = emptyList(),
 )
 
+/** A row of the folder list: a node that all of its ancestors expose. */
+data class VisibleFolder(val node: FolderNode, val depth: Int, val isExpanded: Boolean)
+
 object FolderTree {
+
+    /** The rows to show, in order. Children only appear under an expanded parent. */
+    fun visibleRows(nodes: List<FolderNode>, expanded: Set<String>, depth: Int = 0): List<VisibleFolder> =
+        nodes.flatMap { node ->
+            val isExpanded = node.path in expanded
+            val row = VisibleFolder(node, depth, isExpanded)
+            if (isExpanded) listOf(row) + visibleRows(node.children, expanded, depth + 1) else listOf(row)
+        }
 
     /** Builds the tree from photo counts per folder. Photos at the root belong to no folder node. */
     fun build(dirsWithCounts: Map<String, Int>): List<FolderNode> {

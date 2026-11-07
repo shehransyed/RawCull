@@ -70,6 +70,9 @@ interface RawPhotoDao : XmpRows {
     )
     fun observeByImportJob(jobId: Long): Flow<List<PhotoAsset>>
 
+    @Query("SELECT COUNT(*) FROM photo_assets WHERE lastImportJobId = :jobId")
+    fun observeImportPhotoCount(jobId: Long): Flow<Int>
+
     @Query("SELECT COUNT(*) FROM photo_assets WHERE rootUri = :rootUri AND xmpSyncStatus IN ('PENDING', 'WRITING')")
     suspend fun countUnsaved(rootUri: String): Int
 

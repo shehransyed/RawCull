@@ -53,4 +53,27 @@ class FolderTreeTest {
         val names = listOf("img10", "img009", "img1").sortedWith(FolderTree.NaturalOrder)
         assertEquals(listOf("img1", "img009", "img10"), names)
     }
+
+    @Test
+    fun `collapsed folders hide their children`() {
+        val tree = FolderTree.build(mapOf("2026/a" to 1, "2027" to 1))
+        assertEquals(listOf("2026", "2027"), FolderTree.visibleRows(tree, emptySet()).map { it.node.path })
+    }
+
+    @Test
+    fun `expanded folders show their children one level deeper`() {
+        val tree = FolderTree.build(mapOf("2026/a/x" to 1, "2027" to 1))
+
+        val rows = FolderTree.visibleRows(tree, setOf("2026"))
+
+        assertEquals(listOf("2026", "2026/a", "2027"), rows.map { it.node.path })
+        assertEquals(listOf(0, 1, 0), rows.map { it.depth })
+        assertEquals(listOf(true, false, false), rows.map { it.isExpanded })
+    }
+
+    @Test
+    fun `an expanded child under a collapsed parent stays hidden`() {
+        val tree = FolderTree.build(mapOf("2026/a/x" to 1))
+        assertEquals(listOf("2026"), FolderTree.visibleRows(tree, setOf("2026/a")).map { it.node.path })
+    }
 }
