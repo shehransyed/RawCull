@@ -66,9 +66,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -77,9 +77,8 @@ import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
+import dev.shehran.rawcull.library.LibraryKeyAction
 import dev.shehran.rawcull.library.LibraryScope
-import dev.shehran.rawcull.ui.LibraryKeyAction
-import dev.shehran.rawcull.ui.LibraryKeys
 import dev.shehran.rawcull.ui.components.CompareLoupeView
 import dev.shehran.rawcull.ui.components.CullingActionBar
 import dev.shehran.rawcull.ui.components.CullingSideBar
@@ -120,6 +119,11 @@ fun LibraryScreen(
     var inspectorChoice by rememberSaveable { mutableStateOf<Boolean?>(null) }
     var showInspectorSheet by rememberSaveable { mutableStateOf(false) }
     var relinkTargetId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var showHelp by rememberSaveable { mutableStateOf(false) }
+    var chromeHidden by rememberSaveable { mutableStateOf(false) }
+    var filterBarChoice by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    var textFieldFocused by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
     val folderPaneOpen = layout.showsFolderPane && (folderPaneChoice ?: true)
     val inspectorOpen = layout.showsSideInspector && (inspectorChoice ?: layout.opensInspectorByDefault)
 
@@ -181,7 +185,30 @@ fun LibraryScreen(
     )
 
     val keyFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { keyFocus.requestFocus() }
+    // Dialogs and sheets are windows of their own, so focus has to be taken back when they close.
+    val overlayOpen = showHelp || showInspectorSheet || uiState.showTagDialog || uiState.syncDetailsPhoto != null
+    LaunchedEffect(overlayOpen) { if (!overlayOpen) keyFocus.requestFocus() }
+
+    val filterBarVisible = filterBarChoice ?: !layout.isHeightCompact
+    val keyActions = LibraryKeyHandlers(
+        onTogglePanes = {
+            val open = folderPaneOpen || inspectorOpen
+            folderPaneChoice = !open
+            inspectorChoice = !open
+        },
+        onToggleChrome = { chromeHidden = !chromeHidden },
+        onToggleFilterBar = { filterBarChoice = !filterBarVisible },
+        onFocusSearch = { filterBarChoice = true },
+        onShowHelp = { showHelp = true },
+        onEscape = {
+            if (textFieldFocused) {
+                focusManager.clearFocus()
+                keyFocus.requestFocus()
+            } else {
+                viewModel.stepBack()
+            }
+        },
+    )
 
     Box(
         modifier = modifier
@@ -191,13 +218,12 @@ fun LibraryScreen(
             .focusable()
             // Only this screen listens, so typing anywhere else in the app is left alone.
             .onPreviewKeyEvent { event ->
-                val action = LibraryKeys.actionFor(event.key)
-                if (event.type == KeyEventType.KeyDown && action != null) {
-                    onLibraryKey(action, viewModel)
-                    true
-                } else {
-                    false
-                }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val capsLock = event.isCapsLockOn
+                viewModel.onCapsLock(capsLock)
+                val action = event.toLibraryAction(capsLock, textFieldFocused) ?: return@onPreviewKeyEvent false
+                onLibraryKey(action, viewModel, keyActions)
+                true
             }
             .testTag("library_screen"),
     ) {
@@ -229,6 +255,10 @@ fun LibraryScreen(
                     immersive = immersive,
                     folderPaneOpen = folderPaneOpen,
                     inspectorOpen = inspectorOpen,
+                    chromeHidden = chromeHidden,
+                    filterBarVisible = filterBarVisible,
+                    onToggleFilterBar = keyActions.onToggleFilterBar,
+                    onShowShortcuts = keyActions.onShowHelp,
                     folderActions = folderActions,
                     onToggleFolders = {
                         if (layout.showsFolderPane) {
@@ -252,9 +282,15 @@ fun LibraryScreen(
             onDismissRequest = { showInspectorSheet = false },
             containerColor = MaterialTheme.colorScheme.surface,
         ) {
-            InspectorPanel(uiState, culling = null, onEditTags = viewModel::openTagDialog)
+            InspectorPanel(
+                uiState,
+                culling = null,
+                onEditTags = viewModel::openTagDialog,
+                modifier = Modifier.dismissOnEscape { showInspectorSheet = false },
+            )
         }
     }
+    if (showHelp) ShortcutHelpSheet(onDismiss = { showHelp = false })
     if (uiState.showTagDialog) {
         TagManagerDialog(
             currentTags = uiState.currentPhoto?.tags.orEmpty(),
@@ -281,6 +317,10 @@ private fun LibraryContent(
     immersive: Boolean,
     folderPaneOpen: Boolean,
     inspectorOpen: Boolean,
+    chromeHidden: Boolean,
+    filterBarVisible: Boolean,
+    onToggleFilterBar: () -> Unit,
+    onShowShortcuts: () -> Unit,
     folderActions: FolderPaneActions,
     onToggleFolders: () -> Unit,
     onToggleInspector: () -> Unit,
@@ -295,6 +335,7 @@ private fun LibraryContent(
     )
     // On a phone on its side the photo gets the whole screen, so the bar moves out of its way.
     val fullScreenPhoto = immersive && layout.isHeightCompact
+    val showPanes = !fullScreenPhoto && !chromeHidden
     val insets = if (fullScreenPhoto) {
         WindowInsets.safeDrawing
     } else {
@@ -302,15 +343,18 @@ private fun LibraryContent(
     }
 
     Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(insets)) {
-        if (!fullScreenPhoto) {
+        if (showPanes) {
             LibraryTopBar(
                 uiState = uiState,
+                filterBarVisible = filterBarVisible,
                 actions = LibraryTopBarActions(
                     onToggleFolders = onToggleFolders,
                     onToggleInspector = onToggleInspector,
                     onSetViewMode = viewModel::setViewMode,
                     onUpdateFilter = viewModel::updateFilter,
+                    onToggleFilterBar = onToggleFilterBar,
                     onToggleSyncErrors = viewModel::toggleSyncErrorFilter,
+                    onShowShortcuts = onShowShortcuts,
                     onRescan = viewModel::rescan,
                     onToggleMultiSelect = viewModel::toggleMultiSelectMode,
                     onRetryLocation = viewModel::retryLocation,
@@ -320,7 +364,7 @@ private fun LibraryContent(
         }
 
         Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (folderPaneOpen && !fullScreenPhoto) {
+            if (folderPaneOpen && showPanes) {
                 Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.width(Dimens.FolderPaneWidth).fillMaxHeight()) {
                     FolderPane(uiState, folderActions)
                 }
@@ -334,11 +378,12 @@ private fun LibraryContent(
                     culling = culling,
                     cullingInInspector = inspectorOpen && !layout.cullingBarAtSide,
                     fullScreenPhoto = fullScreenPhoto,
+                    chromeHidden = chromeHidden,
                     onOpenInspectorSheet = onOpenInspectorSheet,
                 )
             }
 
-            if (inspectorOpen && !fullScreenPhoto) {
+            if (inspectorOpen && showPanes) {
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier.width(Dimens.InspectorWidth).fillMaxHeight().testTag("right_inspector_sidebar"),
@@ -352,7 +397,7 @@ private fun LibraryContent(
             }
         }
 
-        if (uiState.viewMode != DamViewMode.GRID && layout.showsFilmstrip) {
+        if (uiState.viewMode != DamViewMode.GRID && layout.showsFilmstrip && !chromeHidden) {
             FilmstripBar(
                 photos = uiState.filteredPhotos,
                 selectedPhotoId = uiState.selectedPhotoId,
@@ -375,6 +420,7 @@ private fun LibraryMainView(
     culling: CullingActions,
     cullingInInspector: Boolean,
     fullScreenPhoto: Boolean,
+    chromeHidden: Boolean,
     onOpenInspectorSheet: () -> Unit,
 ) {
     val photo = uiState.currentPhoto
@@ -396,6 +442,7 @@ private fun LibraryMainView(
                 onToggleSelectId = viewModel::togglePhotoSelection,
                 onBatchPick = viewModel::batchPickSelected,
                 onBatchReject = viewModel::batchRejectSelected,
+                onColumnsChanged = viewModel::setGridColumns,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -406,6 +453,7 @@ private fun LibraryMainView(
             onPickB = { swapThenCull(uiState, viewModel, CullStatus.PICK) },
             onRejectA = { viewModel.setCullStatus(CullStatus.REJECT) },
             onRejectB = { swapThenCull(uiState, viewModel, CullStatus.REJECT) },
+            zoomRequest = uiState.zoomRequest,
             modifier = Modifier.fillMaxSize(),
         )
         DamViewMode.LOUPE -> {
@@ -416,6 +464,8 @@ private fun LibraryMainView(
                         onNext = viewModel::nextPhoto,
                         onPrevious = viewModel::previousPhoto,
                         onSyncChipClick = viewModel::showSyncDetails,
+                        zoomRequest = uiState.zoomRequest,
+                        autoAdvance = uiState.advancesAfterEdits,
                         modifier = Modifier.fillMaxSize(),
                     )
                     if (fullScreenPhoto) {
@@ -438,7 +488,9 @@ private fun LibraryMainView(
                 }
             }
 
-            if (layout.cullingBarAtSide) {
+            if (chromeHidden) {
+                loupe(Modifier.fillMaxSize())
+            } else if (layout.cullingBarAtSide) {
                 Row(modifier = Modifier.fillMaxSize()) {
                     loupe(Modifier.weight(1f).fillMaxHeight())
                     CullingSideBar(
@@ -536,15 +588,41 @@ private fun LibraryEmptyState(
     }
 }
 
-private fun onLibraryKey(action: LibraryKeyAction, viewModel: LibraryViewModel) {
+/** What keys do that lives on this screen rather than in the ViewModel. */
+private class LibraryKeyHandlers(
+    val onTogglePanes: () -> Unit,
+    val onToggleChrome: () -> Unit,
+    val onToggleFilterBar: () -> Unit,
+    val onFocusSearch: () -> Unit,
+    val onShowHelp: () -> Unit,
+    val onEscape: () -> Unit,
+)
+
+private fun onLibraryKey(action: LibraryKeyAction, viewModel: LibraryViewModel, screen: LibraryKeyHandlers) {
     when (action) {
-        LibraryKeyAction.TogglePick -> viewModel.togglePick()
-        LibraryKeyAction.ToggleReject -> viewModel.toggleReject()
-        LibraryKeyAction.Unflag -> viewModel.setCullStatus(CullStatus.UNFLAGGED)
-        is LibraryKeyAction.Rate -> viewModel.setRating(action.stars)
+        is LibraryKeyAction.Cull -> viewModel.apply(action.edit, action.advance)
         LibraryKeyAction.Previous -> viewModel.previousPhoto()
         LibraryKeyAction.Next -> viewModel.nextPhoto()
+        LibraryKeyAction.RowUp -> viewModel.moveRow(-1)
+        LibraryKeyAction.RowDown -> viewModel.moveRow(1)
+        LibraryKeyAction.First -> viewModel.firstPhoto()
+        LibraryKeyAction.Last -> viewModel.lastPhoto()
+        LibraryKeyAction.ShowGrid -> viewModel.setViewMode(DamViewMode.GRID)
+        LibraryKeyAction.ShowLoupe -> viewModel.setViewMode(DamViewMode.LOUPE)
         LibraryKeyAction.ToggleCompare -> viewModel.toggleCompareMode()
-        LibraryKeyAction.ShowAllPhotos -> viewModel.setScope(LibraryScope.All)
+        LibraryKeyAction.ToggleZoom -> viewModel.toggleZoom()
+        LibraryKeyAction.TogglePanes -> screen.onTogglePanes()
+        LibraryKeyAction.ToggleChrome -> screen.onToggleChrome()
+        LibraryKeyAction.Undo -> viewModel.undo()
+        LibraryKeyAction.Redo -> viewModel.redo()
+        LibraryKeyAction.SelectAll -> viewModel.selectAll()
+        LibraryKeyAction.SelectNone -> viewModel.clearSelection()
+        LibraryKeyAction.FocusSearch -> screen.onFocusSearch()
+        LibraryKeyAction.ToggleFilterBar -> screen.onToggleFilterBar()
+        LibraryKeyAction.ToggleFilters -> viewModel.toggleFilters()
+        LibraryKeyAction.EditTags -> viewModel.openTagDialog()
+        LibraryKeyAction.DeleteRejects -> Unit // R4.8
+        LibraryKeyAction.ShowHelp -> screen.onShowHelp()
+        LibraryKeyAction.Escape -> screen.onEscape()
     }
 }

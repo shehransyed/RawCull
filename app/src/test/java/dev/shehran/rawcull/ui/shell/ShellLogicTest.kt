@@ -1,9 +1,6 @@
 package dev.shehran.rawcull.ui.shell
 
 import androidx.compose.runtime.saveable.SaverScope
-import androidx.compose.ui.input.key.Key
-import dev.shehran.rawcull.ui.LibraryKeyAction
-import dev.shehran.rawcull.ui.LibraryKeys
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -140,19 +137,5 @@ class ShellLogicTest {
         assertEquals(TopLevelTab.IMPORT, restored.selected)
         assertEquals(listOf(AppKey.ImportSource, AppKey.ImportProgress(9)), restored.current.toList())
         assertEquals(listOf<AppKey>(AppKey.Library), restored.stack(TopLevelTab.LIBRARY).toList())
-    }
-
-    @Test
-    fun `culling keys map to their actions`() {
-        assertEquals(LibraryKeyAction.TogglePick, LibraryKeys.actionFor(Key.P))
-        assertEquals(LibraryKeyAction.ToggleReject, LibraryKeys.actionFor(Key.X))
-        assertEquals(LibraryKeyAction.Unflag, LibraryKeys.actionFor(Key.U))
-        assertEquals(LibraryKeyAction.Rate(0), LibraryKeys.actionFor(Key.Zero))
-        assertEquals(LibraryKeyAction.Rate(5), LibraryKeys.actionFor(Key.Five))
-        assertEquals(LibraryKeyAction.Previous, LibraryKeys.actionFor(Key.DirectionLeft))
-        assertEquals(LibraryKeyAction.Next, LibraryKeys.actionFor(Key.NavigateNext))
-        assertEquals(LibraryKeyAction.ToggleCompare, LibraryKeys.actionFor(Key.C))
-        assertEquals(LibraryKeyAction.ShowAllPhotos, LibraryKeys.actionFor(Key.Escape))
-        assertNull(LibraryKeys.actionFor(Key.Q))
     }
 }

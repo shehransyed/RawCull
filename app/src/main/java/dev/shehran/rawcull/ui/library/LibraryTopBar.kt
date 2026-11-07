@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
@@ -41,7 +42,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,7 +85,9 @@ class LibraryTopBarActions(
     val onToggleInspector: () -> Unit,
     val onSetViewMode: (DamViewMode) -> Unit,
     val onUpdateFilter: ((FilterOptions) -> FilterOptions) -> Unit,
+    val onToggleFilterBar: () -> Unit,
     val onToggleSyncErrors: () -> Unit,
+    val onShowShortcuts: () -> Unit,
     val onRescan: () -> Unit,
     val onToggleMultiSelect: () -> Unit,
     val onRetryLocation: () -> Unit,
@@ -95,12 +97,11 @@ class LibraryTopBarActions(
 @Composable
 fun LibraryTopBar(
     uiState: LibraryUiState,
+    filterBarVisible: Boolean,
     actions: LibraryTopBarActions,
     modifier: Modifier = Modifier,
 ) {
     val layout = LocalWindowLayout.current
-    var showFilters by rememberSaveable { mutableStateOf<Boolean?>(null) }
-    val filtersVisible = showFilters ?: !layout.isHeightCompact
 
     Surface(
         modifier = modifier.fillMaxWidth().testTag("library_top_bar"),
@@ -135,13 +136,13 @@ fun LibraryTopBar(
                 SyncCounter(uiState, actions.onToggleSyncErrors)
                 ViewModeToggle(uiState.viewMode, showLabels = layout.showsFolderPane, onSetViewMode = actions.onSetViewMode)
                 IconButton(
-                    onClick = { showFilters = !filtersVisible },
+                    onClick = actions.onToggleFilterBar,
                     modifier = Modifier.testTag("library_filter_button"),
                 ) {
                     Icon(
                         Icons.Default.FilterList,
                         contentDescription = "Filters",
-                        tint = if (filtersVisible) PrimaryCyan else TextSecondary,
+                        tint = if (filterBarVisible) PrimaryCyan else TextSecondary,
                     )
                 }
                 if (layout.showsSideInspector) {
@@ -152,7 +153,7 @@ fun LibraryTopBar(
                 OverflowMenu(uiState, actions)
             }
 
-            if (filtersVisible) FilterChipsRow(uiState, actions.onUpdateFilter)
+            if (filterBarVisible) FilterChipsRow(uiState, actions.onUpdateFilter)
             ScanProgressLine(uiState)
             if (!uiState.isLocationAvailable) {
                 LocationUnavailableBanner(actions.onRetryLocation, actions.onRelinkLocation)
@@ -267,6 +268,12 @@ private fun OverflowMenu(uiState: LibraryUiState, actions: LibraryTopBarActions)
                 leadingIcon = { Icon(Icons.Default.SelectAll, contentDescription = null) },
                 onClick = { choose(actions.onToggleMultiSelect) },
                 modifier = Modifier.testTag("multi_select_toggle_button"),
+            )
+            DropdownMenuItem(
+                text = { Text("Keyboard shortcuts") },
+                leadingIcon = { Icon(Icons.Default.Keyboard, contentDescription = null) },
+                onClick = { choose(actions.onShowShortcuts) },
+                modifier = Modifier.testTag("keyboard_shortcuts_button"),
             )
         }
     }

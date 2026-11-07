@@ -45,6 +45,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -89,9 +90,13 @@ fun GridViewGallery(
     onToggleSelectId: (String) -> Unit,
     onBatchPick: () -> Unit,
     onBatchReject: () -> Unit,
+    onColumnsChanged: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val gridState = rememberLazyGridState()
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.layoutInfo.maxSpan }.collect(onColumnsChanged)
+    }
     val rows = remember(photos) { buildGridRows(photos) }
     val selectedRow = remember(rows, selectedPhotoId) {
         rows.indexOfFirst { it is GridRow.Photo && it.photo.id == selectedPhotoId }

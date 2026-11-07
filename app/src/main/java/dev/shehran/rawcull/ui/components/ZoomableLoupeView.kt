@@ -39,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -74,12 +75,16 @@ import dev.shehran.rawcull.ui.theme.TextMuted
 import dev.shehran.rawcull.ui.theme.TextSecondary
 import dev.shehran.rawcull.util.RawPreviewLoader
 
+private const val ONE_TO_ONE_SCALE = 2.5f
+
 @Composable
 fun ZoomableLoupeView(
     photo: PhotoAsset?,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onSyncChipClick: () -> Unit,
+    zoomRequest: Int = 0,
+    autoAdvance: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -88,6 +93,16 @@ fun ZoomableLoupeView(
 
     var scale by remember(photo?.id) { mutableFloatStateOf(1f) }
     var offset by remember(photo?.id) { mutableStateOf(Offset.Zero) }
+
+    // Only a press made while this view is up counts, not one left over from before it opened.
+    var handledZoomRequest by remember { mutableIntStateOf(zoomRequest) }
+    LaunchedEffect(zoomRequest) {
+        if (zoomRequest != handledZoomRequest) {
+            handledZoomRequest = zoomRequest
+            scale = if (scale > 1.2f) 1f else ONE_TO_ONE_SCALE
+            offset = Offset.Zero
+        }
+    }
 
     LaunchedEffect(photo?.id) {
         if (photo == null) {
@@ -308,6 +323,21 @@ fun ZoomableLoupeView(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            if (autoAdvance) {
+                Surface(
+                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).testTag("auto_advance_indicator"),
+                    color = PillSurface,
+                ) {
+                    Text(
+                        text = "AUTO",
+                        color = PrimaryCyan,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
+                }
+            }
+
             // Zoom indicator & 100% toggle
             Surface(
                 modifier = Modifier
@@ -349,7 +379,7 @@ fun ZoomableLoupeView(
                             scale = 1f
                             offset = Offset.Zero
                         } else {
-                            scale = 2.5f // 1:1 inspection
+                            scale = ONE_TO_ONE_SCALE
                             offset = Offset.Zero
                         }
                     },

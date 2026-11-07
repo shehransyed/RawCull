@@ -34,6 +34,7 @@ import dev.shehran.rawcull.library.FilterCounts
 import dev.shehran.rawcull.library.FolderNode
 import dev.shehran.rawcull.library.FolderSection
 import dev.shehran.rawcull.library.FolderTree
+import dev.shehran.rawcull.library.GridNavigation
 import dev.shehran.rawcull.library.LibraryFilter
 import dev.shehran.rawcull.library.LibraryRestore
 import dev.shehran.rawcull.library.LibraryScope
@@ -107,6 +108,8 @@ data class LibraryUiState(
     val canRedo: Boolean = false,
     val autoAdvance: Boolean = false,
     val swipeToFlag: Boolean = true,
+    val capsLock: Boolean = false,
+    val zoomRequest: Int = 0, // Bumped by Z and Space; the loupe on screen toggles its zoom
 ) {
     /** Derived, not stored: enrichment re-sorts the list, and the selection must follow the photo. */
     val selectedIndex: Int by lazy(LazyThreadSafetyMode.NONE) {
@@ -132,6 +135,9 @@ data class LibraryUiState(
     val syncErrorCount: Int get() = counts.syncErrors
     val syncDetailsPhoto: PhotoAsset? get() = photos.firstOrNull { it.id == syncDetailsPhotoId }
     val isDemo: Boolean get() = activeLocation?.isDemo == true
+
+    /** Caps Lock counts as well as the toggle, as in Lightroom. */
+    val advancesAfterEdits: Boolean get() = autoAdvance || capsLock
     val rootUri: String? get() = activeLocation?.treeUri
 
     val scopeTitle: String
@@ -176,6 +182,7 @@ class LibraryViewModel(
     private var saveFilterJob: Job? = null
 
     private val undoStack = UndoStack()
+    private var gridColumns = 1
 
     /** Fair, so edits reach Room in the order they were made and an undo can't overtake its edit. */
     private val writeOrder = Mutex()
@@ -306,6 +313,48 @@ class LibraryViewModel(
     fun previousPhoto() {
         val current = _uiState.value
         if (current.selectedIndex > 0) selectPhotoIndex(current.selectedIndex - 1)
+    }
+
+    fun firstPhoto() = selectPhotoIndex(0)
+
+    fun lastPhoto() = selectPhotoIndex(_uiState.value.filteredPhotos.lastIndex)
+
+    fun setGridColumns(columns: Int) {
+        gridColumns = columns
+    }
+
+    /** Up and down mean a row in the grid and a photo everywhere else. */
+    fun moveRow(delta: Int) {
+        val state = _uiState.value
+        if (state.viewMode == DamViewMode.GRID) {
+            selectPhotoIndex(
+                GridNavigation.rowStep(state.selectedIndex, delta, gridColumns, state.sections, state.filteredPhotos.size),
+            )
+        } else if (delta > 0) {
+            nextPhoto()
+        } else {
+            previousPhoto()
+        }
+    }
+
+    fun onCapsLock(on: Boolean) {
+        if (on != _uiState.value.capsLock) _uiState.update { it.copy(capsLock = on) }
+    }
+
+    fun toggleZoom() {
+        _uiState.update { it.copy(zoomRequest = it.zoomRequest + 1) }
+    }
+
+    /** Esc: one step back per press, innermost first. */
+    fun stepBack() {
+        val state = _uiState.value
+        when {
+            state.showTagDialog -> dismissTagDialog()
+            state.syncDetailsPhotoId != null -> dismissSyncDetails()
+            state.selectedPhotoIds.isNotEmpty() || state.isMultiSelectMode -> clearSelection()
+            state.viewMode != DamViewMode.GRID -> setViewMode(DamViewMode.GRID)
+            state.scope != LibraryScope.All -> setScope(LibraryScope.All)
+        }
     }
 
     fun setCompareIndex(index: Int) {
@@ -744,6 +793,14 @@ class LibraryViewModel(
             val selecting = !it.isMultiSelectMode
             it.copy(isMultiSelectMode = selecting, selectedPhotoIds = if (selecting) it.selectedPhotoIds else emptySet())
         }
+    }
+
+    fun selectAll() {
+        _uiState.update { it.copy(selectedPhotoIds = visibleIdSet, isMultiSelectMode = true) }
+    }
+
+    fun clearSelection() {
+        _uiState.update { it.copy(selectedPhotoIds = emptySet(), isMultiSelectMode = false) }
     }
 
     fun togglePhotoSelection(id: String) {

@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -73,6 +74,7 @@ fun CompareLoupeView(
     onPickB: () -> Unit,
     onRejectA: () -> Unit,
     onRejectB: () -> Unit,
+    zoomRequest: Int,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -84,6 +86,15 @@ fun CompareLoupeView(
     // Synchronized zoom & pan state
     var sharedScale by remember { mutableFloatStateOf(1f) }
     var sharedOffset by remember { mutableStateOf(Offset.Zero) }
+
+    var handledZoomRequest by remember { mutableIntStateOf(zoomRequest) }
+    LaunchedEffect(zoomRequest) {
+        if (zoomRequest != handledZoomRequest) {
+            handledZoomRequest = zoomRequest
+            sharedScale = if (sharedScale > 1.2f) 1f else 2.5f
+            sharedOffset = Offset.Zero
+        }
+    }
 
     LaunchedEffect(photoA?.id) {
         if (photoA != null) {
