@@ -13,6 +13,7 @@ data class PreviewSource(
     val format: PhotoFormat,
     val companionUri: String?,
     val key: String,
+    val companionFormat: PhotoFormat? = null,
 )
 
 /** The one way images get loaded. */
