@@ -14,6 +14,7 @@ class RawCullApp : Application() {
         super.onCreate()
         container = AppContainer(this)
         container.xmpWriteQueue.start()
+        container.applicationScope.launch { container.importController.ensureScheduled() }
         // Leaving the app is the last chance to write before the system may kill the process.
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStop(owner: LifecycleOwner) {

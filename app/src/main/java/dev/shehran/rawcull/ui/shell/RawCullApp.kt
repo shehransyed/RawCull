@@ -22,6 +22,7 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +69,13 @@ fun RawCullApp(
     val stacks = rememberSaveable(saver = TabStacks.Saver) { TabStacks() }
     val activeJob by shellViewModel.activeJob.collectAsStateWithLifecycle()
     var immersive by remember { mutableStateOf(false) }
+    val importState by importViewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(importState.startedJobId) {
+        importState.startedJobId?.let { jobId ->
+            stacks.resetTo(TopLevelTab.IMPORT, AppKey.ImportProgress(jobId))
+            importViewModel.onProgressOpened()
+        }
+    }
     val suiteType = when {
         immersive -> NavigationSuiteType.None
         layout.usesBottomBar -> NavigationSuiteType.NavigationBar

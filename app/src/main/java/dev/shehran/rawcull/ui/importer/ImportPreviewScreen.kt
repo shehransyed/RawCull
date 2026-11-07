@@ -1,10 +1,15 @@
 package dev.shehran.rawcull.ui.importer
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -48,6 +53,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -80,6 +87,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.shehran.rawcull.data.model.ImportItemRole
 import dev.shehran.rawcull.importer.DayTick
@@ -126,6 +134,25 @@ fun ImportPreviewScreen(
 
     LaunchedEffect(uiState.draft.locationId) { viewModel.refreshFreeSpace() }
 
+    // Asked at the first import. The answer doesn't matter: an import works without notifications.
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        viewModel.startImport()
+    }
+    val context = LocalContext.current
+    val onStart = {
+        val needsAsking = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        if (needsAsking) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else viewModel.startImport()
+    }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(uiState.message) {
+        uiState.message?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.onMessageShown()
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize().testTag("import_preview_screen")) {
         Column(
             modifier = Modifier
@@ -143,7 +170,7 @@ fun ImportPreviewScreen(
                     }
                 }
             }
-            SummaryBar(uiState, viewModel, onBack)
+            SummaryBar(uiState, onStart, onBack)
         }
 
         uiState.viewerCandidate?.let { candidate ->
@@ -153,6 +180,8 @@ fun ImportPreviewScreen(
         if (uiState.session == ImportSessionState.SourceLost) {
             CardDisconnectedOverlay(onBackToSource)
         }
+
+        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -373,7 +402,7 @@ private fun TileBadge(text: String, background: Color, color: Color) {
 }
 
 @Composable
-private fun SummaryBar(uiState: ImportUiState, viewModel: ImportViewModel, onBack: () -> Unit) {
+private fun SummaryBar(uiState: ImportUiState, onStart: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val summary = uiState.summary
     val size = Formatter.formatShortFileSize(context, summary.bytes)
@@ -408,7 +437,7 @@ private fun SummaryBar(uiState: ImportUiState, viewModel: ImportViewModel, onBac
         WizardActionBar(
             nextLabel = "Start import",
             nextEnabled = uiState.canStart,
-            onNext = viewModel::startImport,
+            onNext = onStart,
             nextTag = "import_start_button",
             onBack = onBack,
         )

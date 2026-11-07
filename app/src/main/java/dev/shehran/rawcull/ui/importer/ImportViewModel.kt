@@ -12,6 +12,9 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.shehran.rawcull.RawCullApp
 import dev.shehran.rawcull.data.importer.CardVolume
 import dev.shehran.rawcull.data.importer.CardVolumes
+import dev.shehran.rawcull.data.importer.ImportController
+import dev.shehran.rawcull.data.importer.ImportRequest
+import dev.shehran.rawcull.data.importer.ImportStart
 import dev.shehran.rawcull.data.local.ImportPresetDao
 import dev.shehran.rawcull.data.model.ImportPreset
 import dev.shehran.rawcull.data.model.LibraryLocation
@@ -22,6 +25,7 @@ import dev.shehran.rawcull.importer.DocumentIo
 import dev.shehran.rawcull.importer.ImportCandidate
 import dev.shehran.rawcull.importer.ImportDestination
 import dev.shehran.rawcull.importer.ImportPreview
+import dev.shehran.rawcull.importer.ImportSelection
 import dev.shehran.rawcull.importer.ImportSession
 import dev.shehran.rawcull.importer.ImportSessionState
 import dev.shehran.rawcull.importer.ImportSource
@@ -58,14 +62,18 @@ data class ImportUiState(
     val viewerId: String? = null,
     val inspectedId: String? = null,
     val destinationFreeBytes: Long? = null,
-    val deleteFromCard: Boolean = false,
+    val deleteFromCardSetting: Boolean = false,
+    val isStarting: Boolean = false,
+    val startedJobId: Long? = null, // Read once by the shell, to open the progress screen
 ) {
+    /** Only a detected card is ever emptied. */
+    val deleteFromCard: Boolean get() = deleteFromCardSetting && source?.volumeUuid != null
     val candidates: List<ImportCandidate> get() = session.candidateList
     val viewerCandidate: ImportCandidate? get() = viewerId?.let { id -> candidates.firstOrNull { it.id == id } }
     val inspected: ImportCandidate? get() = inspectedId?.let { id -> candidates.firstOrNull { it.id == id } }
     val isShortOfSpace: Boolean get() = ImportPreview.isShortOfSpace(summary.bytes, destinationFreeBytes)
     val canStart: Boolean
-        get() = summary.selectedPhotos > 0 && hasDestination && !isShortOfSpace &&
+        get() = summary.selectedPhotos > 0 && hasDestination && !isShortOfSpace && !isStarting &&
             session != ImportSessionState.SourceLost
     val selectedPreset: ImportPreset? get() = presets.firstOrNull { it.id == selectedPresetId }
     val isDraftModified: Boolean get() = selectedPreset?.sameSettingsAs(draft) == false
@@ -88,6 +96,7 @@ class ImportViewModel(
     private val volumes: CardVolumes,
     private val session: ImportSession,
     private val documents: DocumentIo,
+    private val controller: ImportController,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ImportUiState())
     val uiState: StateFlow<ImportUiState> = _uiState.asStateFlow()
@@ -102,7 +111,7 @@ class ImportViewModel(
         }
         viewModelScope.launch {
             settings.importPrefs.collect { prefs ->
-                _uiState.update { it.copy(deleteFromCard = prefs.deleteFromCardAfterImport) }
+                _uiState.update { it.copy(deleteFromCardSetting = prefs.deleteFromCardAfterImport) }
                 if (!hideImportedTouched) {
                     updatePreview { it.copy(options = it.options.copy(hideImported = prefs.hideAlreadyImported)) }
                 }
@@ -345,7 +354,37 @@ class ImportViewModel(
     }
 
     fun startImport() {
-        showMessage("Import starts in the next step of this round.")
+        val state = _uiState.value
+        val source = state.source ?: return
+        val location = state.destination ?: return
+        val draft = state.draft
+        _uiState.update { it.copy(isStarting = true) }
+        viewModelScope.launch {
+            val result = controller.start(
+                ImportRequest(
+                    source = source,
+                    location = location,
+                    candidates = state.candidates,
+                    selection = ImportSelection(
+                        selectedIds = ImportPreview.selectedIds(state.candidates, state.options, state.overrides),
+                        includeRaw = state.options.includeRaw,
+                        includeRaster = state.options.includeRaster,
+                    ),
+                    template = { date -> ImportDestination.relativeDir(draft, date) },
+                    verifyMode = settings.importPrefs.first().verifyMode,
+                    deleteFromCard = state.deleteFromCardSetting,
+                ),
+            )
+            _uiState.update { it.copy(isStarting = false) }
+            when (result) {
+                is ImportStart.Refused -> showMessage(result.message)
+                is ImportStart.Started -> _uiState.update { it.copy(startedJobId = result.jobId) }
+            }
+        }
+    }
+
+    fun onProgressOpened() {
+        _uiState.update { it.copy(startedJobId = null) }
     }
 
     private fun showMessage(message: String) {
@@ -368,6 +407,7 @@ class ImportViewModel(
                     volumes = app.container.cardVolumes,
                     session = app.container.importSession,
                     documents = app.container.documentIo,
+                    controller = app.container.importController,
                 )
             }
         }

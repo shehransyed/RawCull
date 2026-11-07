@@ -3,8 +3,11 @@ package dev.shehran.rawcull
 import android.content.Context
 import android.util.Log
 import dev.shehran.rawcull.data.importer.CardVolumes
+import dev.shehran.rawcull.data.importer.ImportController
+import dev.shehran.rawcull.data.importer.ImportEngine
 import dev.shehran.rawcull.data.importer.SafDocumentIo
 import dev.shehran.rawcull.data.importer.SafImportSourceReader
+import dev.shehran.rawcull.data.importer.WorkManagerImportScheduler
 import dev.shehran.rawcull.data.local.AppDatabase
 import dev.shehran.rawcull.data.local.RawPhotoDao
 import dev.shehran.rawcull.data.repository.LocationRepository
@@ -58,6 +61,20 @@ class AppContainer(context: Context) {
         isIndexed = { hash, size -> database.importedFileDao().contains(hash, size) },
         scope = applicationScope,
         log = { Log.i("RawCull.Import", it) },
+    )
+    val importEngine: ImportEngine = ImportEngine(
+        jobs = database.importJobDao(),
+        importedFiles = database.importedFileDao(),
+        locations = database.locationDao(),
+        photos = photoDao,
+        io = documentIo,
+        log = { Log.i("RawCull.Import", it) },
+    )
+    val importController: ImportController = ImportController(
+        jobs = database.importJobDao(),
+        engine = importEngine,
+        io = documentIo,
+        scheduler = WorkManagerImportScheduler(appContext),
     )
     val scanCoordinator: ScanCoordinator =
         ScanCoordinator(appContext, database, photoDao, applicationScope, sidecarStores, xmpWriteQueue)

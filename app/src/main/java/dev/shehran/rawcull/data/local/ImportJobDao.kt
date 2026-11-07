@@ -56,6 +56,21 @@ interface ImportJobDao {
     @Query("SELECT * FROM import_jobs WHERE locationId = :locationId AND doneFiles > 0 ORDER BY id DESC LIMIT 1")
     fun observeLatestJob(locationId: Long): Flow<ImportJob?>
 
+    @Query("UPDATE import_jobs SET status = 'RUNNING', startedAt = :startedAt, finishedAt = NULL WHERE id = :id")
+    suspend fun markRunning(id: Long, startedAt: Long)
+
+    @Query("UPDATE import_jobs SET status = :status, finishedAt = :finishedAt WHERE id = :id")
+    suspend fun finish(id: Long, status: ImportJobStatus, finishedAt: Long)
+
+    @Query(
+        """
+        UPDATE import_jobs SET doneFiles = :doneFiles, doneBytes = :doneBytes,
+            skippedFiles = :skippedFiles, failedFiles = :failedFiles
+        WHERE id = :id
+        """
+    )
+    suspend fun updateProgress(id: Long, doneFiles: Int, doneBytes: Long, skippedFiles: Int, failedFiles: Int)
+
     @Query("UPDATE import_jobs SET status = :status WHERE id = :id")
     suspend fun setStatus(id: Long, status: ImportJobStatus)
 
