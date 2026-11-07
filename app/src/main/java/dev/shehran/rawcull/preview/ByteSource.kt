@@ -2,6 +2,8 @@ package dev.shehran.rawcull.preview
 
 import java.io.Closeable
 import java.io.InputStream
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 
 /** The most any one preview may ask for, and the most a non-seekable file is ever read. */
 const val MAX_PREVIEW_BYTES: Long = 64L * 1024 * 1024
@@ -27,6 +29,23 @@ class ArrayByteSource(private val bytes: ByteArray) : ByteSource {
         if (offset < 0 || offset >= bytes.size) return ByteArray(0)
         val end = minOf(offset + length, bytes.size.toLong()).toInt()
         return bytes.copyOfRange(offset.toInt(), end)
+    }
+}
+
+/** Positional reads on a descriptor: nothing moves, so nothing has to be put back. */
+class ChannelByteSource(private val channel: FileChannel, override val size: Long) : ByteSource {
+    override val seekable: Boolean get() = true
+
+    override fun read(offset: Long, length: Int): ByteArray {
+        if (offset < 0 || offset >= size || length <= 0) return ByteArray(0)
+        val buffer = ByteBuffer.allocate(minOf(length.toLong(), size - offset).toInt())
+        var position = offset
+        while (buffer.hasRemaining()) {
+            val count = channel.read(buffer, position)
+            if (count < 0) break
+            position += count
+        }
+        return if (buffer.hasRemaining()) buffer.array().copyOf(buffer.position()) else buffer.array()
     }
 }
 

@@ -1,5 +1,6 @@
 package dev.shehran.rawcull
 
+import android.app.ActivityManager
 import android.content.Context
 import android.net.Uri
 import android.util.Log
@@ -13,7 +14,13 @@ import dev.shehran.rawcull.data.importer.SafImportSourceReader
 import dev.shehran.rawcull.data.importer.WorkManagerImportScheduler
 import dev.shehran.rawcull.data.local.AppDatabase
 import dev.shehran.rawcull.data.local.RawPhotoDao
+import dev.shehran.rawcull.data.preview.AndroidPreviewCodec
+import dev.shehran.rawcull.data.preview.DefaultPreviewRepository
+import dev.shehran.rawcull.data.preview.PreviewCacheDatabase
+import dev.shehran.rawcull.data.preview.PreviewMemory
 import dev.shehran.rawcull.data.preview.PreviewRepository
+import dev.shehran.rawcull.data.preview.SafPreviewFiles
+import dev.shehran.rawcull.data.preview.ThumbnailStore
 import dev.shehran.rawcull.data.repository.LegacyPreviewCache
 import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.RawCatalogRepository
@@ -28,7 +35,6 @@ import dev.shehran.rawcull.data.xmp.XMP_TOOLKIT
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
 import dev.shehran.rawcull.importer.DocumentIo
 import dev.shehran.rawcull.importer.ImportSession
-import dev.shehran.rawcull.util.RawPreviewLoader
 import dev.shehran.rawcull.util.SafPermissions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -36,9 +42,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.io.File
 
 private const val LEGACY_PREVIEW_CACHE_DIR = "rawcull_preview_cache"
+private const val THUMBNAIL_DIR = "previews/v1"
+private const val DEFAULT_PREVIEW_CACHE_MB = 1024L
+private const val BYTES_PER_MB = 1024L * 1024
+private const val PREVIEW_IO_THREADS = 4
+private const val PREVIEW_DECODE_THREADS = 3
 
 /** Manual dependency container; one instance lives on [RawCullApp]. */
 class AppContainer(context: Context) {
@@ -115,5 +127,25 @@ class AppContainer(context: Context) {
     val deletionGateway: DeletionGateway = SafDeletionGateway(appContext)
     val scanCoordinator: ScanCoordinator =
         ScanCoordinator(appContext, database, photoDao, applicationScope, sidecarStores, xmpWriteQueue)
-    val previewRepository: PreviewRepository = RawPreviewLoader.repository(appContext)
+    private val previewDatabase: PreviewCacheDatabase = PreviewCacheDatabase.build(appContext)
+    private val thumbnailStore: ThumbnailStore = ThumbnailStore(
+        dao = previewDatabase.dao(),
+        root = File(appContext.cacheDir, THUMBNAIL_DIR),
+        limitBytes = { DEFAULT_PREVIEW_CACHE_MB * BYTES_PER_MB },
+    )
+    val previewRepository: PreviewRepository = DefaultPreviewRepository(
+        files = SafPreviewFiles(appContext),
+        codec = AndroidPreviewCodec(),
+        store = thumbnailStore,
+        dao = previewDatabase.dao(),
+        memory = PreviewMemory.forMemoryClass(appContext.getSystemService(ActivityManager::class.java).memoryClass),
+        scope = applicationScope,
+        io = Dispatchers.IO.limitedParallelism(PREVIEW_IO_THREADS),
+        decoding = Dispatchers.Default.limitedParallelism(PREVIEW_DECODE_THREADS),
+        log = { Log.i("RawCull.Preview", it) },
+    )
+
+    init {
+        applicationScope.launch { thumbnailStore.reconcile() }
+    }
 }

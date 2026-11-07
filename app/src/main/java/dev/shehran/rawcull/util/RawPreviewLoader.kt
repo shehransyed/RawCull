@@ -10,36 +10,12 @@ import android.os.Build
 import android.util.LruCache
 import androidx.exifinterface.media.ExifInterface
 import dev.shehran.rawcull.data.model.PhotoFormat
-import dev.shehran.rawcull.data.preview.PreviewRepository
-import dev.shehran.rawcull.data.preview.PreviewSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
 object RawPreviewLoader {
-    /** The old loader behind the new interface, until every caller has moved over. */
-    fun repository(context: Context): PreviewRepository = object : PreviewRepository {
-        override suspend fun thumbnail(source: PreviewSource, sizePx: Int): Bitmap? = loadThumbnail(
-            context,
-            Uri.parse(source.primaryUri),
-            source.key,
-            source.format,
-            maxDimension = sizePx,
-            companionUri = source.companionUri?.let(Uri::parse),
-        )
-
-        override suspend fun fitPreview(source: PreviewSource, widthPx: Int, heightPx: Int): Bitmap? = loadPreview(
-            context,
-            Uri.parse(source.primaryUri),
-            source.key,
-            source.format,
-            targetWidth = widthPx,
-            targetHeight = heightPx,
-            companionUri = source.companionUri?.let(Uri::parse),
-        )
-    }
-
     private val memoryCache: LruCache<String, Bitmap> = run {
         val maxMemory = (Runtime.getRuntime().maxMemory() / 1024).toInt()
         val cacheSize = maxMemory / 8 // Use 1/8th of available memory
