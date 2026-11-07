@@ -6,9 +6,14 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
@@ -19,9 +24,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LifecycleStartEffect
@@ -31,7 +41,10 @@ import dev.shehran.rawcull.ui.components.SyncDetailsDialog
 import dev.shehran.rawcull.ui.components.TagManagerDialog
 import dev.shehran.rawcull.ui.components.WelcomeScreen
 import dev.shehran.rawcull.ui.components.rememberSourcePicker
+import dev.shehran.rawcull.data.model.CullStatus
+import dev.shehran.rawcull.library.LibraryScope
 import dev.shehran.rawcull.ui.mobile.MobileDamScreen
+import dev.shehran.rawcull.ui.shell.LocalWindowLayout
 import dev.shehran.rawcull.ui.tablet.TabletDamScreen
 
 @Composable
@@ -65,8 +78,27 @@ fun MainDamScreen(
         }
     }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val isTablet = this.maxWidth >= 700.dp
+    val keyFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { keyFocus.requestFocus() }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+            .focusRequester(keyFocus)
+            .focusable()
+            // Only this screen listens, so typing anywhere else in the app is left alone.
+            .onPreviewKeyEvent { event ->
+                val action = LibraryKeys.actionFor(event.key)
+                if (event.type == KeyEventType.KeyDown && action != null) {
+                    onLibraryKey(action, viewModel)
+                    true
+                } else {
+                    false
+                }
+            }
+    ) {
+        val isTablet = LocalWindowLayout.current.showsSideInspector
 
         when {
             // Avoids flashing Welcome while the last source is being checked.
@@ -136,6 +168,19 @@ fun MainDamScreen(
         }
 
         SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+private fun onLibraryKey(action: LibraryKeyAction, viewModel: RawCullViewModel) {
+    when (action) {
+        LibraryKeyAction.TogglePick -> viewModel.togglePick()
+        LibraryKeyAction.ToggleReject -> viewModel.toggleReject()
+        LibraryKeyAction.Unflag -> viewModel.setCullStatus(CullStatus.UNFLAGGED)
+        is LibraryKeyAction.Rate -> viewModel.setRating(action.stars)
+        LibraryKeyAction.Previous -> viewModel.previousPhoto()
+        LibraryKeyAction.Next -> viewModel.nextPhoto()
+        LibraryKeyAction.ToggleCompare -> viewModel.toggleCompareMode()
+        LibraryKeyAction.ShowAllPhotos -> viewModel.setScope(LibraryScope.All)
     }
 }
 
