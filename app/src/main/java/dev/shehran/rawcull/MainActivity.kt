@@ -17,6 +17,7 @@ import dev.shehran.rawcull.ui.library.LibraryViewModel
 import dev.shehran.rawcull.ui.shell.RawCullApp as RawCullScreen
 import dev.shehran.rawcull.ui.shell.ShellViewModel
 import dev.shehran.rawcull.ui.theme.RawCullTheme
+import dev.shehran.rawcull.ui.components.LocalPreviewWarmup
 
 class MainActivity : ComponentActivity() {
     private val viewModel: LibraryViewModel by viewModels { LibraryViewModel.Factory }
@@ -29,7 +30,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             RawCullTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    CompositionLocalProvider(LocalPreviewRepository provides (application as RawCullApp).container.previewRepository) {
+                    val container = (application as RawCullApp).container
+                    CompositionLocalProvider(
+                        LocalPreviewRepository provides container.previewRepository,
+                        LocalPreviewWarmup provides container.previewWarmup,
+                    ) {
                         RawCullScreen(libraryViewModel = viewModel, shellViewModel = shellViewModel)
                     }
                 }

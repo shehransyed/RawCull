@@ -106,6 +106,7 @@ import dev.shehran.rawcull.ui.theme.Dimens
 import dev.shehran.rawcull.ui.theme.PrimaryCyan
 import dev.shehran.rawcull.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
+import dev.shehran.rawcull.ui.components.WarmupBar
 
 /**
  * The whole archive: folder pane, content and inspector, as far as the window has room for them.
@@ -466,6 +467,7 @@ private fun LibraryContent(
                     onRelinkLocation = onRelink,
                 ),
             )
+            WarmupBar()
         }
 
         Row(modifier = Modifier.weight(1f).fillMaxWidth()) {

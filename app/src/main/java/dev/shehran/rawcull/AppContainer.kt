@@ -44,6 +44,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
+import dev.shehran.rawcull.data.model.ImportJobStatus
+import dev.shehran.rawcull.data.preview.PreviewKeys
+import dev.shehran.rawcull.data.preview.PreviewWarmup
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 private const val LEGACY_PREVIEW_CACHE_DIR = "rawcull_preview_cache"
 private const val THUMBNAIL_DIR = "previews/v1"
@@ -145,7 +150,33 @@ class AppContainer(context: Context) {
         log = { Log.i("RawCull.Preview", it) },
     )
 
+    val previewWarmup: PreviewWarmup = PreviewWarmup(
+        repository = previewRepository,
+        scope = applicationScope,
+        importCopying = database.importJobDao().observeActiveJob()
+            .map { it?.status == ImportJobStatus.RUNNING }
+            .distinctUntilChanged(),
+        log = { Log.i("RawCull.Preview", it) },
+    )
+
     init {
         applicationScope.launch { thumbnailStore.reconcile() }
+        applicationScope.launch { warmFinishedImports() }
+    }
+
+    /** D12: when an import finishes, its new photos are the ones about to be culled. */
+    private suspend fun warmFinishedImports() {
+        val jobs = database.importJobDao()
+        var running: Long? = null
+        jobs.observeActiveJob().collect { job ->
+            val previous = running
+            running = job?.id
+            if (previous == null || previous == job?.id) return@collect
+            val finished = jobs.getJob(previous) ?: return@collect
+            if (finished.status == ImportJobStatus.COMPLETED || finished.status == ImportJobStatus.COMPLETED_WITH_ERRORS) {
+                val photos = photoDao.observeByImportJob(previous).first()
+                previewWarmup.start(PreviewWarmup.LATEST_IMPORT_LABEL, photos.map(PreviewKeys::source))
+            }
+        }
     }
 }

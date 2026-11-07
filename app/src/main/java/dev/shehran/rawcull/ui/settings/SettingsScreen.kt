@@ -185,6 +185,9 @@ fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) 
                     onCheckedChange = viewModel::setSwipeToFlag,
                 )
 
+                SectionHeader("PREVIEWS")
+                PreviewSettingsSection(uiState, viewModel)
+
                 SectionHeader("SIDECARS")
                 SwitchRow(
                     title = "Write rejects as rating −1",

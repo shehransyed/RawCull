@@ -23,6 +23,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import dev.shehran.rawcull.data.preview.PreviewKeys
+import dev.shehran.rawcull.data.preview.PreviewWarmup
+import dev.shehran.rawcull.data.preview.WarmupState
 
 data class SettingsUiState(
     val locations: List<LocationUi> = emptyList(),
@@ -30,6 +33,9 @@ data class SettingsUiState(
     val importPrefs: ImportPrefs = ImportPrefs(),
     val rejectAsNegativeRating: Boolean = true,
     val cullingPrefs: CullingPrefs = CullingPrefs(),
+    /** The Location the Library has open, which *Build previews* works on; null for none or the demo. */
+    val previewLocation: LibraryLocation? = null,
+    val warmup: WarmupState = WarmupState(),
     val message: String? = null,
 )
 
@@ -38,6 +44,7 @@ class SettingsViewModel(
     private val locations: LocationRepository,
     private val presets: ImportPresetDao,
     private val catalog: RawCatalogRepository,
+    private val warmup: PreviewWarmup,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -51,6 +58,7 @@ class SettingsViewModel(
                 refreshAvailability()
             }
         }
+        viewModelScope.launch { warmup.state.collect { state -> _uiState.update { it.copy(warmup = state) } } }
         viewModelScope.launch { presets.observeAll().collect { list -> _uiState.update { it.copy(presets = list) } } }
         viewModelScope.launch { settings.importPrefs.collect { prefs -> _uiState.update { it.copy(importPrefs = prefs) } } }
         viewModelScope.launch { settings.cullingPrefs.collect { prefs -> _uiState.update { it.copy(cullingPrefs = prefs) } } }
@@ -61,10 +69,28 @@ class SettingsViewModel(
         }
     }
 
+    /** D12: thumbnails for every photo in the Library's open Location, ahead of time. */
+    fun buildPreviews() {
+        val location = _uiState.value.previewLocation ?: return
+        viewModelScope.launch {
+            val photos = catalog.photosIn(location.treeUri)
+            warmup.start(location.displayName, photos.map(PreviewKeys::source))
+        }
+    }
+
+    fun pauseWarmup() = warmup.pause()
+
+    fun resumeWarmup() = warmup.resume()
+
+    fun cancelWarmup() = warmup.cancel()
+
     fun refreshAvailability() {
         viewModelScope.launch {
             val rows = knownLocations.map { LocationUi(it, locations.isAvailable(it)) }
-            _uiState.update { it.copy(locations = rows) }
+            val activeId = settings.librarySession().activeLocationId
+            val real = knownLocations.filterNot { it.isDemo }
+            val previewLocation = real.firstOrNull { it.id == activeId } ?: real.singleOrNull()
+            _uiState.update { it.copy(locations = rows, previewLocation = previewLocation) }
         }
     }
 
@@ -158,6 +184,7 @@ class SettingsViewModel(
                     locations = container.locationRepository,
                     presets = container.database.importPresetDao(),
                     catalog = container.catalogRepository,
+                    warmup = container.previewWarmup,
                 )
             }
         }
