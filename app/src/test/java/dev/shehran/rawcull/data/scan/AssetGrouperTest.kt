@@ -145,6 +145,14 @@ class AssetGrouperTest {
     }
 
     @Test
+    fun `files in the system trash are ignored`() {
+        val result = group(".trashed-1794074468-DSC001.ARW", ".trashed-1794074468-DSC001.xmp", "DSC002.ARW")
+
+        assertEquals(listOf("DSC002.ARW"), result.assets.map { it.primary.name })
+        assertEquals(emptyList<ScannedEntry>(), result.orphanSidecars)
+    }
+
+    @Test
     fun `macOS AppleDouble stubs are ignored`() {
         val result = group("._DSC001.ARW", "._DSC001.xmp", "DSC001.ARW")
 

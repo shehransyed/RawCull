@@ -31,6 +31,12 @@ interface PhotoCatalog {
 
     /** Writes [change]'s `after` states as one batch; only fields that differ count as edited. */
     suspend fun applyChange(change: CullChange)
+
+    /** The rows as they are now, which may be newer than what's on screen. */
+    suspend fun photosById(ids: List<String>): List<PhotoAsset>
+
+    /** Forgets rows whose files have gone. The import duplicate index keeps them on purpose (D9). */
+    suspend fun removeRows(ids: List<String>)
 }
 
 class RawCatalogRepository(
@@ -82,6 +88,14 @@ class RawCatalogRepository(
             }
         }
         writeQueue.enqueue(change.ids)
+    }
+
+    override suspend fun photosById(ids: List<String>): List<PhotoAsset> = withContext(Dispatchers.IO) {
+        ids.chunked(MAX_IDS_PER_QUERY).flatMap { dao.getByIds(it) }
+    }
+
+    override suspend fun removeRows(ids: List<String>) = withContext(Dispatchers.IO) {
+        database.withTransaction { ids.chunked(MAX_IDS_PER_QUERY).forEach { dao.deleteByIds(it) } }
     }
 
     /** The ids whose [value] differs between before and after, grouped by the new value. */

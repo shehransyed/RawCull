@@ -1,7 +1,9 @@
 package dev.shehran.rawcull.ui.library
 
+import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -147,6 +149,19 @@ fun LibraryScreen(
         relinkLauncher.launch(null)
     }
 
+    // Saved, so the result still lands right if the activity is recreated behind the system dialog.
+    var trashRestoring by rememberSaveable { mutableStateOf(false) }
+    val trashLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        viewModel.onTrashResult(approved = result.resultCode == Activity.RESULT_OK, restoring = trashRestoring)
+    }
+    LaunchedEffect(uiState.trashRequest) {
+        uiState.trashRequest?.let { request ->
+            trashRestoring = request.restoring
+            viewModel.onTrashRequestLaunched()
+            trashLauncher.launch(IntentSenderRequest.Builder(request.sender).build())
+        }
+    }
+
     LifecycleResumeEffect(Unit) {
         viewModel.refreshSources()
         onPauseOrDispose { }
@@ -158,13 +173,20 @@ fun LibraryScreen(
     StorageChangeEffect(onChanged = viewModel::refreshSources)
     LaunchedEffect(uiState.snackbarMessage) {
         uiState.snackbarMessage?.let { message ->
+            val action = uiState.snackbarAction
             // Clearing first would change this effect's key and cancel the snackbar.
             val result = snackbarHostState.showSnackbar(
                 message = message,
-                actionLabel = "Undo".takeIf { uiState.snackbarOffersUndo },
+                actionLabel = action?.label,
             )
             viewModel.onSnackbarShown()
-            if (result == SnackbarResult.ActionPerformed) viewModel.undo()
+            if (result == SnackbarResult.ActionPerformed) {
+                when (action) {
+                    SnackbarAction.UNDO -> viewModel.undo()
+                    SnackbarAction.RESTORE -> viewModel.restoreTrashed()
+                    null -> Unit
+                }
+            }
         }
     }
 
@@ -199,7 +221,7 @@ fun LibraryScreen(
     val keyFocus = remember { FocusRequester() }
     // Dialogs and sheets are windows of their own, so focus has to be taken back when they close.
     val filterSheetOpen = showFilterSheet && !layout.showsFilterBar
-    val overlayOpen = showHelp || showInspectorSheet || filterSheetOpen ||
+    val overlayOpen = showHelp || showInspectorSheet || filterSheetOpen || uiState.deletionPrompt != null ||
         uiState.showTagDialog || uiState.syncDetailsPhoto != null
     LaunchedEffect(overlayOpen) {
         if (!overlayOpen) {
@@ -236,6 +258,7 @@ fun LibraryScreen(
         onUpdate = viewModel::updateFilter,
         onClear = viewModel::clearFilters,
         onToggleEnabled = viewModel::toggleFilters,
+        onDeleteRejects = { viewModel.requestDeleteRejects() },
         onSearchFocusChanged = { textFieldFocused = it },
         onSearchFocused = { focusSearch = false },
     )
@@ -325,6 +348,9 @@ fun LibraryScreen(
         }
     }
     if (showHelp) ShortcutHelpSheet(onDismiss = { showHelp = false })
+    uiState.deletionPrompt?.let { plan ->
+        DeleteRejectsDialog(plan, onConfirm = viewModel::confirmDeletion, onDismiss = viewModel::cancelDeletion)
+    }
     if (filterSheetOpen) {
         ModalBottomSheet(
             onDismissRequest = { showFilterSheet = false },
@@ -411,6 +437,7 @@ private fun LibraryContent(
                             onSelectAll = viewModel::selectAll,
                             onEdit = { viewModel.apply(it) },
                             onEditTags = viewModel::openTagDialog,
+                            onDeleteRejects = { viewModel.requestDeleteRejects(selectionOnly = true) },
                         )
                     }
                 } else {
@@ -428,6 +455,7 @@ private fun LibraryContent(
                     onToggleFilterBar = onToggleFilterBar,
                     onToggleSyncErrors = viewModel::toggleSyncErrorFilter,
                     onShowShortcuts = onShowShortcuts,
+                    onDeleteRejects = { viewModel.requestDeleteRejects() },
                     onRescan = viewModel::rescan,
                     onRetryLocation = viewModel::retryLocation,
                     onRelinkLocation = onRelink,
@@ -696,7 +724,7 @@ private fun onLibraryKey(action: LibraryKeyAction, viewModel: LibraryViewModel, 
         LibraryKeyAction.ToggleFilterBar -> screen.onToggleFilterBar()
         LibraryKeyAction.ToggleFilters -> viewModel.toggleFilters()
         LibraryKeyAction.EditTags -> viewModel.openTagDialog()
-        LibraryKeyAction.DeleteRejects -> Unit // R4.8
+        LibraryKeyAction.DeleteRejects -> viewModel.requestDeleteRejects()
         LibraryKeyAction.ShowHelp -> screen.onShowHelp()
         LibraryKeyAction.Escape -> screen.onEscape()
     }

@@ -94,6 +94,7 @@ class FilterActions(
     val onToggleEnabled: () -> Unit,
     val onSearchFocusChanged: (Boolean) -> Unit,
     val onSearchFocused: () -> Unit,
+    val onDeleteRejects: () -> Unit,
 )
 
 /** The full bar, for windows wide enough to hold it. It wraps, so that no control ends up out of reach. */
@@ -126,6 +127,7 @@ fun FilterBar(
         SortMenu(uiState.filterOptions.sortOrder, actions)
         EnabledToggle(uiState.filtersEnabled, actions)
         if (uiState.filterOptions.isActive) ClearButton(actions)
+        DeleteRejectsButton(uiState, actions)
     }
 }
 
@@ -178,6 +180,7 @@ fun ActiveFilterRow(
             DamFilterChip("“${filter.searchQuery}”", true) { actions.onUpdate { it.copy(searchQuery = "") } }
         }
         if (!uiState.filtersEnabled) DamFilterChip("Filters off", true, onClick = actions.onToggleEnabled)
+        DeleteRejectsButton(uiState, actions)
     }
 }
 
@@ -486,6 +489,16 @@ private fun EnabledToggle(enabled: Boolean, actions: FilterActions) {
 private fun ClearButton(actions: FilterActions) {
     TextButton(onClick = actions.onClear, modifier = Modifier.testTag("filter_clear_button")) {
         Text("Clear", color = PrimaryCyan, fontSize = 12.sp)
+    }
+}
+
+/** Only offered when the view is nothing but rejects, which is when the question comes up. */
+@Composable
+private fun DeleteRejectsButton(uiState: LibraryUiState, actions: FilterActions) {
+    val onlyRejects = uiState.filterOptions.flags == setOf(CullStatus.REJECT) && uiState.filtersEnabled
+    if (!onlyRejects || uiState.rejectsCount == 0 || !uiState.isLocationAvailable) return
+    TextButton(onClick = actions.onDeleteRejects, modifier = Modifier.testTag("filter_delete_rejects")) {
+        Text("Delete rejects…", color = RawCullTheme.colors.reject, fontSize = 12.sp)
     }
 }
 

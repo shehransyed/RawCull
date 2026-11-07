@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Compare
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Image
@@ -70,6 +71,7 @@ class LibraryTopBarActions(
     val onToggleFilterBar: () -> Unit,
     val onToggleSyncErrors: () -> Unit,
     val onShowShortcuts: () -> Unit,
+    val onDeleteRejects: () -> Unit,
     val onRescan: () -> Unit,
     val onRetryLocation: () -> Unit,
     val onRelinkLocation: () -> Unit,
@@ -260,6 +262,13 @@ private fun OverflowMenu(uiState: LibraryUiState, actions: LibraryTopBarActions)
                 leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
                 onClick = { choose(actions.onRescan) },
                 modifier = Modifier.testTag("rescan_button"),
+            )
+            DropdownMenuItem(
+                text = { Text("Delete rejects…") },
+                enabled = uiState.rejectsCount > 0 && uiState.isLocationAvailable,
+                leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null) },
+                onClick = { choose(actions.onDeleteRejects) },
+                modifier = Modifier.testTag("delete_rejects_button"),
             )
             DropdownMenuItem(
                 text = { Text("Keyboard shortcuts") },

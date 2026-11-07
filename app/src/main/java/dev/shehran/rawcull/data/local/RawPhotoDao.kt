@@ -85,6 +85,9 @@ interface RawPhotoDao : XmpRows {
     @Upsert
     suspend fun upsertAll(photos: List<PhotoAsset>)
 
+    @Query("SELECT * FROM photo_assets WHERE id IN (:ids)")
+    suspend fun getByIds(ids: List<String>): List<PhotoAsset>
+
     @Query("DELETE FROM photo_assets WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<String>)
 

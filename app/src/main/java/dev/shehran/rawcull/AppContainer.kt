@@ -3,6 +3,8 @@ package dev.shehran.rawcull
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import dev.shehran.rawcull.data.deletion.DeletionGateway
+import dev.shehran.rawcull.data.deletion.SafDeletionGateway
 import dev.shehran.rawcull.data.importer.CardVolumes
 import dev.shehran.rawcull.data.importer.ImportController
 import dev.shehran.rawcull.data.importer.ImportEngine
@@ -99,6 +101,7 @@ class AppContainer(context: Context) {
         io = documentIo,
         scheduler = WorkManagerImportScheduler(appContext),
     )
+    val deletionGateway: DeletionGateway = SafDeletionGateway(appContext)
     val scanCoordinator: ScanCoordinator =
         ScanCoordinator(appContext, database, photoDao, applicationScope, sidecarStores, xmpWriteQueue)
 }

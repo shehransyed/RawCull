@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FlagCircle
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
@@ -55,6 +56,7 @@ fun SelectionTopBar(
     onSelectAll: () -> Unit,
     onEdit: (CullEdit) -> Unit,
     onEditTags: () -> Unit,
+    onDeleteRejects: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -93,6 +95,13 @@ fun SelectionTopBar(
                 RatingMenu(onEdit)
                 LabelMenu(onEdit)
                 BarIcon(Icons.AutoMirrored.Filled.Label, "Tags", "selection_tags", Color.White, onEditTags)
+                BarIcon(
+                    Icons.Default.DeleteOutline,
+                    "Delete rejects in selection",
+                    "selection_delete_rejects",
+                    RawCullTheme.colors.reject,
+                    onDeleteRejects,
+                )
             }
         }
     }

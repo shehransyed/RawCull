@@ -1,6 +1,7 @@
 package dev.shehran.rawcull.ui.library
 
 import android.content.Context
+import android.content.IntentSender
 import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -10,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.shehran.rawcull.RawCullApp
+import dev.shehran.rawcull.data.deletion.DeletionGateway
 import dev.shehran.rawcull.data.local.ImportJobDao
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
@@ -30,6 +32,7 @@ import dev.shehran.rawcull.library.AutoAdvance
 import dev.shehran.rawcull.library.CullChange
 import dev.shehran.rawcull.library.CullEdit
 import dev.shehran.rawcull.library.CullEdits
+import dev.shehran.rawcull.library.DeletionPlan
 import dev.shehran.rawcull.library.FilterCounts
 import dev.shehran.rawcull.library.FolderNode
 import dev.shehran.rawcull.library.FolderSection
@@ -40,6 +43,7 @@ import dev.shehran.rawcull.library.LibraryRestore
 import dev.shehran.rawcull.library.LibraryScope
 import dev.shehran.rawcull.library.LibraryView
 import dev.shehran.rawcull.library.LoupeSwipe
+import dev.shehran.rawcull.library.RejectDeletion
 import dev.shehran.rawcull.library.UndoStack
 import dev.shehran.rawcull.ui.SelectionLogic
 import dev.shehran.rawcull.util.HistogramCalculator
@@ -71,6 +75,14 @@ enum class DamViewMode {
     COMPARE
 }
 
+enum class SnackbarAction(val label: String) {
+    UNDO("Undo"),
+    RESTORE("Restore"),
+}
+
+/** The system's trash dialog, and whether it's bringing files back. */
+class TrashRequest(val sender: IntentSender, val restoring: Boolean)
+
 /** A Location plus whether its volume is connected right now. */
 data class LocationUi(val location: LibraryLocation, val isAvailable: Boolean)
 
@@ -93,7 +105,9 @@ data class LibraryUiState(
     val latestImport: ImportJob? = null,
     val latestImportPhotoCount: Int = 0,
     val snackbarMessage: String? = null,
-    val snackbarOffersUndo: Boolean = false,
+    val snackbarAction: SnackbarAction? = null,
+    val deletionPrompt: DeletionPlan? = null,
+    val trashRequest: TrashRequest? = null, // A system dialog waiting to be shown
     val isScanning: Boolean = false,
     val isRefreshing: Boolean = false,
     val scanProgress: Float? = null, // Null while the total isn't known yet
@@ -167,6 +181,7 @@ class LibraryViewModel(
     private val jobs: ImportJobDao,
     private val scanCoordinator: ScanCoordinator,
     private val writeQueue: XmpWriteQueue,
+    private val deletions: DeletionGateway,
     private val startupFinished: suspend () -> Unit,
     private val log: (String) -> Unit = { Log.i("RawCull.Library", it) },
 ) : ViewModel() {
@@ -196,6 +211,9 @@ class LibraryViewModel(
     private var shiftHeld = false
     private var selectionAnchor: String? = null
     private var dragBaseline: Set<String> = emptySet()
+    private var pendingDeletion: DeletionPlan? = null
+    private var trashedFiles: List<String> = emptyList()
+    private var trashedFolders: Set<String> = emptySet()
 
     /** Fair, so edits reach Room in the order they were made and an undo can't overtake its edit. */
     private val writeOrder = Mutex()
@@ -407,7 +425,7 @@ class LibraryViewModel(
             undoStack.push(change)
             publishUndoState()
             write(change)
-            if (isBatch) _uiState.update { it.copy(snackbarMessage = change.summary, snackbarOffersUndo = true) }
+            if (isBatch) _uiState.update { it.copy(snackbarMessage = change.summary, snackbarAction = SnackbarAction.UNDO) }
         }
         val tagging = edit is CullEdit.AddTag || edit is CullEdit.RemoveTag
         if (!isBatch && !tagging && (advance || state.autoAdvance)) advanceFrom(targets.single(), change)
@@ -543,6 +561,8 @@ class LibraryViewModel(
         histogramKey = null
         if (switching) {
             undoStack.clear()
+            trashedFiles = emptyList()
+            trashedFolders = emptySet()
             saveFilterJob?.cancel()
             filter.value = settings.filters(location.id)
             filtersEnabled.value = settings.filtersEnabled(location.id)
@@ -773,7 +793,7 @@ class LibraryViewModel(
     }
 
     fun onSnackbarShown() {
-        _uiState.update { it.copy(snackbarMessage = null, snackbarOffersUndo = false) }
+        _uiState.update { it.copy(snackbarMessage = null, snackbarAction = null) }
     }
 
     // --- DIALOGS ---
@@ -811,7 +831,134 @@ class LibraryViewModel(
         }
     }
 
+    // --- DELETE REJECTS ---
+    /** @param selectionOnly the rejects in the selection; otherwise every reject in the scope, filtered or not. */
+    fun requestDeleteRejects(selectionOnly: Boolean = false) {
+        val state = _uiState.value
+        if (!state.isLocationAvailable) {
+            showMessage("Location disconnected. Reconnect it to delete photos.")
+            return
+        }
+        val ids = state.photos
+            .filter { it.cullStatus == CullStatus.REJECT && (!selectionOnly || it.id in state.selectedPhotoIds) }
+            .map { it.id }
+        if (ids.isEmpty()) {
+            showMessage("No rejected photos here")
+            return
+        }
+        viewModelScope.launch {
+            // Writing can create a sidecar, so the rows have to be read after this, not before.
+            writeQueue.flushNow()
+            val rows = repository.photosById(ids)
+            val plan = if (state.isDemo) {
+                RejectDeletion.rowsOnly(rows)
+            } else {
+                withContext(Dispatchers.IO) { RejectDeletion.plan(rows, deletions.apiLevel, deletions::mediaUri) }
+            }
+            _uiState.update { it.copy(deletionPrompt = plan) }
+        }
+    }
+
+    fun cancelDeletion() {
+        _uiState.update { it.copy(deletionPrompt = null) }
+    }
+
+    fun confirmDeletion() {
+        val plan = _uiState.value.deletionPrompt ?: return
+        _uiState.update { it.copy(deletionPrompt = null) }
+        val trash = plan.toTrash.mapNotNull { it.mediaUri }
+        if (trash.isEmpty()) {
+            viewModelScope.launch { finishDeletion(plan) }
+            return
+        }
+        pendingDeletion = plan
+        showTrashDialog(trash, restoring = false)
+    }
+
+    private fun showTrashDialog(mediaUris: List<String>, restoring: Boolean) {
+        try {
+            val sender = deletions.trashRequest(mediaUris, trashed = !restoring)
+            _uiState.update { it.copy(trashRequest = TrashRequest(sender, restoring)) }
+        } catch (e: RuntimeException) {
+            // Nothing has happened yet, and nothing must: the permanent part only follows the trash.
+            log("trashRequest failed: $e")
+            pendingDeletion = null
+            showMessage("Android refused the trash request, so nothing was deleted.")
+        }
+    }
+
+    /** The dialog is on its way; a rotation mustn't show it again. */
+    fun onTrashRequestLaunched() {
+        _uiState.update { it.copy(trashRequest = null) }
+    }
+
+    fun onTrashResult(approved: Boolean, restoring: Boolean) {
+        if (restoring) {
+            if (approved) onFilesRestored()
+            return
+        }
+        val plan = pendingDeletion ?: return
+        pendingDeletion = null
+        if (approved) {
+            viewModelScope.launch { finishDeletion(plan) }
+        } else {
+            showMessage("Nothing was deleted")
+        }
+    }
+
+    /** Runs after the trash, if there was one: cancelling that dialog never gets this far. */
+    private suspend fun finishDeletion(requested: DeletionPlan) {
+        // Sidecars can't go to the trash, so they're deleted for good here. If a photo somehow didn't
+        // go when the system said it did, its sidecar must stay with it.
+        val notTrashed = withContext(Dispatchers.IO) {
+            requested.toTrash.filter { deletions.documentExists(it.documentUri) }
+        }
+        val plan = requested.withoutPhotos(notTrashed.map { it.photoId }.toSet())
+        val failed = withContext(Dispatchers.IO) {
+            plan.toDelete.filterNot { deletions.deleteDocument(it.documentUri) }.map { it.documentUri }.toSet()
+        }
+        val outcome = RejectDeletion.outcome(plan, failed).let { it.copy(failedFiles = it.failedFiles + notTrashed.size) }
+        val folders = _uiState.value.photos.filter { it.id in outcome.removedIds.toHashSet() }.map { it.relativeDir }.toSet()
+        repository.removeRows(outcome.removedIds)
+        undoStack.dropIds(outcome.removedIds.toHashSet())
+        publishUndoState()
+        clearSelection()
+
+        val trashed = plan.toTrash.mapNotNull { it.mediaUri }
+        trashedFiles = trashed
+        trashedFolders = folders
+        val count = outcome.removedIds.size
+        val photos = if (count == 1) "1 photo" else "$count photos"
+        val done = if (trashed.isEmpty()) "$photos deleted" else "$photos moved to trash"
+        val problem = when (outcome.failedFiles) {
+            0 -> ""
+            1 -> " · 1 file couldn't be deleted"
+            else -> " · ${outcome.failedFiles} files couldn't be deleted"
+        }
+        log("deleted photos=$count trashed=${trashed.size} permanent=${plan.toDelete.size} failed=${outcome.failedFiles}")
+        _uiState.update {
+            it.copy(
+                snackbarMessage = done + problem,
+                snackbarAction = SnackbarAction.RESTORE.takeIf { trashed.isNotEmpty() },
+            )
+        }
+    }
+
+    /** Files deleted permanently are gone; this brings back what went to the trash. */
+    fun restoreTrashed() {
+        if (trashedFiles.isNotEmpty()) showTrashDialog(trashedFiles, restoring = true)
+    }
+
+    private fun onFilesRestored() {
+        val root = _uiState.value.rootUri
+        val folder = RejectDeletion.commonFolder(trashedFolders)
+        trashedFiles = emptyList()
+        trashedFolders = emptySet()
+        root?.let { scanCoordinator.rescanSubtree(it, folder) }
+    }
+
     // --- MULTI-SELECT ---
+
     /** Tracked from key events: a touch or mouse click can't say what's held on the keyboard. */
     fun onKeyboardModifiers(ctrl: Boolean, shift: Boolean) {
         ctrlHeld = ctrl
@@ -904,6 +1051,7 @@ class LibraryViewModel(
                     jobs = app.container.database.importJobDao(),
                     scanCoordinator = app.container.scanCoordinator,
                     writeQueue = app.container.xmpWriteQueue,
+                    deletions = app.container.deletionGateway,
                     startupFinished = { app.container.startup.await() },
                 )
             }
