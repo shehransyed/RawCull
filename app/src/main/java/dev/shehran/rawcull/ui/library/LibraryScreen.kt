@@ -322,7 +322,7 @@ private fun LibraryContent(
         }
 
         Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (folderPaneOpen) {
+            if (folderPaneOpen && !fullScreenPhoto) {
                 Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.width(FolderPaneWidth).fillMaxHeight()) {
                     FolderPane(uiState, folderActions)
                 }

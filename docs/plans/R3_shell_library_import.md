@@ -225,3 +225,106 @@ Full-screen destination (replaces `SettingsSheet`), grouped list, adaptive (two-
 10. Rotate on every screen (Library grid/loupe, each wizard step, progress, settings) on the tablet and phone: nothing resets. Phone landscape loupe uses the full screen. Resize a desktop/freeform window: layouts switch at the breakpoints.
 11. Relaunch → same Location, folder and selected photo.
 12. Copy and verify speeds (from `adb logcat -s RawCull.Import`) recorded in the notes with card, reader and destination.
+
+
+---
+
+## Implementation notes
+
+Done on `feature/r3-shell-library-import` from local `main` @ `73eb70f`. Not pushed, no PR, not merged. 15 commits: R3.0 to R3.13, plus one `fix(shell)` commit (`6ea8dbe`) for what running on an emulator turned up. `./gradlew testDebugUnitTest assembleDebug` passed after every commit; the suite grew from 199 to 437 tests.
+
+**Nothing here has run on real hardware.** There was no phone, tablet, card reader or real RAW file. Everything below marked verified was on emulators, with a virtual SD card and test files.
+
+### Versions (latest stable that compile against `compileSdk` 36.1)
+
+| Library | Chosen | Plan asked for | Why |
+|---|---|---|---|
+| Compose BOM | **2026.06.01** | ≥ 2026.09.00 | 2026.08.00 and later (Compose UI 1.12) need `compileSdk` 37 |
+| material3-adaptive (`adaptive`, `-layout`, `-navigation`) | **1.2.0** | 1.3.x | 1.3.0 needs `compileSdk` 37 |
+| lifecycle (all, incl. `viewmodel-navigation3`) | **2.10.0** | what Nav3 needs | `*-compose` and `viewmodel-navigation3` 2.11.0 need `compileSdk` 37 |
+| navigation3 | 1.2.1 | 1.2.x | |
+| material3-adaptive-navigation-suite | 1.4.0 (from the BOM) | from the BOM | |
+| work-runtime-ktx, work-testing | 2.12.0 | latest | |
+| activity-compose | 1.13.0 | not listed | bumped alongside, needed by the newer Compose |
+| room-testing | 2.7.0 | not listed | matches the repo's Room, for `MigrationTestHelper` |
+
+`adaptive-navigation3` isn't added, as the plan allowed, because it isn't used. `navigation-compose` is removed: nothing used it. `adaptive-layout` and `adaptive-navigation` are declared as R3.0 lists them, but no code calls them directly yet.
+
+### Deviations from the plan
+
+1. **Below the plan's minimum versions**, as above. The brief says to use versions that work with the repo's `compileSdk`, and `android-37` isn't installed.
+2. **`TabStacks` instead of `rememberNavBackStack`.** The latter needs `@Serializable` keys and so the kotlinx.serialization plugin. Keys encode to text through a plain `Saver`, the "or equivalent" of R3.4.
+3. **`import_job_items` has four extra columns:** `role`, `captureDate`, `metadataJson`, `assetDiscriminator`. The worker has to build a library row after process death, and the plan's columns can't say which file is the companion or carry the EXIF.
+4. **`RawCullViewModel` is gone** (the R3.5 question). `LibraryViewModel` took everything, with a small `ShellViewModel` for the active job.
+5. **HEIF is created as `application/octet-stream`,** not its format's MIME type, following the old export code: `.HIF` isn't an extension providers map to `image/heif`, so they'd append one.
+6. **Delete from card only applies to a detected removable volume.** With the setting on, importing from a folder picked by hand deletes nothing, because that folder may be someone's only copy. Tighter than D10, and the setting's text says so.
+7. **A lost destination pauses the job.** The plan only covers a lost source; without this, an unplugged USB SSD would fail every remaining file.
+8. **Sidecars don't count as conflicts.** An existing library sidecar is kept and the card's is skipped, because the library's is the source of truth and RawCull rewrites it, so it will often differ.
+9. **Cancel goes through the database.** `stopReason` is annotated API 31+ and `minSdk` is 24, so `ImportController.cancel` writes `CANCELLED` first and the notification action goes through a small receiver. Anything else that stops the worker reads as `PAUSED`.
+10. **`SidecarReconciler.exportBytes` and its tests are removed** (the R3.12 question). Sidecars are copied byte for byte; nothing merges on import.
+11. **The inspector starts closed below Large (1200 dp).** With all three panes at 840 dp only about 160 dp is left for the photo. It's one tap away and the culling bar docks under the photo instead. Differs from the spec table's "three panes" at Expanded.
+12. **The loupe hides the folder pane whenever height is Compact,** including phones in landscape that are Expanded by width. A real phone is about 915×412, which the spec's 640×360 doesn't represent.
+13. **Worker tests landed in R3.9** rather than R3.13, with the code they cover.
+14. **`ImportEngine` lives in `data/importer/`,** not `importer/`: it needs Room and `org.json`. It stays behind `DocumentIo`, and `ImportWorker` is a thin shell around it.
+15. **Import Profile "edit" in Settings is rename and delete.** Folder settings are edited in the wizard and saved there; Settings says so.
+16. **Licences links to the Apache 2.0 text;** there's no generated list of dependencies.
+17. **`SupportingPaneScaffold` and `ListDetailPaneScaffold` aren't used.** The panes are plain `Row`s driven by `WindowLayout` ("or equivalent"; the two-pane Settings was optional).
+18. **System bars aren't hidden in the landscape loupe.** "Immersive allowed", not required; the rail, panes and top bar all go.
+
+### Bugs that only running it found
+
+Worth reading, because unit tests were green for all of them.
+
+- **Crash opening ImportProgress and Settings.** Nav3's entry-scoped `ViewModelStoreOwner` has no `APPLICATION_KEY` in its creation extras. **The R3.10 and R3.11 commits build and pass on their own but crash on those screens**; `6ea8dbe` fixes it, so don't bisect a runtime problem to those two without it. `AdaptiveShellTest` now composes the real destinations.
+- A resumed job rewrote rows of finished groups with an empty `parentDocUri`, which would have broken later sidecar creation (found by a worker test).
+- The closed drawer extended over the rail; the landscape back arrow sat on the loupe's badges; "(modified)" showed on every session; the summary path counted hidden photos.
+
+### Measured throughput
+
+**Emulator only, so treat these as a check that the pipeline isn't the bottleneck, not as real numbers.** Tablet AVD, API 36, Windows host with WHPX. Source: a virtual vfat SD card on the host disk. Destination: internal shared storage. Files of 50 MiB (25 MiB for JPGs in job 5).
+
+| Job | Verify | Copied | Copy MB/s | Verify MB/s | First file |
+|---|---|---|---|---|---|
+| 3 (resumed after force-stop) | Full | 350 MiB | 155.9 | 651.7 | 502 ms |
+| 4, before the card was pulled | Full | 200 MiB | 151.1 | 391.5 | 516 ms |
+| 4, after Resume | Full | 200 MiB | 125.3 | 597.7 | 685 ms |
+| 5 | Quick | 300 MiB | 134.2 | n/a | 888 ms |
+| 1 (16 files of about 1.2 MB) | Full | 18 MiB | 25.0 | 46.5 | 594 ms |
+
+The screen showed about 89 MB/s end to end during a Full job. Full verify's speed is inflated by the page cache; see the open questions. Quick's logged `verifyMBs=1.9` only reflects opening each file for a 64 KB read, so it isn't a useful rate. **Acceptance item 12 (speeds with a real card, reader and destination) is still open.**
+
+### What was verified, and where
+
+- **Tablet AVD `Medium_Tablet` (API 36, 1280×800 dp):** the real import flow through the system picker, on a real removable vfat volume made with `sm set-virtual-disk`. `wm size` at density 320 for 360×640, 640×360, 600×960, 840×1280 and 1280×800 across Library grid, Loupe, Import and Settings, with no crashes; resizing doubled as a configuration change.
+- **Phone AVD `Medium_Phone_API_36.0` (API 36, about 411×914 dp):** empty state, demo library, drawer, loupe, Import, and a real rotation in both directions.
+- **Both AVDs:** `connectedDebugAndroidTest` 8 of 8, including the 4 → 5 migration with a `PENDING` row.
+- **Robolectric (`AdaptiveShellTest`):** the real shell at w360, w640-h360, w915-h412 and w1280.
+
+| # | Acceptance item | Result on emulator |
+|---|---|---|
+| 1 | Fresh install, empty state, demo | **Pass**, on both AVDs. Adding a Location shown through Import |
+| 2 | Card appears; picker at DCIM; next time no picker | **Pass** with the virtual card. The ~2 s detection wasn't timed; USB reader not tested |
+| 3 | Day grouping, dates, pairs, summary | **Pass** for grouping, dates, pairs and summary. Unticking and the space block are unit tests only |
+| 4 | Progress, background, folders, sidecars | **Partly.** Files, folders and sidecars pass. Running on with the screen locked or another app open wasn't tried, and the notification itself wasn't looked at |
+| 5 | Force-stop mid-import | **Pass.** Killed during a job; it resumed unaided about 15 to 30 s after relaunch; all 8 files SHA-256 identical on the device, no duplicates, no partial files |
+| 6 | Pull the card, Resume | **Pass** with `sm unmount`: `SOURCE_LOST` at 4 of 8, Resume refused while out, finished after remount, hashes identical |
+| 7 | Summary, Cull in Library, XMP | **Partly.** Summary and Latest Import pass, and Pick wrote XMP beside the library file keeping the existing label and rating. The *Cull in Library* button itself wasn't tapped |
+| 8 | Reimport hides everything | **Pass** |
+| 9 | Delete from card | **Pass.** All 8 gone from the card, library matched hashes taken before the import, other folders untouched. Partial failure is a unit test only |
+| 10 | Rotation, resizing | **Mostly.** Layouts switch at the breakpoints; the view mode survives. Each wizard step wasn't rotated individually, and a freely resized desktop window wasn't available (`wm size` stood in) |
+| 11 | Relaunch restores | **Partly.** Location and folder pass; the selected photo wasn't checked |
+| 12 | Speeds on real hardware | **Open** |
+
+Not exercised on a device, covered by unit tests only: Cancel and Retry failed, the space block, relink and remove, the legacy migration on a real upgrade from v4, conflict suffixes on a real provider. Not exercised at all: predictive back gestures, a hardware keyboard, the inspector bottom sheet, the Android 15 `dataSync` timeout, anything below API 36, and real RAW files (test `.ARW`s were JPEG data or random bytes, so CR3 and companion EXIF paths are unproven).
+
+### Open questions and known limitations
+
+1. **Move to `compileSdk` 37?** It would allow the plan's versions: BOM 2026.09, adaptive 1.3, lifecycle 2.11. It means installing the platform, and it's a repo-wide change, so it wasn't made here.
+2. **Full verify may read the page cache.** The copy is `fsync`ed on close, but the read-back right after can come from memory, so it proves what the kernel holds rather than what's on the medium. A cheap fix isn't available through SAF. Does this matter enough, given delete-from-card relies on it? A slower option is dropping the cache per file via `posix_fadvise` on the descriptor.
+3. **Time and average speed include time stopped.** A job paused for 40 s showed 00:44 and 9.5 MB/s. Fixing it needs an active-time column, so a schema change.
+4. **Resume after a force-stop waits for JobScheduler,** about 15 to 30 s here. Android may behave differently on a real device.
+5. **Old catalog rows for cards stay in `photo_assets`.** Cards were culled in place before R3 and aren't Locations, so those rows are unreachable. Harmless, but any `PENDING` XMP on them won't land until that card is back. Delete them in a later migration?
+6. **A scan during a copy can briefly list a partial file.** The worker corrects the row when the group lands, and `ScanMerger` no longer deletes rows the listing missed.
+7. **The on-disk `Undated` fallback uses the card's file date first (D6),** so `Undated` only appears for files with no date at all. Cameras with an unset clock will land in 1970-ish folders. Should implausible dates count as undated?
+8. **Folder-source grants** are kept while a job might resume and released at the next launch.
+9. **Large archives:** `LibraryViewModel` still holds a scope's rows in memory and filters them there. Fine at the sizes tested (tens of photos); untested at 100k. R4's filter work is a natural place to look.
