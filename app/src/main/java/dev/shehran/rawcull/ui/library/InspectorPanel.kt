@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.ui.components.CullingActionBar
+import dev.shehran.rawcull.ui.components.CullingHistory
 import dev.shehran.rawcull.ui.components.ExifInspectorPanel
 import dev.shehran.rawcull.ui.components.HistogramView
 import dev.shehran.rawcull.ui.theme.PrimaryCyan
@@ -40,6 +41,7 @@ class CullingActions(
     val onToggleReject: () -> Unit,
     val onSetRating: (Int) -> Unit,
     val onSetColorLabel: (ColorLabel) -> Unit,
+    val history: CullingHistory,
 )
 
 /** Histogram, EXIF and tags; a side pane on wide windows and a bottom sheet on narrow ones. */
@@ -67,6 +69,7 @@ fun InspectorPanel(
                 onToggleReject = it.onToggleReject,
                 onSetRating = it.onSetRating,
                 onSetColorLabel = it.onSetColorLabel,
+                history = it.history,
             )
         }
         HistogramView(histogram = uiState.currentHistogram)

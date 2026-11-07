@@ -20,8 +20,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Star
@@ -43,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.ui.theme.Dimens
+import dev.shehran.rawcull.ui.theme.PrimaryCyan
 import dev.shehran.rawcull.ui.theme.ControlSurface
 import dev.shehran.rawcull.ui.theme.DotOutlineWhite
 import dev.shehran.rawcull.ui.theme.PanelSurface
@@ -50,6 +54,44 @@ import dev.shehran.rawcull.ui.theme.RawCullTheme
 import dev.shehran.rawcull.ui.theme.StarEmpty
 import dev.shehran.rawcull.ui.theme.TextMuted
 import dev.shehran.rawcull.ui.theme.TextSecondary
+
+/** Undo, redo and the auto-advance toggle, which go wherever the culling buttons go. */
+class CullingHistory(
+    val canUndo: Boolean,
+    val canRedo: Boolean,
+    val autoAdvance: Boolean,
+    val onUndo: () -> Unit,
+    val onRedo: () -> Unit,
+    val onToggleAutoAdvance: () -> Unit,
+)
+
+@Composable
+private fun HistoryButtons(history: CullingHistory) {
+    IconButton(onClick = history.onUndo, enabled = history.canUndo, modifier = Modifier.size(Dimens.TouchTarget).testTag("undo_button")) {
+        Icon(
+            Icons.AutoMirrored.Filled.Undo,
+            contentDescription = "Undo",
+            tint = if (history.canUndo) Color.White else StarEmpty,
+        )
+    }
+    IconButton(onClick = history.onRedo, enabled = history.canRedo, modifier = Modifier.size(Dimens.TouchTarget).testTag("redo_button")) {
+        Icon(
+            Icons.AutoMirrored.Filled.Redo,
+            contentDescription = "Redo",
+            tint = if (history.canRedo) Color.White else StarEmpty,
+        )
+    }
+    IconButton(
+        onClick = history.onToggleAutoAdvance,
+        modifier = Modifier.size(Dimens.TouchTarget).testTag("auto_advance_toggle"),
+    ) {
+        Icon(
+            Icons.Default.FastForward,
+            contentDescription = if (history.autoAdvance) "Auto-advance on" else "Auto-advance off",
+            tint = if (history.autoAdvance) PrimaryCyan else TextMuted,
+        )
+    }
+}
 
 @Composable
 fun CullingActionBar(
@@ -60,6 +102,7 @@ fun CullingActionBar(
     onToggleReject: () -> Unit,
     onSetRating: (Int) -> Unit,
     onSetColorLabel: (ColorLabel) -> Unit,
+    history: CullingHistory,
     modifier: Modifier = Modifier,
     dense: Boolean = false, // Drops the labels, which don't fit a 360 dp phone next to 48 dp targets
 ) {
@@ -117,11 +160,11 @@ fun CullingActionBar(
                             tint = pickText,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(if (dense) 2.dp else 6.dp))
                         Text(
-                            text = "PICK [P]",
+                            text = if (dense) "PICK" else "PICK [P]",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
+                            fontSize = if (dense) 12.sp else 13.sp,
                             color = pickText
                         )
                     }
@@ -155,18 +198,27 @@ fun CullingActionBar(
                             tint = rejectText,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(if (dense) 2.dp else 6.dp))
                         Text(
-                            text = "REJECT [X]",
+                            text = if (dense) "REJECT" else "REJECT [X]",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
+                            fontSize = if (dense) 12.sp else 13.sp,
                             color = rejectText
                         )
                     }
                 }
+
+                if (dense) HistoryButtons(history)
             }
 
-            Spacer(modifier = Modifier.height(if (dense) 2.dp else 14.dp))
+            if (!dense) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) { HistoryButtons(history) }
+            }
+
+            Spacer(modifier = Modifier.height(if (dense) 2.dp else 8.dp))
 
             // 0 - 5 Star Rating Row
             Row(
@@ -296,6 +348,7 @@ fun CullingSideBar(
     onToggleReject: () -> Unit,
     onSetRating: (Int) -> Unit,
     onSetColorLabel: (ColorLabel) -> Unit,
+    history: CullingHistory,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -307,6 +360,7 @@ fun CullingSideBar(
             .testTag("culling_side_bar"),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        HistoryButtons(history)
         IconButton(onClick = onTogglePick, modifier = Modifier.size(Dimens.TouchTarget).testTag("pick_button")) {
             Icon(
                 Icons.Default.Check,

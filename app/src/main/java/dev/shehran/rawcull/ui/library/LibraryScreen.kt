@@ -44,6 +44,7 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -84,6 +85,7 @@ import dev.shehran.rawcull.library.LibraryKeyAction
 import dev.shehran.rawcull.library.LibraryScope
 import dev.shehran.rawcull.ui.components.CompareLoupeView
 import dev.shehran.rawcull.ui.components.CullingActionBar
+import dev.shehran.rawcull.ui.components.CullingHistory
 import dev.shehran.rawcull.ui.components.CullingSideBar
 import dev.shehran.rawcull.ui.components.FilmstripBar
 import dev.shehran.rawcull.ui.components.GridViewGallery
@@ -157,8 +159,12 @@ fun LibraryScreen(
     LaunchedEffect(uiState.snackbarMessage) {
         uiState.snackbarMessage?.let { message ->
             // Clearing first would change this effect's key and cancel the snackbar.
-            snackbarHostState.showSnackbar(message)
+            val result = snackbarHostState.showSnackbar(
+                message = message,
+                actionLabel = "Undo".takeIf { uiState.snackbarOffersUndo },
+            )
             viewModel.onSnackbarShown()
+            if (result == SnackbarResult.ActionPerformed) viewModel.undo()
         }
     }
 
@@ -376,6 +382,14 @@ private fun LibraryContent(
         onToggleReject = viewModel::toggleReject,
         onSetRating = viewModel::setRating,
         onSetColorLabel = viewModel::setColorLabel,
+        history = CullingHistory(
+            canUndo = uiState.canUndo,
+            canRedo = uiState.canRedo,
+            autoAdvance = uiState.advancesAfterEdits,
+            onUndo = viewModel::undo,
+            onRedo = viewModel::redo,
+            onToggleAutoAdvance = { viewModel.setAutoAdvance(!uiState.autoAdvance) },
+        ),
     )
     // On a phone on its side the photo gets the whole screen, so the bar moves out of its way.
     val fullScreenPhoto = immersive && layout.isHeightCompact
@@ -509,6 +523,8 @@ private fun LibraryMainView(
             onRejectA = { viewModel.setCullStatus(CullStatus.REJECT) },
             onRejectB = { swapThenCull(uiState, viewModel, CullStatus.REJECT) },
             zoomRequest = uiState.zoomRequest,
+            swipeToFlag = uiState.swipeToFlag,
+            onSwipe = viewModel::onSwipe,
             modifier = Modifier.fillMaxSize(),
         )
         DamViewMode.LOUPE -> {
@@ -521,6 +537,8 @@ private fun LibraryMainView(
                         onSyncChipClick = viewModel::showSyncDetails,
                         zoomRequest = uiState.zoomRequest,
                         autoAdvance = uiState.advancesAfterEdits,
+                        swipeToFlag = uiState.swipeToFlag,
+                        onSwipe = viewModel::onSwipe,
                         modifier = Modifier.fillMaxSize(),
                     )
                     if (fullScreenPhoto) {
@@ -556,6 +574,7 @@ private fun LibraryMainView(
                         onToggleReject = culling.onToggleReject,
                         onSetRating = culling.onSetRating,
                         onSetColorLabel = culling.onSetColorLabel,
+                        history = culling.history,
                     )
                 }
             } else {
@@ -570,6 +589,7 @@ private fun LibraryMainView(
                             onToggleReject = culling.onToggleReject,
                             onSetRating = culling.onSetRating,
                             onSetColorLabel = culling.onSetColorLabel,
+                            history = culling.history,
                             dense = true,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         )

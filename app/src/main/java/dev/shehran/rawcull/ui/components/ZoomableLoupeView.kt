@@ -5,7 +5,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,6 +52,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -62,6 +62,7 @@ import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.library.LoupeSwipe
 import dev.shehran.rawcull.ui.theme.FormatBadgeOrange
 import dev.shehran.rawcull.ui.theme.FormatBadgePurple
 import dev.shehran.rawcull.ui.theme.LoupeBackground
@@ -85,9 +86,13 @@ fun ZoomableLoupeView(
     onSyncChipClick: () -> Unit,
     zoomRequest: Int = 0,
     autoAdvance: Boolean = false,
+    swipeToFlag: Boolean = false,
+    onSwipe: ((LoupeSwipe) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    val swipe = rememberLoupeSwipeState()
     var previewBitmap by remember(photo?.id) { mutableStateOf<Bitmap?>(null) }
     var isLoading by remember(photo?.id) { mutableStateOf(value = true) }
 
@@ -148,11 +153,12 @@ fun ZoomableLoupeView(
                     }
                 )
             }
-            .pointerInput(photo?.id) {
-                detectTransformGestures { _, pan, zoom, _ ->
+            .loupeGestures(
+                key = photo?.id,
+                isZoomed = { scale > 1f },
+                onTransform = { pan, zoom, size ->
                     val newScale = (scale * zoom).coerceIn(1f, 6f)
                     scale = newScale
-
                     offset = if (newScale > 1f) {
                         val maxPanX = (size.width * (newScale - 1f)) / 2f
                         val maxPanY = (size.height * (newScale - 1f)) / 2f
@@ -163,8 +169,16 @@ fun ZoomableLoupeView(
                     } else {
                         Offset.Zero
                     }
-                }
-            }
+                },
+                state = swipe,
+                swipeToFlag = swipeToFlag,
+                onSwipe = onSwipe?.let { handler ->
+                    { committed ->
+                        haptics.onSwipeCommitted(committed)
+                        handler(committed)
+                    }
+                },
+            )
             .testTag("zoomable_loupe_container"),
         contentAlignment = Alignment.Center
     ) {
@@ -177,8 +191,8 @@ fun ZoomableLoupeView(
                     .graphicsLayer {
                         scaleX = scale
                         scaleY = scale
-                        translationX = offset.x
-                        translationY = offset.y
+                        translationX = offset.x + swipe.offset.x
+                        translationY = offset.y + swipe.offset.y
                     }
                     .testTag("loupe_raw_image"),
                 contentScale = ContentScale.Fit
@@ -206,6 +220,8 @@ fun ZoomableLoupeView(
                 style = MaterialTheme.typography.bodyMedium
             )
         }
+
+        SwipeBadge(swipe, Modifier.align(Alignment.Center))
 
         // Top-Left Overlays: File format, Star Rating, Cull Badge
         if (photo != null) {

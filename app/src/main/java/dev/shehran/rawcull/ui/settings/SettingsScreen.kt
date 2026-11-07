@@ -169,6 +169,22 @@ fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) 
                     )
                 }
 
+                SectionHeader("CULLING")
+                SwitchRow(
+                    title = "Auto-advance",
+                    detail = "Moves to the next photo after each flag, rating or label. Caps Lock does the same on a keyboard.",
+                    checked = uiState.cullingPrefs.autoAdvance,
+                    tag = "settings_auto_advance",
+                    onCheckedChange = viewModel::setAutoAdvance,
+                )
+                SwitchRow(
+                    title = "Swipe to flag",
+                    detail = "In the loupe, swipe up to pick and down to reject.",
+                    checked = uiState.cullingPrefs.swipeToFlag,
+                    tag = "settings_swipe_to_flag",
+                    onCheckedChange = viewModel::setSwipeToFlag,
+                )
+
                 SectionHeader("SIDECARS")
                 SwitchRow(
                     title = "Write rejects as rating −1",

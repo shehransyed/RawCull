@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,9 +43,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -54,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.library.LoupeSwipe
 import dev.shehran.rawcull.ui.theme.BarSurface
 import dev.shehran.rawcull.ui.theme.CompareBackground
 import dev.shehran.rawcull.ui.theme.ControlSurface
@@ -75,9 +75,13 @@ fun CompareLoupeView(
     onRejectA: () -> Unit,
     onRejectB: () -> Unit,
     zoomRequest: Int,
+    swipeToFlag: Boolean,
+    onSwipe: (LoupeSwipe) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    val swipe = rememberLoupeSwipeState()
     var bitmapA by remember(photoA?.id) { mutableStateOf<Bitmap?>(null) }
     var bitmapB by remember(photoB?.id) { mutableStateOf<Bitmap?>(null) }
     var loadingA by remember(photoA?.id) { mutableStateOf(value = true) }
@@ -172,8 +176,10 @@ fun CompareLoupeView(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .pointerInput(Unit) {
-                    detectTransformGestures { _, pan, zoom, _ ->
+                .loupeGestures(
+                    key = photoA?.id,
+                    isZoomed = { sharedScale > 1f },
+                    onTransform = { pan, zoom, size ->
                         val newScale = (sharedScale * zoom).coerceIn(1f, 5f)
                         sharedScale = newScale
                         sharedOffset = if (newScale > 1f) {
@@ -186,8 +192,14 @@ fun CompareLoupeView(
                         } else {
                             Offset.Zero
                         }
-                    }
-                }
+                    },
+                    state = swipe,
+                    swipeToFlag = swipeToFlag,
+                    onSwipe = { committed ->
+                        haptics.onSwipeCommitted(committed)
+                        onSwipe(committed)
+                    },
+                )
         ) {
             // Pane A (Left / Top)
             ComparePane(
@@ -196,7 +208,8 @@ fun CompareLoupeView(
                 bitmap = bitmapA,
                 isLoading = loadingA,
                 scale = sharedScale,
-                offset = sharedOffset,
+                offset = sharedOffset + swipe.offset, // Swipes act on the selected photo, so only it moves
+                swipe = swipe,
                 onPick = onPickA,
                 onReject = onRejectA,
                 modifier = Modifier.weight(1f).border(1.dp, CyanOutline)
@@ -229,6 +242,7 @@ private fun ComparePane(
     onPick: () -> Unit,
     onReject: () -> Unit,
     modifier: Modifier = Modifier,
+    swipe: LoupeSwipeState? = null,
 ) {
     Box(
         modifier = modifier
@@ -255,6 +269,8 @@ private fun ComparePane(
         } else {
             Text("No photo", color = TextMuted, style = MaterialTheme.typography.bodySmall)
         }
+
+        swipe?.let { SwipeBadge(it, Modifier.align(Alignment.Center)) }
 
         // Top Info Overlay
         if (photo != null) {

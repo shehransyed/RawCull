@@ -39,6 +39,7 @@ import dev.shehran.rawcull.library.LibraryFilter
 import dev.shehran.rawcull.library.LibraryRestore
 import dev.shehran.rawcull.library.LibraryScope
 import dev.shehran.rawcull.library.LibraryView
+import dev.shehran.rawcull.library.LoupeSwipe
 import dev.shehran.rawcull.library.UndoStack
 import dev.shehran.rawcull.ui.SelectionLogic
 import dev.shehran.rawcull.util.HistogramCalculator
@@ -92,6 +93,7 @@ data class LibraryUiState(
     val latestImport: ImportJob? = null,
     val latestImportPhotoCount: Int = 0,
     val snackbarMessage: String? = null,
+    val snackbarOffersUndo: Boolean = false,
     val isScanning: Boolean = false,
     val isRefreshing: Boolean = false,
     val scanProgress: Float? = null, // Null while the total isn't known yet
@@ -405,7 +407,7 @@ class LibraryViewModel(
             undoStack.push(change)
             publishUndoState()
             write(change)
-            if (isBatch) showMessage(change.summary)
+            if (isBatch) _uiState.update { it.copy(snackbarMessage = change.summary, snackbarOffersUndo = true) }
         }
         val tagging = edit is CullEdit.AddTag || edit is CullEdit.RemoveTag
         if (!isBatch && !tagging && (advance || state.autoAdvance)) advanceFrom(targets.single(), change)
@@ -445,6 +447,15 @@ class LibraryViewModel(
         write(change)
         change.ids.firstOrNull { it in visibleIdSet }?.let(::selectPhoto)
         showMessage("$verb: ${change.summary}")
+    }
+
+    fun onSwipe(swipe: LoupeSwipe) {
+        when (swipe) {
+            LoupeSwipe.PICK -> togglePick()
+            LoupeSwipe.REJECT -> toggleReject()
+            LoupeSwipe.NEXT -> nextPhoto()
+            LoupeSwipe.PREVIOUS -> previousPhoto()
+        }
     }
 
     fun togglePick() = apply(CullEdit.Flag(CullStatus.PICK))
@@ -762,7 +773,7 @@ class LibraryViewModel(
     }
 
     fun onSnackbarShown() {
-        _uiState.update { it.copy(snackbarMessage = null) }
+        _uiState.update { it.copy(snackbarMessage = null, snackbarOffersUndo = false) }
     }
 
     // --- DIALOGS ---

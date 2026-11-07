@@ -11,6 +11,7 @@ import dev.shehran.rawcull.data.local.ImportPresetDao
 import dev.shehran.rawcull.data.model.ImportPreset
 import dev.shehran.rawcull.data.model.LibraryLocation
 import dev.shehran.rawcull.data.model.VerifyMode
+import dev.shehran.rawcull.data.repository.CullingPrefs
 import dev.shehran.rawcull.data.repository.ImportPrefs
 import dev.shehran.rawcull.data.repository.LocationChange
 import dev.shehran.rawcull.data.repository.LocationRepository
@@ -28,6 +29,7 @@ data class SettingsUiState(
     val presets: List<ImportPreset> = emptyList(),
     val importPrefs: ImportPrefs = ImportPrefs(),
     val rejectAsNegativeRating: Boolean = true,
+    val cullingPrefs: CullingPrefs = CullingPrefs(),
     val message: String? = null,
 )
 
@@ -51,6 +53,7 @@ class SettingsViewModel(
         }
         viewModelScope.launch { presets.observeAll().collect { list -> _uiState.update { it.copy(presets = list) } } }
         viewModelScope.launch { settings.importPrefs.collect { prefs -> _uiState.update { it.copy(importPrefs = prefs) } } }
+        viewModelScope.launch { settings.cullingPrefs.collect { prefs -> _uiState.update { it.copy(cullingPrefs = prefs) } } }
         viewModelScope.launch {
             settings.xmpPrefs.collect { prefs ->
                 _uiState.update { it.copy(rejectAsNegativeRating = prefs.rejectAsNegativeRating) }
@@ -100,6 +103,14 @@ class SettingsViewModel(
 
     fun setRejectAsNegativeRating(enabled: Boolean) {
         viewModelScope.launch { settings.setRejectAsNegativeRating(enabled) }
+    }
+
+    fun setAutoAdvance(enabled: Boolean) {
+        viewModelScope.launch { settings.setAutoAdvance(enabled) }
+    }
+
+    fun setSwipeToFlag(enabled: Boolean) {
+        viewModelScope.launch { settings.setSwipeToFlag(enabled) }
     }
 
     fun renamePreset(preset: ImportPreset, name: String) {
