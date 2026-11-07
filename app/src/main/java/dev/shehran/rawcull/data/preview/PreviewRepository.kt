@@ -37,7 +37,7 @@ enum class PreviewKind(val label: String) {
 
 /** What a picture really came from, for the UI to be honest about (D10). */
 data class PreviewSourceInfo(val kind: PreviewKind, val width: Int, val height: Int) {
-    val description: String get() = "${kind.label} $width × $height"
+    val description: String get() = if (width > 0 && height > 0) "${kind.label} $width × $height" else kind.label
 }
 
 /** The largest source there is for a photo, and which way up its pixels are. */
@@ -113,6 +113,9 @@ interface PreviewRepository {
     ): PreviewResult
 
     suspend fun regionSource(source: PreviewSource): RegionSource?
+
+    /** The largest source there is for a photo, for the inspector (D10). From the index when it has the scan. */
+    suspend fun fullSource(source: PreviewSource): FullSource?
 
     /** Replaces what's waiting in [lane]: anything not in [requests] is cancelled. */
     fun prefetch(requests: List<PrefetchRequest>, lane: PreviewLane = PreviewLane.PREFETCH)

@@ -1,18 +1,13 @@
 package dev.shehran.rawcull.ui.components
 
-import android.graphics.Bitmap
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,7 +22,6 @@ import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ZoomIn
-import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,7 +31,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,19 +38,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PhotoAsset
@@ -73,10 +61,6 @@ import dev.shehran.rawcull.ui.theme.RawCullTheme
 import dev.shehran.rawcull.ui.theme.ScrimMedium
 import dev.shehran.rawcull.ui.theme.ScrimStrong
 import dev.shehran.rawcull.ui.theme.TextMuted
-import dev.shehran.rawcull.ui.theme.TextSecondary
-import dev.shehran.rawcull.util.RawPreviewLoader
-
-private const val ONE_TO_ONE_SCALE = 2.5f
 
 @Composable
 fun ZoomableLoupeView(
@@ -90,45 +74,18 @@ fun ZoomableLoupeView(
     onSwipe: ((LoupeSwipe) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val swipe = rememberLoupeSwipeState()
-    var previewBitmap by remember(photo?.id) { mutableStateOf<Bitmap?>(null) }
-    var isLoading by remember(photo?.id) { mutableStateOf(value = true) }
-
-    var scale by remember(photo?.id) { mutableFloatStateOf(1f) }
-    var offset by remember(photo?.id) { mutableStateOf(Offset.Zero) }
+    val zoom = rememberLoupeZoomState()
+    var content by remember(photo?.id) { mutableStateOf(LoupeContent(null, null)) }
 
     // Only a press made while this view is up counts, not one left over from before it opened.
     var handledZoomRequest by remember { mutableIntStateOf(zoomRequest) }
     LaunchedEffect(zoomRequest) {
         if (zoomRequest != handledZoomRequest) {
             handledZoomRequest = zoomRequest
-            scale = if (scale > 1.2f) 1f else ONE_TO_ONE_SCALE
-            offset = Offset.Zero
+            zoom.toggle()
         }
-    }
-
-    LaunchedEffect(photo?.id) {
-        if (photo == null) {
-            previewBitmap = null
-            isLoading = false
-            return@LaunchedEffect
-        }
-        isLoading = true
-        val uri = photo.fileUri.toUri()
-        val jpegUri = photo.companionFileUri?.toUri()
-        val bmp = RawPreviewLoader.loadPreview(
-            context = context,
-            uri = uri,
-            id = photo.previewCacheKey,
-            format = photo.format,
-            targetWidth = 2560,
-            targetHeight = 1600,
-            companionUri = jpegUri,
-        )
-        previewBitmap = bmp
-        isLoading = false
     }
 
     Box(
@@ -137,39 +94,12 @@ fun ZoomableLoupeView(
             .clip(RoundedCornerShape(8.dp))
             .background(LoupeBackground)
             .pointerInput(photo?.id) {
-                detectTapGestures(
-                    onDoubleTap = { tapOffset ->
-                        if (scale > 1.2f) {
-                            scale = 1f
-                            offset = Offset.Zero
-                        } else {
-                            scale = 2.5f
-                            // Center on tap
-                            offset = Offset(
-                                (size.width / 2f - tapOffset.x) * 1.5f,
-                                (size.height / 2f - tapOffset.y) * 1.5f
-                            )
-                        }
-                    }
-                )
+                detectTapGestures(onDoubleTap = { tapOffset -> zoom.toggle(tapOffset) })
             }
             .loupeGestures(
                 key = photo?.id,
-                isZoomed = { scale > 1f },
-                onTransform = { pan, zoom, size ->
-                    val newScale = (scale * zoom).coerceIn(1f, 6f)
-                    scale = newScale
-                    offset = if (newScale > 1f) {
-                        val maxPanX = (size.width * (newScale - 1f)) / 2f
-                        val maxPanY = (size.height * (newScale - 1f)) / 2f
-                        Offset(
-                            x = (offset.x + pan.x).coerceIn(-maxPanX, maxPanX),
-                            y = (offset.y + pan.y).coerceIn(-maxPanY, maxPanY)
-                        )
-                    } else {
-                        Offset.Zero
-                    }
-                },
+                isZoomed = { !zoom.isAtFit },
+                onTransform = { pan, zoomBy, centroid, _ -> zoom.transform(pan, zoomBy, centroid) },
                 state = swipe,
                 swipeToFlag = swipeToFlag,
                 onSwipe = onSwipe?.let { handler ->
@@ -182,36 +112,21 @@ fun ZoomableLoupeView(
             .testTag("zoomable_loupe_container"),
         contentAlignment = Alignment.Center
     ) {
-        if (previewBitmap != null) {
-            Image(
-                bitmap = previewBitmap!!.asImageBitmap(),
-                contentDescription = photo?.fileName ?: "RAW Photo",
+        if (photo != null) {
+            LoupeImage(
+                photo = photo,
+                zoom = zoom,
+                onContent = { content = it },
+                placeholder = { CircularProgressIndicator(color = PrimaryCyan, modifier = Modifier.size(44.dp)) },
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        translationX = offset.x + swipe.offset.x
-                        translationY = offset.y + swipe.offset.y
-                    }
-                    .testTag("loupe_raw_image"),
-                contentScale = ContentScale.Fit
+                        translationX = swipe.offset.x
+                        translationY = swipe.offset.y
+                    },
             )
-        } else if (isLoading) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                CircularProgressIndicator(
-                    color = PrimaryCyan,
-                    modifier = Modifier.size(44.dp)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "Decoding RAW sensor data...",
-                    color = TextSecondary,
-                    style = MaterialTheme.typography.bodySmall
-                )
+            content.unavailable?.let { reason ->
+                Text(text = reason, color = TextMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("loupe_unavailable"))
             }
         } else {
             Text(
@@ -374,10 +289,11 @@ fun ZoomableLoupeView(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "${(scale * 100).toInt()}%",
+                        text = zoomPillText(zoom, sensorLongEdge = photo?.let { maxOf(it.width, it.height) } ?: 0),
                         color = Color.White,
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.testTag("zoom_pill_text"),
                     )
                 }
             }
@@ -387,22 +303,14 @@ fun ZoomableLoupeView(
                 modifier = Modifier
                     .clip(CircleShape)
                     .testTag("one_to_one_zoom_button"),
-                color = if (scale > 1.2f) PrimaryCyanVariant else PillSurface
+                color = if (!zoom.isAtFit) PrimaryCyanVariant else PillSurface
             ) {
                 IconButton(
-                    onClick = {
-                        if (scale > 1.2f) {
-                            scale = 1f
-                            offset = Offset.Zero
-                        } else {
-                            scale = ONE_TO_ONE_SCALE
-                            offset = Offset.Zero
-                        }
-                    },
-                    modifier = Modifier.size(36.dp)
+                    onClick = { zoom.toggle(focus = null) },
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
-                        imageVector = if (scale > 1.2f) Icons.Default.FitScreen else Icons.Default.ZoomIn,
+                        imageVector = if (!zoom.isAtFit) Icons.Default.FitScreen else Icons.Default.ZoomIn,
                         contentDescription = "Toggle 100% Loupe",
                         tint = Color.White,
                         modifier = Modifier.size(18.dp)

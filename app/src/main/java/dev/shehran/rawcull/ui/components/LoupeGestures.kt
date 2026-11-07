@@ -5,6 +5,7 @@ import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Box
@@ -80,7 +81,7 @@ fun rememberLoupeSwipeState(): LoupeSwipeState {
 fun Modifier.loupeGestures(
     key: Any?,
     isZoomed: () -> Boolean,
-    onTransform: (pan: Offset, zoom: Float, size: IntSize) -> Unit,
+    onTransform: (pan: Offset, zoom: Float, centroid: Offset, size: IntSize) -> Unit,
     state: LoupeSwipeState,
     swipeToFlag: Boolean,
     onSwipe: ((LoupeSwipe) -> Unit)?,
@@ -107,7 +108,7 @@ fun Modifier.loupeGestures(
                 val zoom = event.calculateZoom()
                 val pan = event.calculatePan()
                 if (zoom != 1f || pan != Offset.Zero) {
-                    onTransform(pan, zoom, size)
+                    onTransform(pan, zoom, event.calculateCentroid(useCurrent = true), size)
                     event.changes.forEach { it.consume() }
                 }
             } else if (onSwipe != null) {

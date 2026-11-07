@@ -148,7 +148,9 @@ private class PlatformRegionDecoder(
         return try {
             decoder.decodeRegion(Rect(rect.left, rect.top, rect.right, rect.bottom), options)
         } catch (e: IllegalArgumentException) {
-            null // The rectangle fell outside the image, or the decoder was recycled
+            null // The rectangle fell outside the image
+        } catch (e: IllegalStateException) {
+            null // Closed while a decode was on its way
         }
     }
 

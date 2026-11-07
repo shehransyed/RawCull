@@ -290,6 +290,20 @@ class DefaultPreviewRepository(
         }
     }
 
+    override suspend fun fullSource(source: PreviewSource): FullSource? = withContext(io) {
+        try {
+            Request(source).use { request ->
+                PreviewChooser.pick(pool(source, request), PreviewRequest.FullResolution)
+                    ?.let { FullSource(info(source, it), it.orientation) }
+                    ?: platformTarget(source)?.let { FullSource(PreviewSourceInfo(it.second, 0, 0), 1) }
+            }
+        } catch (e: IOException) {
+            null
+        } catch (e: SecurityException) {
+            null
+        }
+    }
+
     private suspend fun openRegion(source: PreviewSource, request: Request): RegionSource? {
         val entry = PreviewChooser.pick(pool(source, request), PreviewRequest.FullResolution)
         if (entry == null) {

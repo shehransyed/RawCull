@@ -26,6 +26,8 @@ class FakePreviewRepository : PreviewRepository {
 
     override suspend fun regionSource(source: PreviewSource): RegionSource? = null
 
+    override suspend fun fullSource(source: PreviewSource): FullSource? = null
+
     override fun prefetch(requests: List<PrefetchRequest>, lane: PreviewLane) {
         prefetches += lane to requests
     }

@@ -23,6 +23,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import dev.shehran.rawcull.data.preview.FullSource
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -205,6 +208,21 @@ fun ExifInspectorPanel(
                     label = "XMP Sidecar",
                     value = "${photo.sidecarFileName} (${photo.xmpSyncStatus.label})"
                 )
+
+                // What the loupe really shows at 100 % (D10)
+                val previews = LocalPreviewRepository.current
+                val previewSource = rememberPreviewSource(photo)
+                val full by produceState<FullSource?>(null, previewSource.key, previews) {
+                    value = previews?.fullSource(previewSource)
+                }
+                full?.let {
+                    MetadataRow(
+                        icon = Icons.Default.Info,
+                        label = "Preview",
+                        value = it.info.description,
+                        modifier = Modifier.testTag("inspector_preview_source"),
+                    )
+                }
             }
         }
     }

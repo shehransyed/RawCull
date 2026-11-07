@@ -1,7 +1,5 @@
 package dev.shehran.rawcull.ui.components
 
-import android.graphics.Bitmap
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -31,26 +29,19 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.library.LoupeSwipe
@@ -64,7 +55,6 @@ import dev.shehran.rawcull.ui.theme.PrimaryCyan
 import dev.shehran.rawcull.ui.theme.RawCullTheme
 import dev.shehran.rawcull.ui.theme.ScrimStrong
 import dev.shehran.rawcull.ui.theme.TextMuted
-import dev.shehran.rawcull.util.RawPreviewLoader
 
 @Composable
 fun CompareLoupeView(
@@ -79,42 +69,27 @@ fun CompareLoupeView(
     onSwipe: (LoupeSwipe) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val swipe = rememberLoupeSwipeState()
-    var bitmapA by remember(photoA?.id) { mutableStateOf<Bitmap?>(null) }
-    var bitmapB by remember(photoB?.id) { mutableStateOf<Bitmap?>(null) }
-    var loadingA by remember(photoA?.id) { mutableStateOf(value = true) }
-    var loadingB by remember(photoB?.id) { mutableStateOf(value = true) }
-
-    // Synchronized zoom & pan state
-    var sharedScale by remember { mutableFloatStateOf(1f) }
-    var sharedOffset by remember { mutableStateOf(Offset.Zero) }
+    // One zoom per pane, driven together: each pane goes to its own 100 %.
+    val zoomA = rememberLoupeZoomState()
+    val zoomB = rememberLoupeZoomState()
+    val zoomed = !zoomA.isAtFit || !zoomB.isAtFit
+    val toggle = {
+        if (zoomed) {
+            zoomA.reset()
+            zoomB.reset()
+        } else {
+            zoomA.toggle(focus = null)
+            zoomB.toggle(focus = null)
+        }
+    }
 
     var handledZoomRequest by remember { mutableIntStateOf(zoomRequest) }
     LaunchedEffect(zoomRequest) {
         if (zoomRequest != handledZoomRequest) {
             handledZoomRequest = zoomRequest
-            sharedScale = if (sharedScale > 1.2f) 1f else 2.5f
-            sharedOffset = Offset.Zero
-        }
-    }
-
-    LaunchedEffect(photoA?.id) {
-        if (photoA != null) {
-            loadingA = true
-            val jpegUriA = photoA.companionFileUri?.toUri()
-            bitmapA = RawPreviewLoader.loadPreview(context, photoA.fileUri.toUri(), photoA.previewCacheKey, photoA.format, 1920, 1200, companionUri = jpegUriA)
-            loadingA = false
-        }
-    }
-
-    LaunchedEffect(photoB?.id) {
-        if (photoB != null) {
-            loadingB = true
-            val jpegUriB = photoB.companionFileUri?.toUri()
-            bitmapB = RawPreviewLoader.loadPreview(context, photoB.fileUri.toUri(), photoB.previewCacheKey, photoB.format, 1920, 1200, companionUri = jpegUriB)
-            loadingB = false
+            toggle()
         }
     }
 
@@ -144,26 +119,19 @@ fun CompareLoupeView(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "${(sharedScale * 100).toInt()}%",
+                    text = "${zoomA.percent}% · ${zoomB.percent}%",
                     color = Color.White,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(end = 8.dp)
+                    modifier = Modifier.padding(end = 8.dp).testTag("compare_zoom_text")
                 )
 
                 IconButton(
-                    onClick = {
-                        if (sharedScale > 1.2f) {
-                            sharedScale = 1f
-                            sharedOffset = Offset.Zero
-                        } else {
-                            sharedScale = 2.5f
-                        }
-                    },
-                    modifier = Modifier.size(32.dp).testTag("compare_zoom_toggle")
+                    onClick = toggle,
+                    modifier = Modifier.size(48.dp).testTag("compare_zoom_toggle")
                 ) {
                     Icon(
-                        imageVector = if (sharedScale > 1.2f) Icons.Default.FitScreen else Icons.Default.ZoomIn,
+                        imageVector = if (zoomed) Icons.Default.FitScreen else Icons.Default.ZoomIn,
                         contentDescription = "Toggle Zoom",
                         tint = PrimaryCyan
                     )
@@ -178,20 +146,11 @@ fun CompareLoupeView(
                 .fillMaxWidth()
                 .loupeGestures(
                     key = photoA?.id,
-                    isZoomed = { sharedScale > 1f },
-                    onTransform = { pan, zoom, size ->
-                        val newScale = (sharedScale * zoom).coerceIn(1f, 5f)
-                        sharedScale = newScale
-                        sharedOffset = if (newScale > 1f) {
-                            val maxPanX = (size.width * (newScale - 1f)) / 2f
-                            val maxPanY = (size.height * (newScale - 1f)) / 2f
-                            Offset(
-                                (sharedOffset.x + pan.x).coerceIn(-maxPanX, maxPanX),
-                                (sharedOffset.y + pan.y).coerceIn(-maxPanY, maxPanY)
-                            )
-                        } else {
-                            Offset.Zero
-                        }
+                    isZoomed = { zoomed },
+                    // The panes sit side by side, so a pinch zooms each around its own centre.
+                    onTransform = { pan, zoomBy, _, _ ->
+                        zoomA.transform(pan, zoomBy, centroid = null)
+                        zoomB.transform(pan, zoomBy, centroid = null)
                     },
                     state = swipe,
                     swipeToFlag = swipeToFlag,
@@ -205,11 +164,8 @@ fun CompareLoupeView(
             ComparePane(
                 title = "Candidate A (Selected)",
                 photo = photoA,
-                bitmap = bitmapA,
-                isLoading = loadingA,
-                scale = sharedScale,
-                offset = sharedOffset + swipe.offset, // Swipes act on the selected photo, so only it moves
-                swipe = swipe,
+                zoom = zoomA,
+                swipe = swipe, // Swipes act on the selected photo, so only it moves
                 onPick = onPickA,
                 onReject = onRejectA,
                 modifier = Modifier.weight(1f).border(1.dp, CyanOutline)
@@ -219,10 +175,7 @@ fun CompareLoupeView(
             ComparePane(
                 title = "Candidate B (Comparison)",
                 photo = photoB,
-                bitmap = bitmapB,
-                isLoading = loadingB,
-                scale = sharedScale,
-                offset = sharedOffset,
+                zoom = zoomB,
                 onPick = onPickB,
                 onReject = onRejectB,
                 modifier = Modifier.weight(1f).border(1.dp, HairlineWhite)
@@ -235,10 +188,7 @@ fun CompareLoupeView(
 private fun ComparePane(
     title: String,
     photo: PhotoAsset?,
-    bitmap: Bitmap?,
-    isLoading: Boolean,
-    scale: Float,
-    offset: Offset,
+    zoom: LoupeZoomState,
     onPick: () -> Unit,
     onReject: () -> Unit,
     modifier: Modifier = Modifier,
@@ -250,22 +200,18 @@ private fun ComparePane(
             .background(CompareBackground),
         contentAlignment = Alignment.Center
     ) {
-        if (bitmap != null) {
-            Image(
-                bitmap = bitmap.asImageBitmap(),
-                contentDescription = photo?.fileName ?: title,
+        if (photo != null) {
+            LoupeImage(
+                photo = photo,
+                zoom = zoom,
+                placeholder = { CircularProgressIndicator(color = PrimaryCyan, modifier = Modifier.size(36.dp)) },
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        translationX = offset.x
-                        translationY = offset.y
+                        translationX = swipe?.offset?.x ?: 0f
+                        translationY = swipe?.offset?.y ?: 0f
                     },
-                contentScale = ContentScale.Fit
             )
-        } else if (isLoading) {
-            CircularProgressIndicator(color = PrimaryCyan, modifier = Modifier.size(36.dp))
         } else {
             Text("No photo", color = TextMuted, style = MaterialTheme.typography.bodySmall)
         }
