@@ -2,6 +2,7 @@ package dev.shehran.rawcull
 
 import android.content.Context
 import android.util.Log
+import dev.shehran.rawcull.data.importer.CardVolumes
 import dev.shehran.rawcull.data.local.AppDatabase
 import dev.shehran.rawcull.data.local.RawPhotoDao
 import dev.shehran.rawcull.data.repository.LocationRepository
@@ -45,6 +46,7 @@ class AppContainer(context: Context) {
         flushXmp = { xmpWriteQueue.flushNow() },
         isGrantInUse = { treeUri -> treeUri in settingsRepository.volumeGrants.first().values },
     )
+    val cardVolumes: CardVolumes = CardVolumes(appContext)
     val scanCoordinator: ScanCoordinator =
         ScanCoordinator(appContext, database, photoDao, applicationScope, sidecarStores, xmpWriteQueue)
 }

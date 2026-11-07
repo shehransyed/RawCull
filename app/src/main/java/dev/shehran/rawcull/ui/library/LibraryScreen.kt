@@ -1,10 +1,5 @@
 package dev.shehran.rawcull.ui.library
 
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -73,11 +68,9 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -92,6 +85,7 @@ import dev.shehran.rawcull.ui.components.CullingSideBar
 import dev.shehran.rawcull.ui.components.ExportDialog
 import dev.shehran.rawcull.ui.components.FilmstripBar
 import dev.shehran.rawcull.ui.components.GridViewGallery
+import dev.shehran.rawcull.ui.components.StorageChangeEffect
 import dev.shehran.rawcull.ui.components.SyncDetailsDialog
 import dev.shehran.rawcull.ui.components.TagManagerDialog
 import dev.shehran.rawcull.ui.components.ZoomableLoupeView
@@ -567,26 +561,5 @@ private fun onLibraryKey(action: LibraryKeyAction, viewModel: LibraryViewModel) 
         LibraryKeyAction.Next -> viewModel.nextPhoto()
         LibraryKeyAction.ToggleCompare -> viewModel.toggleCompareMode()
         LibraryKeyAction.ShowAllPhotos -> viewModel.setScope(LibraryScope.All)
-    }
-}
-
-/** Nothing reads a volume while idle, so unplugging it has to be noticed from the outside. */
-@Composable
-private fun StorageChangeEffect(onChanged: () -> Unit) {
-    val context = LocalContext.current
-    DisposableEffect(context) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) = onChanged()
-        }
-        val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_MEDIA_MOUNTED)
-            addAction(Intent.ACTION_MEDIA_UNMOUNTED)
-            addAction(Intent.ACTION_MEDIA_EJECT)
-            addAction(Intent.ACTION_MEDIA_REMOVED)
-            addAction(Intent.ACTION_MEDIA_BAD_REMOVAL)
-            addDataScheme("file")
-        }
-        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
-        onDispose { context.unregisterReceiver(receiver) }
     }
 }

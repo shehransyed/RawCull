@@ -40,6 +40,8 @@ import androidx.navigation3.runtime.rememberDecoratedNavEntries
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import dev.shehran.rawcull.data.model.ImportJob
+import dev.shehran.rawcull.ui.importer.ImportSourceScreen
+import dev.shehran.rawcull.ui.importer.ImportViewModel
 import dev.shehran.rawcull.ui.library.LibraryScreen
 import dev.shehran.rawcull.ui.library.LibraryViewModel
 
@@ -59,6 +61,7 @@ fun RawCullApp(
     libraryViewModel: LibraryViewModel,
     modifier: Modifier = Modifier,
     shellViewModel: ShellViewModel = viewModel(factory = ShellViewModel.Factory),
+    importViewModel: ImportViewModel = viewModel(factory = ImportViewModel.Factory),
 ) {
     val layout = rememberWindowLayout()
     val stacks = rememberSaveable(saver = TabStacks.Saver) { TabStacks() }
@@ -94,7 +97,7 @@ fun RawCullApp(
                 }
             },
         ) {
-            AppNavDisplay(stacks, activeJob, libraryViewModel, onImmersiveChange = { immersive = it })
+            AppNavDisplay(stacks, activeJob, libraryViewModel, importViewModel, onImmersiveChange = { immersive = it })
         }
     }
 }
@@ -111,6 +114,7 @@ private fun AppNavDisplay(
     stacks: TabStacks,
     activeJob: ImportJob?,
     libraryViewModel: LibraryViewModel,
+    importViewModel: ImportViewModel,
     onImmersiveChange: (Boolean) -> Unit,
 ) {
     val entryProvider: (AppKey) -> NavEntry<AppKey> = { key ->
@@ -127,7 +131,11 @@ private fun AppNavDisplay(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                AppKey.ImportSource, AppKey.ImportPreview, is AppKey.ImportProgress -> ComingNext("Import")
+                AppKey.ImportSource -> ImportSourceScreen(
+                    viewModel = importViewModel,
+                    onNext = { stacks.push(AppKey.ImportPreview, TopLevelTab.IMPORT) },
+                )
+                AppKey.ImportPreview, is AppKey.ImportProgress -> ComingNext("Import")
                 AppKey.Settings -> ComingNext("Settings")
             }
         }
