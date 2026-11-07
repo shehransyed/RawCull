@@ -18,7 +18,10 @@ import dev.shehran.rawcull.data.model.LibraryLocation
 import dev.shehran.rawcull.data.repository.LocationChange
 import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.SettingsRepository
+import dev.shehran.rawcull.importer.ImportCandidate
 import dev.shehran.rawcull.importer.ImportDestination
+import dev.shehran.rawcull.importer.ImportSession
+import dev.shehran.rawcull.importer.ImportSessionState
 import dev.shehran.rawcull.importer.ImportSource
 import dev.shehran.rawcull.ui.library.LocationUi
 import dev.shehran.rawcull.util.SafPermissions
@@ -40,7 +43,9 @@ data class ImportUiState(
     val locations: List<LocationUi> = emptyList(),
     val message: String? = null,
     val pendingCardPick: CardVolume? = null, // Waiting for the user to read the DCIM hint
+    val session: ImportSessionState = ImportSessionState.Idle,
 ) {
+    val candidates: List<ImportCandidate> get() = session.candidateList
     val selectedPreset: ImportPreset? get() = presets.firstOrNull { it.id == selectedPresetId }
     val isDraftModified: Boolean get() = selectedPreset?.sameSettingsAs(draft) == false
     val destination: LibraryLocation?
@@ -49,8 +54,8 @@ data class ImportUiState(
         get() = locations.firstOrNull { it.location.id == draft.locationId }?.isAvailable == true
     val destinationLocations: List<LocationUi> get() = locations.filterNot { it.location.isDemo }
     val hasDestination: Boolean get() = destination != null && isDestinationAvailable
-    val firstPhotoDate: Long? get() = null
-    val canContinue: Boolean get() = false
+    val firstPhotoDate: Long? get() = candidates.mapNotNull { it.folderDate }.minOrNull()
+    val canContinue: Boolean get() = candidates.isNotEmpty() && hasDestination
 }
 
 /** Holds the wizard: the source, the destination and, once scanned, what to bring in. */
@@ -60,6 +65,7 @@ class ImportViewModel(
     private val locations: LocationRepository,
     private val presets: ImportPresetDao,
     private val volumes: CardVolumes,
+    private val session: ImportSession,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ImportUiState())
     val uiState: StateFlow<ImportUiState> = _uiState.asStateFlow()
@@ -68,6 +74,7 @@ class ImportViewModel(
 
     init {
         refreshCards()
+        viewModelScope.launch { session.state.collect { state -> _uiState.update { it.copy(session = state) } } }
         viewModelScope.launch {
             locations.observeAll().collect {
                 knownLocations = it
@@ -153,6 +160,7 @@ class ImportViewModel(
     /** A volume came or went, or the app came back to the front. */
     fun onStorageChanged() {
         refreshCards()
+        session.onStorageChanged()
         viewModelScope.launch { refreshLocations() }
     }
 
@@ -209,6 +217,7 @@ class ImportViewModel(
 
     private fun selectSource(source: ImportSource) {
         _uiState.update { it.copy(source = source, pendingCardPick = null) }
+        session.start(source)
     }
 
     private fun showMessage(message: String) {
@@ -229,6 +238,7 @@ class ImportViewModel(
                     locations = app.container.locationRepository,
                     presets = app.container.database.importPresetDao(),
                     volumes = app.container.cardVolumes,
+                    session = app.container.importSession,
                 )
             }
         }

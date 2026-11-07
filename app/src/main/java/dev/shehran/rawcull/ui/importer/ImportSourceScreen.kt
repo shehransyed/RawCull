@@ -70,6 +70,7 @@ import dev.shehran.rawcull.data.importer.CardVolume
 import dev.shehran.rawcull.data.model.ImportPreset
 import dev.shehran.rawcull.data.model.StructureMode
 import dev.shehran.rawcull.importer.ImportDestination
+import dev.shehran.rawcull.importer.ImportSessionState
 import dev.shehran.rawcull.importer.PathTemplate
 import dev.shehran.rawcull.ui.components.StorageChangeEffect
 import dev.shehran.rawcull.ui.shell.LocalWindowLayout
@@ -315,6 +316,19 @@ private fun SourceStatus(uiState: ImportUiState) {
             color = Color.White,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(top = 4.dp).testTag("import_source_label"),
+        )
+        Text(
+            text = when (val session = uiState.session) {
+                ImportSessionState.Idle -> ""
+                is ImportSessionState.Scanning -> "Scanning: ${session.files} files in ${session.dirs} folders"
+                is ImportSessionState.Reading -> "${session.total} photos · reading dates ${session.done} / ${session.total}"
+                is ImportSessionState.Ready -> "${session.candidates.size} photos found"
+                ImportSessionState.SourceLost -> "Card disconnected. Reconnect it to continue."
+                ImportSessionState.Empty -> "No photos found here."
+            },
+            color = TextSecondary,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.testTag("import_scan_status"),
         )
     }
 }

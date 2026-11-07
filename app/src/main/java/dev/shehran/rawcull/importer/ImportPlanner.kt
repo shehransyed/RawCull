@@ -11,6 +11,7 @@ data class CandidateFile(
     val sizeBytes: Long,
     val role: ImportItemRole,
     val format: PhotoFormat? = null,
+    val alreadyImported: Boolean = false, // Found in the duplicate index
 )
 
 /** An asset found on the source: its image files, its sidecars and what is known about it. */
