@@ -59,7 +59,19 @@ android {
     compose = true
     buildConfig = true
   }
-  testOptions { unitTests { isIncludeAndroidResources = true } }
+  testOptions {
+    unitTests {
+      isIncludeAndroidResources = true
+      // Opt-in: real RAWs stay outside the repo. See RawSampleReportTest.
+      providers.gradleProperty("rawSamples").orNull?.let { samples ->
+        all { test ->
+          test.systemProperty("rawSamples", samples)
+          test.systemProperty("rawSamplesReport", layout.buildDirectory.file("reports/raw-samples.md").get().asFile.path)
+          test.outputs.upToDateWhen { false }
+        }
+      }
+    }
+  }
   // The XMP fixtures also run on a device, because Android's XML stack isn't the JDK's.
   sourceSets.getByName("androidTest").assets.directories.add("src/test/resources")
   // MigrationTestHelper reads the exported schemas from the test APK's assets.
