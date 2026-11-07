@@ -788,8 +788,9 @@ class LibraryViewModel(
         }
     }
 
+    /** A plain message: it must not inherit the action of whatever it replaces. */
     private fun showMessage(message: String) {
-        _uiState.update { it.copy(snackbarMessage = message) }
+        _uiState.update { it.copy(snackbarMessage = message, snackbarAction = null) }
     }
 
     fun onSnackbarShown() {

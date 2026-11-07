@@ -1,6 +1,6 @@
 # RawCull — Implementation Plan: Round 4 (Culling UX + reject deletion)
 
-Status: **READY FOR CLAUDE CODE** · Planned 2026-11-07 · Base: local branch `feature/r3-shell-library-import` @ `a53eccb` (R3 done, on-device testing in progress, not merged into `main` yet)
+Status: **IMPLEMENTED, D12 failed at 50k rows (see Implementation notes), on-device testing to do** · Planned 2026-11-07 · Base: local branch `feature/r3-shell-library-import` @ `a53eccb` (R3 done, on-device testing in progress, not merged into `main` yet)
 Overview of the whole overhaul: `00_workflow_overhaul_overview.md`. R5 (previews), R6 (extras) and R7 (design pass) are out of scope here.
 
 ## Goal
@@ -168,3 +168,111 @@ In `dev.shehran.rawcull.library` (or `ui/library/logic/`, following the code):
 8. Re-import the card those rejects came from: they show as *Imported* and are hidden.
 9. Debug build: add 50,000 synthetic photos to the demo library; changing filters stays snappy (note the `RawCull.Library` ms from logcat); scrolling doesn't stutter.
 10. Rotate and resize on the filter bar / sheet, multi-select and loupe: nothing resets.
+
+---
+
+## Implementation notes
+
+Done on local `feature/r4-culling-ux`, branched from `feature/r3-shell-library-import` @ `a53eccb`, which got no new commits during the work. Not pushed, no PR, nothing merged. One commit per task, R4.0 to R4.10. `./gradlew testDebugUnitTest assembleDebug` passed after every commit; the suite grew from 437 to 552 tests.
+
+**Nothing here has run on real hardware.** Everything marked verified was on emulators with test files. The test RAWs are JPEG data with a `.ARW` name, so real RAW files, a real keyboard, a real mouse and haptics are all unproven.
+
+### Stop-and-report: D12 failed at 50,000 rows
+
+**A 50,000-photo library crashes the app with `OutOfMemoryError` after a few edits, and each edit takes about 6 seconds to appear.** The plan says to stop and report here, so nothing was re-architected.
+
+Tablet AVD, API 36, WHPX, software GPU, 192 MB heap limit, 50,008 rows:
+
+| Measure | Result | Budget |
+|---|---|---|
+| `LibraryFilter` step, warm (8 samples) | 47 to 163 ms | ≤ 150 ms |
+| Same, cold at launch | 246 ms | |
+| Same, desktop JVM, best of 5 (rows already in date order) | 5 to 10 ms | |
+| Edit to updated list | **5.9 and 6.7 s** | none set |
+| Third edit in a row | **crash**: `OutOfMemoryError` in `RawPhotoDao_Impl.observeScopeMatching` | |
+| Java heap after launch | 79 MB (PSS 220 MB) | |
+| Scrolling, 80 frames | 27.5 % janky, p50 32 ms, p90 46 ms, p99 81 ms | no dropped frames |
+
+- The filter itself is close to budget; one sample in eight was over, on an emulator. **The problem is Room:** every edit re-reads all rows, and the XMP queue's status updates trigger more reads. Holding the old list while building a new one is what exhausts the heap.
+- Scrolling numbers come from a software renderer, so they say little about the tablet.
+- Relaunching at 50k works, and so does removing the synthetic rows. Nothing on the tablet was measured.
+- Sizes tested before this were tens of photos. Where the edit delay becomes noticeable between those and 50k wasn't measured.
+
+Options, for a separate decision: move filtering into Room with Paging; keep slim rows in memory (id, flags, dates) and load the rest on demand; or apply edits to the in-memory list and stop re-reading on every change. `android:largeHeap` would only delay the crash.
+
+### Decisions you may want to revisit
+
+1. **Restore doesn't bring sidecars back.** MediaStore can't trash an `.xmp`, so sidecars are deleted permanently, as D8 says. A restored photo returns unflagged, with its rating and anything else in the sidecar gone, including Lightroom's settings. The dialog says how many files are permanent, but not that they're the sidecars. The XMP rule says sidecars are the source of truth, so this is worth a look: RawCull could keep a private copy until the trash expires, or move sidecars into a `.trashed` name of its own.
+2. **Toggles on a selection** only switch off when every target already has the value, so a mixed selection pressed `4` ends up all at 4. The plan didn't say which way this should go.
+
+### Trash behaviour observed
+
+Tablet AVD, API 36. Each row was run through RawCull's dialog and the system dialog, checking the folder with `ls -a`.
+
+| Storage | Photos | `.xmp` | Deny | Restore |
+|---|---|---|---|---|
+| Internal shared storage | Trash: `.trashed-<time>-R1.ARW` | Permanent | Nothing changed, sidecars included | ARW and JPG back, sidecars not; R1's rating 3 lost |
+| Virtual SD card (vfat, removable) | Trash | Permanent | Nothing changed | ARW and JPG back, sidecars not |
+| Folder with `.nomedia` | Trash, although listed `media_type=0` | Permanent | Not run | Not run |
+| Generic `.RAW` on the SD card (`application/octet-stream`) | **Permanent**: "This can't be undone", no system dialog, gone | Permanent | n/a | n/a |
+| **API 29** | **Not verified**: no API 29 image, and no `sdkmanager` or `avdmanager` here. Planner and ViewModel tests cover `apiLevel = 29` | | | |
+| **USB drive** | **Not verified** | | | |
+
+No truly unindexed folder could be made on shared storage: even `.nomedia` files have MediaStore rows. ARW, JPG and HIF (`image/heif`) all have image MIME types here. Other RAW formats weren't tried; one with no image MIME type would go down the permanent path, with the warning.
+
+### Deviations from the plan
+
+1. **`getMediaUri` → `createTrashRequest` doesn't work as written.** `getMediaUri` returns `content://media/<volume>/file/<id>` for everything, and `createTrashRequest` refuses that with "All requested items must be Media items". `SafDeletionGateway` rebuilds the URI in the Images collection by id when the document's MIME type is `image/*`.
+2. **Trash check added.** After the system says yes, any group with a file still on disk skips its permanent part and is reported, so a sidecar can't be deleted when its photo wasn't. Not in the plan.
+3. **`WalkPolicy` doesn't handle `.trashed-` files.** It only covers directories; `AssetGrouper` drops all dot files, so the test is there.
+4. **D14 went ahead:** `compileSdk` 37, Compose BOM 2026.09.00, adaptive 1.3.0, lifecycle 2.11.0, `targetSdk` still 36. AGP installed `android-37.0` itself, since this machine has no `sdkmanager`.
+5. **`LibraryKeymap` takes a `LibraryKey` enum,** not Compose's `Key`, to stay free of Android types. `ui/library/LibraryKeys.kt` maps between them.
+6. **`FilterOptions` was never persisted before,** so "the old persisted shape" means the old field names. The decoder is kept and tested anyway. It uses `org.json`, so it lives in `data/repository/` with a Robolectric test rather than plain JUnit.
+7. **Filters use one key per Location** (`library_filters_<id>`, `library_filters_enabled_<id>`), like `expanded_folders_<id>`, rather than one map. `syncErrorsOnly` isn't stored.
+8. **The format and `RAW+JPG` chips stay** in the bar and sheet, though the plan's list omits them; dropping them would lose a feature.
+9. **The filter bar wraps** to two or three lines. On one scrolling line Search, Sort and Clear were off-screen at 1280 dp. `\` hides it.
+10. **The contextual bar replaces the title row only.** Replacing the whole top bar moved the tiles under the finger when a selection started.
+11. **`PhotoCatalog` interface added,** so the ViewModel can run on a fake.
+12. **Added to the debug tools:** "Remove the synthetic photos", so a device can be cleaned up.
+13. **D16 keeps `ERROR` and `READ_ONLY` rows** too, since only `SYNCED` rows go.
+14. **`Shift`/`Ctrl` clicks read the modifiers from key events,** not pointer events.
+15. **A batch never auto-advances,** and neither do tag edits.
+16. **Undated photos sort last in both directions.**
+17. **Plausible dates are applied in `ImportSession`,** so the preview, planner and target folder all follow without engine changes. A library row's stored `dateTaken` isn't rewritten; the date sort applies the rule.
+18. **Row up and down use the new `GridNavigation`,** which the plan didn't list, because sections start new rows.
+
+### Bugs that only running it found
+
+Unit tests were green for all of these.
+
+- Long press and release deselected the photo at once: the lift reached the tile as a click. **Every plain long press was broken.**
+- The grid's own scrolling took over selection drags, stopping them at one photo.
+- `Esc` didn't close sheets, which are separate windows.
+- A snackbar after a deletion could show **Restore** on an unrelated message, and tapping it would have restored files.
+- At 1280 dp the filter bar hid its most-used controls.
+
+Test-only problems, for anyone extending `LibraryViewModelTest`: DataStore outlives a test while Location ids restart at 1, so each test seeds its own id range; a ViewModel's scope has to be cancelled in `tearDown`, or it races the next test's `Dispatchers.setMain`; and a `runBlocking` DataStore write in `setUp` deadlocks on Robolectric's main thread.
+
+### What was verified, and where
+
+- **R4.1, no visual change:** grid and loupe at 1280×800 and 360×640 are pixel-identical to R4.0 below the status bar, using builds confirmed by APK hash. A first comparison against a freshly cleared app differed in photos and histogram only; a same-state control showed that came from app state, not R4.1. The exact cause wasn't found.
+- **Update check (tablet AVD):** installed the real `a53eccb` build, added a Location, picked, rejected, rated, set Verify to Quick and imported from the virtual card. `adb install -r` to 0.6.0 with no uninstall: 9 photos, the pick and reject, ratings 4/3/2/3, Latest Import, the folder tree, the selected photo and Verify = Quick all survived. Settings → About shows 0.6.0. Only this final build was installed over R3; every commit carries `versionCode` 6 and the same key, but they weren't each install-tested.
+- **Size matrix, tablet AVD via `wm size`:** 360×640, 640×360, 600×960, 840×1280, 1280×800: grid, loupe and help sheet by screenshot, and the selection survived every resize, with no crashes. The accessibility dump failed at the two largest sizes, so those rest on screenshots.
+- **Keys, tablet AVD, injected with `adb input`** (a virtual keyboard, not a real one): `P` `X` `U`, `2` `4` `6`, `Ctrl+Z`, `Ctrl+Shift+Z`, `E` `G` `Z`, arrows, Home/End, `\`, `Ctrl+A/D/F/K/L/Backspace`, `Ctrl+/`, `?`, the `Esc` ladder, typing into search. Caps Lock is unit-tested only.
+- **Touch, tablet AVD:** swipe up, down, left, right, a short swipe, a drag while zoomed, long press, drag-select with batch rate and one undo restoring 5/4/1/5, and Back clearing it. Pinch wasn't exercised.
+- **Auto-advance:** four picks through a filter visited all four photos, none skipped, and four undos restored them.
+- **D9:** deleted an imported reject and re-scanned the card: it stayed hidden as imported.
+- **Robolectric:** `LibraryCullingUiTest` at w360, w640-h360 and w1280; `LibraryViewModelTest` on a fake catalog.
+- **Both AVDs (`Medium_Tablet`, `Medium_Phone_API_36.0`):** `connectedDebugAndroidTest` 9 of 9, including the 4 → 5 and 5 → 6 migrations with data and the XMP fixtures. Run per serial; the attached real device received nothing.
+
+### Not exercised
+
+Mouse and `Shift`/`Ctrl` clicks; Caps Lock on a real key; haptics (no motor on an emulator); pinch; compare-view swipes; edge auto-scroll during a drag; predictive back animation; anything below API 36; filters remembered across a real Location switch (ViewModel test only); the 20 % swipe threshold by feel.
+
+### Open questions and known limitations
+
+1. **What to do about D12.** See above. It's the main decision before anyone relies on a large library.
+2. **Should Restore keep sidecars?** See above.
+3. **Worktree cleanup.** `git worktree prune` removed nothing, because the `r2-trustworthy-xmp-handoff-1ffc50` and `r3-shell-library-import-4d1efc` folders still exist. They were left alone.
+4. **Batches of thousands in one trash request** weren't tried; the URIs travel through a single system call and may hit a size limit.
+5. **At 360 dp the zoom pill overlaps the status badges in the loupe.** Already so in R3; left for R7.
