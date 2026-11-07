@@ -4,6 +4,7 @@ import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.RatingOperator
 import dev.shehran.rawcull.data.model.SortOrder
 import dev.shehran.rawcull.data.model.XmpSyncStatus
@@ -21,6 +22,8 @@ data class FilterCounts(
     val paired: Int = 0,
     val saving: Int = 0,
     val syncErrors: Int = 0,
+    val formats: Set<PhotoFormat> = emptySet(),
+    val companionFormats: Set<PhotoFormat> = emptySet(),
 )
 
 data class LibraryView(
@@ -106,19 +109,23 @@ object LibraryFilter {
         var paired = 0
         var saving = 0
         var syncErrors = 0
+        val formats = HashSet<PhotoFormat>()
+        val companionFormats = HashSet<PhotoFormat>()
         rows.forEach { photo ->
             flags.merge(photo.cullStatus, 1, Int::plus)
             ratings.merge(photo.rating, 1, Int::plus)
             colors.merge(photo.colorLabel, 1, Int::plus)
             photo.tags.forEach { tags.merge(it, 1, Int::plus) }
             if (photo.hasCompanion) paired++
+            formats += photo.format
+            photo.companionFormat?.let { companionFormats += it }
             when (photo.xmpSyncStatus) {
                 XmpSyncStatus.PENDING, XmpSyncStatus.WRITING -> saving++
                 XmpSyncStatus.ERROR -> syncErrors++
                 else -> Unit
             }
         }
-        return FilterCounts(rows.size, flags, ratings, colors, tags, paired, saving, syncErrors)
+        return FilterCounts(rows.size, flags, ratings, colors, tags, paired, saving, syncErrors, formats, companionFormats)
     }
 
     private val SortOrder.groupsByFolder: Boolean

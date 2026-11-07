@@ -122,6 +122,8 @@ fun LibraryScreen(
     var showHelp by rememberSaveable { mutableStateOf(false) }
     var chromeHidden by rememberSaveable { mutableStateOf(false) }
     var filterBarChoice by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    var showFilterSheet by rememberSaveable { mutableStateOf(false) }
+    var focusSearch by remember { mutableStateOf(false) }
     var textFieldFocused by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val folderPaneOpen = layout.showsFolderPane && (folderPaneChoice ?: true)
@@ -186,8 +188,15 @@ fun LibraryScreen(
 
     val keyFocus = remember { FocusRequester() }
     // Dialogs and sheets are windows of their own, so focus has to be taken back when they close.
-    val overlayOpen = showHelp || showInspectorSheet || uiState.showTagDialog || uiState.syncDetailsPhoto != null
-    LaunchedEffect(overlayOpen) { if (!overlayOpen) keyFocus.requestFocus() }
+    val filterSheetOpen = showFilterSheet && !layout.showsFilterBar
+    val overlayOpen = showHelp || showInspectorSheet || filterSheetOpen ||
+        uiState.showTagDialog || uiState.syncDetailsPhoto != null
+    LaunchedEffect(overlayOpen) {
+        if (!overlayOpen) {
+            textFieldFocused = false
+            keyFocus.requestFocus()
+        }
+    }
 
     val filterBarVisible = filterBarChoice ?: !layout.isHeightCompact
     val keyActions = LibraryKeyHandlers(
@@ -198,7 +207,10 @@ fun LibraryScreen(
         },
         onToggleChrome = { chromeHidden = !chromeHidden },
         onToggleFilterBar = { filterBarChoice = !filterBarVisible },
-        onFocusSearch = { filterBarChoice = true },
+        onFocusSearch = {
+            if (layout.showsFilterBar) filterBarChoice = true else showFilterSheet = true
+            focusSearch = true
+        },
         onShowHelp = { showHelp = true },
         onEscape = {
             if (textFieldFocused) {
@@ -208,6 +220,14 @@ fun LibraryScreen(
                 viewModel.stepBack()
             }
         },
+    )
+
+    val filterActions = FilterActions(
+        onUpdate = viewModel::updateFilter,
+        onClear = viewModel::clearFilters,
+        onToggleEnabled = viewModel::toggleFilters,
+        onSearchFocusChanged = { textFieldFocused = it },
+        onSearchFocused = { focusSearch = false },
     )
 
     Box(
@@ -259,6 +279,9 @@ fun LibraryScreen(
                     filterBarVisible = filterBarVisible,
                     onToggleFilterBar = keyActions.onToggleFilterBar,
                     onShowShortcuts = keyActions.onShowHelp,
+                    filterActions = filterActions,
+                    focusSearch = focusSearch,
+                    onOpenFilterSheet = { showFilterSheet = true },
                     folderActions = folderActions,
                     onToggleFolders = {
                         if (layout.showsFolderPane) {
@@ -291,6 +314,19 @@ fun LibraryScreen(
         }
     }
     if (showHelp) ShortcutHelpSheet(onDismiss = { showHelp = false })
+    if (filterSheetOpen) {
+        ModalBottomSheet(
+            onDismissRequest = { showFilterSheet = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+        ) {
+            FilterSheetContent(
+                uiState = uiState,
+                actions = filterActions,
+                focusSearch = focusSearch,
+                modifier = Modifier.dismissOnEscape(takeFocus = !focusSearch) { showFilterSheet = false },
+            )
+        }
+    }
     if (uiState.showTagDialog) {
         TagManagerDialog(
             currentTags = uiState.currentPhoto?.tags.orEmpty(),
@@ -321,6 +357,9 @@ private fun LibraryContent(
     filterBarVisible: Boolean,
     onToggleFilterBar: () -> Unit,
     onShowShortcuts: () -> Unit,
+    filterActions: FilterActions,
+    focusSearch: Boolean,
+    onOpenFilterSheet: () -> Unit,
     folderActions: FolderPaneActions,
     onToggleFolders: () -> Unit,
     onToggleInspector: () -> Unit,
@@ -347,11 +386,13 @@ private fun LibraryContent(
             LibraryTopBar(
                 uiState = uiState,
                 filterBarVisible = filterBarVisible,
+                filterActions = filterActions,
+                focusSearch = focusSearch,
+                onOpenFilterSheet = onOpenFilterSheet,
                 actions = LibraryTopBarActions(
                     onToggleFolders = onToggleFolders,
                     onToggleInspector = onToggleInspector,
                     onSetViewMode = viewModel::setViewMode,
-                    onUpdateFilter = viewModel::updateFilter,
                     onToggleFilterBar = onToggleFilterBar,
                     onToggleSyncErrors = viewModel::toggleSyncErrorFilter,
                     onShowShortcuts = onShowShortcuts,
@@ -443,6 +484,7 @@ private fun LibraryMainView(
                 onBatchPick = viewModel::batchPickSelected,
                 onBatchReject = viewModel::batchRejectSelected,
                 onColumnsChanged = viewModel::setGridColumns,
+                onClearFilters = viewModel::clearFilters.takeIf { uiState.totalCount > 0 },
                 modifier = Modifier.fillMaxSize(),
             )
         }

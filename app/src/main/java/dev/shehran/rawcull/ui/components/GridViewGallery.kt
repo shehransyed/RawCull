@@ -38,6 +38,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -91,6 +92,7 @@ fun GridViewGallery(
     onBatchPick: () -> Unit,
     onBatchReject: () -> Unit,
     onColumnsChanged: (Int) -> Unit,
+    onClearFilters: (() -> Unit)?, // Set when something in the scope is hidden, not when it's empty
     modifier: Modifier = Modifier,
 ) {
     val gridState = rememberLazyGridState()
@@ -122,10 +124,15 @@ fun GridViewGallery(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "No photos to show",
+                    text = if (onClearFilters != null) "No photos match" else "No photos to show",
                     color = TextMuted,
                     style = MaterialTheme.typography.bodyMedium
                 )
+                if (onClearFilters != null) {
+                    TextButton(onClick = onClearFilters, modifier = Modifier.testTag("clear_filters_button")) {
+                        Text("Clear filters", color = PrimaryCyan)
+                    }
+                }
             }
         } else {
             LazyVerticalGrid(

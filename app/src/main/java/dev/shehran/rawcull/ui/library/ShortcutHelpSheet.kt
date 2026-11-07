@@ -26,7 +26,7 @@ fun ShortcutHelpSheet(onDismiss: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .dismissOnEscape(onDismiss)
+                .dismissOnEscape(onDismiss = onDismiss)
                 .testTag("shortcut_help_sheet"),
         ) {
             item {

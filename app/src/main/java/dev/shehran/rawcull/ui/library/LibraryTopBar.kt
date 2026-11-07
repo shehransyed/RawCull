@@ -1,10 +1,7 @@
 package dev.shehran.rawcull.ui.library
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Compare
@@ -53,27 +49,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.shehran.rawcull.data.model.CullStatus
-import dev.shehran.rawcull.data.model.FilterOptions
-import dev.shehran.rawcull.data.model.PairMode
-import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.library.LibraryScope
-import dev.shehran.rawcull.ui.components.formatsPresent
-import dev.shehran.rawcull.ui.components.pairChipLabel
 import dev.shehran.rawcull.ui.components.syncCounterText
 import dev.shehran.rawcull.ui.shell.LocalWindowLayout
 import dev.shehran.rawcull.ui.theme.DarkroomSurfaceVariant
 import dev.shehran.rawcull.ui.theme.ErrorContainer
 import dev.shehran.rawcull.ui.theme.ErrorText
-import dev.shehran.rawcull.ui.theme.FormatCyan
-import dev.shehran.rawcull.ui.theme.FormatOrange
-import dev.shehran.rawcull.ui.theme.HairlineWhite
-import dev.shehran.rawcull.ui.theme.OutlineWhite
-import dev.shehran.rawcull.ui.theme.PairedMint
 import dev.shehran.rawcull.ui.theme.PrimaryCyan
 import dev.shehran.rawcull.ui.theme.PrimaryCyanVariant
 import dev.shehran.rawcull.ui.theme.RawCullTheme
-import dev.shehran.rawcull.ui.theme.TextChip
 import dev.shehran.rawcull.ui.theme.TextMuted
 import dev.shehran.rawcull.ui.theme.TextSecondary
 import dev.shehran.rawcull.ui.theme.WarningContainer
@@ -84,7 +68,6 @@ class LibraryTopBarActions(
     val onToggleFolders: () -> Unit,
     val onToggleInspector: () -> Unit,
     val onSetViewMode: (DamViewMode) -> Unit,
-    val onUpdateFilter: ((FilterOptions) -> FilterOptions) -> Unit,
     val onToggleFilterBar: () -> Unit,
     val onToggleSyncErrors: () -> Unit,
     val onShowShortcuts: () -> Unit,
@@ -99,6 +82,9 @@ fun LibraryTopBar(
     uiState: LibraryUiState,
     filterBarVisible: Boolean,
     actions: LibraryTopBarActions,
+    filterActions: FilterActions,
+    focusSearch: Boolean,
+    onOpenFilterSheet: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val layout = LocalWindowLayout.current
@@ -126,11 +112,13 @@ fun LibraryTopBar(
                         modifier = Modifier.testTag("library_title"),
                     )
                     Text(
-                        text = scopeSubtitle(uiState, showFullPath = layout.showsFolderPane),
+                        text = listOfNotNull(scopeSubtitle(uiState, showFullPath = layout.showsFolderPane), filterCountText(uiState))
+                            .joinToString(" · "),
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.testTag("library_subtitle"),
                     )
                 }
                 SyncCounter(uiState, actions.onToggleSyncErrors)
@@ -153,13 +141,26 @@ fun LibraryTopBar(
                 OverflowMenu(uiState, actions)
             }
 
-            if (filterBarVisible) FilterChipsRow(uiState, actions.onUpdateFilter)
+            if (filterBarVisible) {
+                if (layout.showsFilterBar) {
+                    FilterBar(uiState, filterActions, focusSearch)
+                } else {
+                    ActiveFilterRow(uiState, filterActions, onOpenFilterSheet)
+                }
+            }
             ScanProgressLine(uiState)
             if (!uiState.isLocationAvailable) {
                 LocationUnavailableBanner(actions.onRetryLocation, actions.onRelinkLocation)
             }
         }
     }
+}
+
+/** "137 of 842", only when the filters are hiding something. */
+private fun filterCountText(uiState: LibraryUiState): String? {
+    val shown = uiState.filteredPhotos.size
+    val total = uiState.totalCount
+    return if (shown < total) "$shown of $total" else null
 }
 
 private fun scopeSubtitle(uiState: LibraryUiState, showFullPath: Boolean): String {
@@ -276,105 +277,6 @@ private fun OverflowMenu(uiState: LibraryUiState, actions: LibraryTopBarActions)
                 modifier = Modifier.testTag("keyboard_shortcuts_button"),
             )
         }
-    }
-}
-
-@Composable
-private fun FilterChipsRow(uiState: LibraryUiState, onUpdateFilter: ((FilterOptions) -> FilterOptions) -> Unit) {
-    val filter = uiState.filterOptions
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        fun flags(vararg status: CullStatus): () -> Unit = { onUpdateFilter { it.copy(flags = status.toSet()) } }
-
-        DamFilterChip("All (${uiState.totalCount})", filter.flags.isEmpty(), onClick = flags())
-        DamFilterChip(
-            "Picks (${uiState.picksCount})",
-            filter.flags == setOf(CullStatus.PICK),
-            RawCullTheme.colors.pick,
-            flags(CullStatus.PICK),
-        )
-        DamFilterChip(
-            "Unflagged (${uiState.unflaggedCount})",
-            filter.flags == setOf(CullStatus.UNFLAGGED),
-            onClick = flags(CullStatus.UNFLAGGED),
-        )
-        DamFilterChip(
-            "Rejects (${uiState.rejectsCount})",
-            filter.flags == setOf(CullStatus.REJECT),
-            RawCullTheme.colors.reject,
-            flags(CullStatus.REJECT),
-        )
-
-        ChipDivider()
-
-        pairChipLabel(uiState.photos)?.let { label ->
-            DamFilterChip(
-                "$label (${uiState.pairedCount})",
-                filter.pairFilter == PairMode.RAW_AND_RASTER,
-                PairedMint,
-            ) {
-                onUpdateFilter {
-                    it.copy(pairFilter = if (it.pairFilter == PairMode.RAW_AND_RASTER) null else PairMode.RAW_AND_RASTER)
-                }
-            }
-        }
-        formatsPresent(uiState.photos).forEach { format ->
-            DamFilterChip(format.extension, filter.formatFilter == format, formatChipColor(format)) {
-                onUpdateFilter { it.copy(formatFilter = if (it.formatFilter == format) null else format) }
-            }
-        }
-
-        ChipDivider()
-
-        DamFilterChip("★ 5 Only", filter.rating == 5, RawCullTheme.colors.star) {
-            onUpdateFilter { it.copy(rating = if (it.rating == 5) 0 else 5) }
-        }
-        DamFilterChip("★ 3+ Stars", filter.rating == 3, RawCullTheme.colors.star) {
-            onUpdateFilter { it.copy(rating = if (it.rating == 3) 0 else 3) }
-        }
-    }
-}
-
-@Composable
-private fun ChipDivider() {
-    Box(modifier = Modifier.height(20.dp).width(1.dp).background(OutlineWhite))
-}
-
-private fun formatChipColor(format: PhotoFormat): Color = when (format) {
-    PhotoFormat.ARW -> FormatOrange
-    PhotoFormat.DNG -> FormatCyan
-    else -> PrimaryCyan
-}
-
-@Composable
-private fun DamFilterChip(
-    label: String,
-    selected: Boolean,
-    activeColor: Color = PrimaryCyan,
-    onClick: () -> Unit,
-) {
-    // The visible chip is small, but its touch target is the full 48 dp.
-    Box(
-        modifier = Modifier.clickable(onClick = onClick).minimumInteractiveComponentSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            color = if (selected) activeColor else TextChip,
-            fontSize = 11.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            modifier = Modifier
-                .clip(RoundedCornerShape(16.dp))
-                .background(if (selected) activeColor.copy(alpha = 0.2f) else DarkroomSurfaceVariant)
-                .border(1.dp, if (selected) activeColor else HairlineWhite, RoundedCornerShape(16.dp))
-                .padding(horizontal = 10.dp, vertical = 4.dp),
-        )
     }
 }
 

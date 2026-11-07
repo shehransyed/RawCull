@@ -1,12 +1,14 @@
 package dev.shehran.rawcull.ui
 
+import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.PairMode
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.data.model.SortOrder
+import dev.shehran.rawcull.library.LibraryFilter
 import dev.shehran.rawcull.ui.components.GridRow
 import dev.shehran.rawcull.ui.components.badgeText
 import dev.shehran.rawcull.ui.components.buildGridRows
-import dev.shehran.rawcull.ui.components.formatsPresent
 import dev.shehran.rawcull.ui.components.pairChipLabel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -122,20 +124,20 @@ class PhotoBadgeTest {
     }
 
     @Test
-    fun `format chips come from the catalog in format order`() {
+    fun `format chips come from the formats in the scope`() {
         val photos = listOf(photo("a", PhotoFormat.JPEG), photo("b", PhotoFormat.DNG), photo("c", PhotoFormat.JPEG))
 
-        assertEquals(listOf(PhotoFormat.DNG, PhotoFormat.JPEG), formatsPresent(photos))
+        assertEquals(setOf(PhotoFormat.DNG, PhotoFormat.JPEG), LibraryFilter.apply(photos, FilterOptions(), SortOrder.NAME_ASC, false).counts.formats)
     }
 
     @Test
     fun `the pair chip reflects the companions present`() {
-        assertNull(pairChipLabel(listOf(photo("a"))))
-        assertEquals("RAW+JPG", pairChipLabel(listOf(photo("a", companion = PhotoFormat.JPEG))))
-        assertEquals("RAW+HIF", pairChipLabel(listOf(photo("a", companion = PhotoFormat.HEIF))))
+        assertNull(pairChipLabel(emptySet()))
+        assertEquals("RAW+JPG", pairChipLabel(setOf(PhotoFormat.JPEG)))
+        assertEquals("RAW+HIF", pairChipLabel(setOf(PhotoFormat.HEIF)))
         assertEquals(
             "RAW+Raster",
-            pairChipLabel(listOf(photo("a", companion = PhotoFormat.JPEG), photo("b", companion = PhotoFormat.HEIF))),
+            pairChipLabel(setOf(PhotoFormat.JPEG, PhotoFormat.HEIF)),
         )
     }
 

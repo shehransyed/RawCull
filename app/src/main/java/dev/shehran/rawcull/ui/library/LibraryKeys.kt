@@ -93,12 +93,13 @@ val KeyEvent.isCapsLockOn: Boolean get() = nativeKeyEvent.isCapsLockOn
 
 /**
  * Sheets are windows of their own, so the Library's key handler never sees Esc while one is open.
- * Put this on the sheet's content; it takes focus so that the key arrives.
+ * Put this on the sheet's content. It takes focus so that the key arrives, unless a field in the
+ * sheet is about to.
  */
 @Composable
-fun Modifier.dismissOnEscape(onDismiss: () -> Unit): Modifier {
+fun Modifier.dismissOnEscape(takeFocus: Boolean = true, onDismiss: () -> Unit): Modifier {
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    LaunchedEffect(Unit) { if (takeFocus) focus.requestFocus() }
     return focusRequester(focus)
         .focusable()
         .onPreviewKeyEvent { event ->

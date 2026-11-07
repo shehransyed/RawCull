@@ -21,6 +21,9 @@ data class WindowLayout(val width: WidthClass, val isHeightCompact: Boolean) {
     val showsSideInspector: Boolean get() = width >= WidthClass.MEDIUM
     val showsSideBySide: Boolean get() = width >= WidthClass.MEDIUM
 
+    /** Below this the filter controls live in a sheet, behind a row of the active ones. */
+    val showsFilterBar: Boolean get() = width >= WidthClass.EXPANDED
+
     /** Below this, folder pane plus inspector leave the photo too little room, so it starts closed. */
     val opensInspectorByDefault: Boolean get() = width >= WidthClass.LARGE
 

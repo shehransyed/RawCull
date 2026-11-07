@@ -7,18 +7,11 @@ import dev.shehran.rawcull.data.model.PhotoFormat
 val PhotoAsset.badgeText: String
     get() = companionFormat?.let { "${format.extension}+${it.extension}" } ?: format.extension
 
-/** The primary formats actually present, for the filter chips. */
-fun formatsPresent(photos: List<PhotoAsset>): List<PhotoFormat> =
-    photos.map { it.format }.distinct().sortedBy { it.ordinal }
-
 /** Label for the paired-files chip, or null when nothing is paired. */
-fun pairChipLabel(photos: List<PhotoAsset>): String? {
-    val companions = photos.mapNotNull { it.companionFormat }.toSet()
-    return when (companions.size) {
-        0 -> null
-        1 -> "RAW+${companions.single().extension}"
-        else -> "RAW+Raster"
-    }
+fun pairChipLabel(companions: Set<PhotoFormat>): String? = when (companions.size) {
+    0 -> null
+    1 -> "RAW+${companions.single().extension}"
+    else -> "RAW+Raster"
 }
 
 sealed interface GridRow {
