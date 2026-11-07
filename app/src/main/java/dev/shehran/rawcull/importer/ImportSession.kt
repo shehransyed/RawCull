@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import dev.shehran.rawcull.library.PlausibleDate
 import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
@@ -70,6 +71,7 @@ class ImportSession(
     private val scope: CoroutineScope,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = { System.nanoTime() / NANOS_PER_MILLI },
+    private val wallClock: () -> Long = { System.currentTimeMillis() },
     private val log: (String) -> Unit = {},
 ) {
     private val _state = MutableStateFlow<ImportSessionState>(ImportSessionState.Idle)
@@ -220,7 +222,9 @@ class ImportSession(
             if (file.role.isSidecar) return@map file
             file.copy(alreadyImported = duplicates.isImported(file.sizeBytes) { reader.headHash(file.uri) })
         }
-        return candidate.copy(captureDate = metadata.captureDate, metadataJson = metadata.metadataJson, files = files)
+        // A camera with an unset clock mustn't file photos under 1970: the file date gets its turn.
+        val captureDate = metadata.captureDate.takeIf { PlausibleDate.isPlausible(it, wallClock()) }
+        return candidate.copy(captureDate = captureDate, metadataJson = metadata.metadataJson, files = files)
     }
 
     private fun ensureAvailable(target: ImportSource, cause: Exception) {
@@ -239,7 +243,7 @@ class ImportSession(
             stemGroup = "${primary.parentDocId}|${stem.lowercase(Locale.ROOT)}",
             stem = stem,
             files = files,
-            fallbackDate = primary.lastModified.takeIf { it > 0 },
+            fallbackDate = primary.lastModified.takeIf { PlausibleDate.isPlausible(it, wallClock()) },
         )
     }
 

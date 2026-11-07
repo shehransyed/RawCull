@@ -76,6 +76,7 @@ class ImportSessionTest {
         isIndexed = { hash, size -> (hash to size) in index },
         scope = this,
         ioDispatcher = StandardTestDispatcher(testScheduler),
+        wallClock = { NOW },
     )
 
     @Test
@@ -96,17 +97,17 @@ class ImportSessionTest {
 
     @Test
     fun `dates come from the file's metadata, with its modification time as the fallback`() = runTest {
-        reader.entries = listOf(entry("A.ARW", modified = 5L), entry("B.ARW", modified = 6L))
-        reader.dates["A.ARW"] = 99L
+        reader.entries = listOf(entry("A.ARW", modified = GOOD_DATE + 5), entry("B.ARW", modified = GOOD_DATE + 6))
+        reader.dates["A.ARW"] = GOOD_DATE + 99
         val session = session()
 
         session.start(source)
         advanceUntilIdle()
 
         val byName = session.state.value.candidateList.associateBy { it.files.first().name }
-        assertEquals(99L, byName.getValue("A.ARW").folderDate)
+        assertEquals(GOOD_DATE + 99, byName.getValue("A.ARW").folderDate)
         assertNull(byName.getValue("B.ARW").captureDate)
-        assertEquals(6L, byName.getValue("B.ARW").folderDate)
+        assertEquals(GOOD_DATE + 6, byName.getValue("B.ARW").folderDate)
     }
 
     @Test
@@ -215,10 +216,10 @@ class ImportSessionTest {
 
     @Test
     fun `one unreadable file doesn't stop the scan`() = runTest {
-        reader.entries = listOf(entry("BAD.ARW", modified = 3L), entry("GOOD.ARW", modified = 4L))
+        reader.entries = listOf(entry("BAD.ARW", modified = GOOD_DATE + 3), entry("GOOD.ARW", modified = GOOD_DATE + 4))
         reader.metadataFailure = IOException("bad sector")
         reader.failMetadataFor = "BAD.ARW"
-        reader.dates["GOOD.ARW"] = 9L
+        reader.dates["GOOD.ARW"] = GOOD_DATE + 9
         val session = session()
 
         session.start(source)
@@ -226,8 +227,8 @@ class ImportSessionTest {
 
         val state = session.state.value as ImportSessionState.Ready
         val byName = state.candidates.associateBy { it.files.first().name }
-        assertEquals(3L, byName.getValue("BAD.ARW").folderDate)
-        assertEquals(9L, byName.getValue("GOOD.ARW").folderDate)
+        assertEquals(GOOD_DATE + 3, byName.getValue("BAD.ARW").folderDate)
+        assertEquals(GOOD_DATE + 9, byName.getValue("GOOD.ARW").folderDate)
     }
 
     @Test
@@ -301,5 +302,36 @@ class ImportSessionTest {
         advanceUntilIdle()
 
         assertEquals(ImportSessionState.Idle, session.state.value)
+    }
+
+    @Test
+    fun `a 1970 EXIF date gives way to a good file date`() = runTest {
+        reader.entries = listOf(entry("A.ARW", modified = GOOD_DATE))
+        reader.dates["A.ARW"] = 86_400_000L
+        val session = session()
+
+        session.start(source)
+        advanceUntilIdle()
+
+        val candidate = session.state.value.candidateList.single()
+        assertNull(candidate.captureDate)
+        assertEquals(GOOD_DATE, candidate.folderDate)
+    }
+
+    @Test
+    fun `with both dates bad the photo is undated`() = runTest {
+        reader.entries = listOf(entry("A.ARW", modified = 946_684_800_000L - 20L * 365 * 86_400_000L))
+        reader.dates["A.ARW"] = 0L
+        val session = session()
+
+        session.start(source)
+        advanceUntilIdle()
+
+        assertNull(session.state.value.candidateList.single().folderDate)
+    }
+
+    private companion object {
+        const val NOW = 1_800_000_000_000L
+        const val GOOD_DATE = 1_700_000_000_000L
     }
 }
