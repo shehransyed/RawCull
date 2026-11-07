@@ -61,6 +61,8 @@ android {
   testOptions { unitTests { isIncludeAndroidResources = true } }
   // The XMP fixtures also run on a device, because Android's XML stack isn't the JDK's.
   sourceSets.getByName("androidTest").assets.directories.add("src/test/resources")
+  // MigrationTestHelper reads the exported schemas from the test APK's assets.
+  sourceSets.getByName("androidTest").assets.directories.add("$projectDir/schemas")
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
@@ -109,6 +111,7 @@ dependencies {
   androidTestImplementation(libs.androidx.compose.ui.test.junit4)
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(libs.androidx.junit)
+  androidTestImplementation(libs.androidx.room.testing)
   androidTestImplementation(libs.androidx.runner)
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)

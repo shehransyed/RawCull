@@ -72,7 +72,10 @@ enum class XmpSyncStatus {
     READ_ONLY
 }
 
-@Entity(tableName = "photo_assets", indices = [Index("rootUri")])
+@Entity(
+    tableName = "photo_assets",
+    indices = [Index("rootUri"), Index(value = ["rootUri", "relativeDir"])],
+)
 data class PhotoAsset(
     @PrimaryKey
     val id: String,
@@ -118,7 +121,8 @@ data class PhotoAsset(
     val xmpLastSyncedMtime: Long? = null, // The sidecar's modification time when the row last matched it
     val xmpError: String? = null,
     val darktableXmpUri: String? = null, // <name>.<ext>.xmp, kept up to date alongside xmpFileUri
-    val xmpPendingFields: Int = 0 // XmpField bits changed in RawCull and not on disk yet
+    val xmpPendingFields: Int = 0, // XmpField bits changed in RawCull and not on disk yet
+    val lastImportJobId: Long? = null, // The import that last brought this asset into the library
 ) {
     val hasCompanion: Boolean
         get() = !companionFileUri.isNullOrBlank()

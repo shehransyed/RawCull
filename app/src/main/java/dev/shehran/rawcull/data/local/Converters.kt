@@ -3,8 +3,13 @@ package dev.shehran.rawcull.data.local
 import androidx.room.TypeConverter
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
+import dev.shehran.rawcull.data.model.ImportItemRole
+import dev.shehran.rawcull.data.model.ImportItemState
+import dev.shehran.rawcull.data.model.ImportJobStatus
 import dev.shehran.rawcull.data.model.PairMode
 import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.data.model.StructureMode
+import dev.shehran.rawcull.data.model.VerifyMode
 import dev.shehran.rawcull.data.model.XmpSyncStatus
 import org.json.JSONArray
 
@@ -48,6 +53,47 @@ class Converters {
     fun toXmpSyncStatus(value: String): XmpSyncStatus = runCatching {
         XmpSyncStatus.valueOf(value)
     }.getOrDefault(XmpSyncStatus.SYNCED)
+
+    @TypeConverter
+    fun fromStructureMode(mode: StructureMode): String = mode.name
+
+    @TypeConverter
+    fun toStructureMode(value: String): StructureMode = runCatching {
+        StructureMode.valueOf(value)
+    }.getOrDefault(StructureMode.DATE)
+
+    @TypeConverter
+    fun fromImportJobStatus(status: ImportJobStatus): String = status.name
+
+    /** An unknown status can't be resumed safely, so it reads as a job that needs the user. */
+    @TypeConverter
+    fun toImportJobStatus(value: String): ImportJobStatus = runCatching {
+        ImportJobStatus.valueOf(value)
+    }.getOrDefault(ImportJobStatus.PAUSED)
+
+    @TypeConverter
+    fun fromVerifyMode(mode: VerifyMode): String = mode.name
+
+    @TypeConverter
+    fun toVerifyMode(value: String): VerifyMode = runCatching {
+        VerifyMode.valueOf(value)
+    }.getOrDefault(VerifyMode.FULL)
+
+    @TypeConverter
+    fun fromImportItemState(state: ImportItemState): String = state.name
+
+    @TypeConverter
+    fun toImportItemState(value: String): ImportItemState = runCatching {
+        ImportItemState.valueOf(value)
+    }.getOrDefault(ImportItemState.QUEUED)
+
+    @TypeConverter
+    fun fromImportItemRole(role: ImportItemRole): String = role.name
+
+    @TypeConverter
+    fun toImportItemRole(value: String): ImportItemRole = runCatching {
+        ImportItemRole.valueOf(value)
+    }.getOrDefault(ImportItemRole.PRIMARY)
 
     @TypeConverter
     fun fromTagsList(tags: List<String>): String {
