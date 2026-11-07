@@ -32,8 +32,18 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.ui.theme.FormatCyan
+import dev.shehran.rawcull.ui.theme.FormatOrange
+import dev.shehran.rawcull.ui.theme.FormatPurple
+import dev.shehran.rawcull.ui.theme.HairlineWhite
+import dev.shehran.rawcull.ui.theme.InsetSurface
+import dev.shehran.rawcull.ui.theme.PanelSurface
+import dev.shehran.rawcull.ui.theme.PrimaryCyan
+import dev.shehran.rawcull.ui.theme.TextMuted
+import dev.shehran.rawcull.ui.theme.TextSecondary
+import dev.shehran.rawcull.ui.theme.TextValue
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -48,7 +58,7 @@ fun ExifInspectorPanel(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .testTag("exif_inspector_panel"),
-        color = Color(0xFF13181F),
+        color = PanelSurface,
         tonalElevation = 2.dp
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -61,16 +71,16 @@ fun ExifInspectorPanel(
                 Text(
                     text = "EXIF & METADATA",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF94A3B8),
+                    color = TextSecondary,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
                 )
 
                 if (photo != null) {
                     val badgeColor = when (photo.format) {
-                        PhotoFormat.ARW -> Color(0xFFF97316) // Sony Orange
-                        PhotoFormat.DNG -> Color(0xFF06B6D4) // Adobe Cyan
-                        else -> Color(0xFFA855F7)
+                        PhotoFormat.ARW -> FormatOrange // Sony Orange
+                        PhotoFormat.DNG -> FormatCyan // Adobe Cyan
+                        else -> FormatPurple
                     }
                     Box(
                         modifier = Modifier
@@ -94,7 +104,7 @@ fun ExifInspectorPanel(
                 Text(
                     text = "No photo selected",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF64748B)
+                    color = TextMuted
                 )
             } else {
                 // File Name & Size
@@ -108,11 +118,11 @@ fun ExifInspectorPanel(
                 Text(
                     text = "${photo.formattedFileSize}  •  ${photo.width} × ${photo.height} px",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF94A3B8)
+                    color = TextSecondary
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(color = Color(0x22FFFFFF))
+                HorizontalDivider(color = HairlineWhite)
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Camera & Lens
@@ -178,7 +188,7 @@ fun ExifInspectorPanel(
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
-                HorizontalDivider(color = Color(0x22FFFFFF))
+                HorizontalDivider(color = HairlineWhite)
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // Paired JPEG & Live XMP
@@ -217,18 +227,18 @@ private fun MetadataRow(
             imageVector = icon,
             contentDescription = label,
             modifier = Modifier.size(16.dp),
-            tint = Color(0xFF64748B)
+            tint = TextMuted
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = "$label: ",
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF94A3B8)
+            color = TextSecondary
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFFE2E8F0),
+            color = TextValue,
             fontWeight = FontWeight.Medium
         )
     }
@@ -243,7 +253,7 @@ private fun ExposurePill(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF0F141C))
+            .background(InsetSurface)
             .padding(vertical = 6.dp, horizontal = 4.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -252,12 +262,12 @@ private fun ExposurePill(
                 text = value,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF38BDF8)
+                color = PrimaryCyan
             )
             Text(
                 text = label,
                 fontSize = 10.sp,
-                color = Color(0xFF64748B)
+                color = TextMuted
             )
         }
     }

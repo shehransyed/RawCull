@@ -25,6 +25,16 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.shehran.rawcull.ui.theme.HistogramBlue
+import dev.shehran.rawcull.ui.theme.HistogramGreen
+import dev.shehran.rawcull.ui.theme.HistogramGrid
+import dev.shehran.rawcull.ui.theme.HistogramLuma
+import dev.shehran.rawcull.ui.theme.HistogramPlot
+import dev.shehran.rawcull.ui.theme.HistogramRed
+import dev.shehran.rawcull.ui.theme.HistogramSurface
+import dev.shehran.rawcull.ui.theme.PrimaryCyan
+import dev.shehran.rawcull.ui.theme.RawCullTheme
+import dev.shehran.rawcull.ui.theme.TextSecondary
 import dev.shehran.rawcull.util.HistogramData
 
 @Composable
@@ -36,7 +46,7 @@ fun HistogramView(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF0F1419))
+            .background(HistogramSurface)
             .padding(12.dp)
             .testTag("histogram_view")
     ) {
@@ -48,7 +58,7 @@ fun HistogramView(
             Text(
                 text = "RGB HISTOGRAM",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF94A3B8),
+                color = TextSecondary,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
             )
@@ -56,21 +66,21 @@ fun HistogramView(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if ((histogram?.shadowClippingCount ?: 0) > 0) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF38BDF8)))
+                        Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(PrimaryCyan))
                         Text(
                             text = " Shadows",
                             fontSize = 10.sp,
-                            color = Color(0xFF38BDF8)
+                            color = PrimaryCyan
                         )
                     }
                 }
                 if ((histogram?.highlightClippingCount ?: 0) > 0) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFEF4444)))
+                        Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(RawCullTheme.colors.reject))
                         Text(
                             text = " Highlights",
                             fontSize = 10.sp,
-                            color = Color(0xFFEF4444)
+                            color = RawCullTheme.colors.reject
                         )
                     }
                 }
@@ -83,14 +93,14 @@ fun HistogramView(
                 .fillMaxWidth()
                 .height(90.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(Color(0xFF05080C))
+                .background(HistogramPlot)
         ) {
             Canvas(modifier = Modifier.matchParentSize()) {
                 val w = size.width
                 val h = size.height
 
                 // Draw background grid lines (25%, 50%, 75%)
-                val gridColor = Color(0x1AFFFFFF)
+                val gridColor = HistogramGrid
                 drawLine(gridColor, start = androidx.compose.ui.geometry.Offset(w * 0.25f, 0f), end = androidx.compose.ui.geometry.Offset(w * 0.25f, h), strokeWidth = 1f)
                 drawLine(gridColor, start = androidx.compose.ui.geometry.Offset(w * 0.50f, 0f), end = androidx.compose.ui.geometry.Offset(w * 0.50f, h), strokeWidth = 1f)
                 drawLine(gridColor, start = androidx.compose.ui.geometry.Offset(w * 0.75f, 0f), end = androidx.compose.ui.geometry.Offset(w * 0.75f, h), strokeWidth = 1f)
@@ -114,28 +124,28 @@ fun HistogramView(
                     // Draw Luminance (White translucent)
                     drawPath(
                         path = buildChannelPath(histogram.lumBins),
-                        color = Color(0x55E2E8F0),
+                        color = HistogramLuma,
                         style = Stroke(width = 1.5.dp.toPx())
                     )
 
                     // Draw Red
                     drawPath(
                         path = buildChannelPath(histogram.redBins),
-                        color = Color(0x88EF4444),
+                        color = HistogramRed,
                         style = Stroke(width = 1.5.dp.toPx())
                     )
 
                     // Draw Green
                     drawPath(
                         path = buildChannelPath(histogram.greenBins),
-                        color = Color(0x8822C55E),
+                        color = HistogramGreen,
                         style = Stroke(width = 1.5.dp.toPx())
                     )
 
                     // Draw Blue
                     drawPath(
                         path = buildChannelPath(histogram.blueBins),
-                        color = Color(0x883B82F6),
+                        color = HistogramBlue,
                         style = Stroke(width = 1.5.dp.toPx())
                     )
                 }

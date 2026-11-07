@@ -53,6 +53,16 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.ui.theme.BarSurface
+import dev.shehran.rawcull.ui.theme.CompareBackground
+import dev.shehran.rawcull.ui.theme.ControlSurface
+import dev.shehran.rawcull.ui.theme.CyanOutline
+import dev.shehran.rawcull.ui.theme.DarkroomBackground
+import dev.shehran.rawcull.ui.theme.HairlineWhite
+import dev.shehran.rawcull.ui.theme.PrimaryCyan
+import dev.shehran.rawcull.ui.theme.RawCullTheme
+import dev.shehran.rawcull.ui.theme.ScrimStrong
+import dev.shehran.rawcull.ui.theme.TextMuted
 import dev.shehran.rawcull.util.RawPreviewLoader
 
 @Composable
@@ -97,14 +107,14 @@ fun CompareLoupeView(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF070A0E))
+            .background(DarkroomBackground)
             .testTag("compare_loupe_container")
     ) {
         // Top Synchronized Zoom Toolbar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF0F141A))
+                .background(BarSurface)
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -112,7 +122,7 @@ fun CompareLoupeView(
             Text(
                 text = "SPLIT COMPARE MODE (SYNCHRONIZED ZOOM)",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF38BDF8),
+                color = PrimaryCyan,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
             )
@@ -140,7 +150,7 @@ fun CompareLoupeView(
                     Icon(
                         imageVector = if (sharedScale > 1.2f) Icons.Default.FitScreen else Icons.Default.ZoomIn,
                         contentDescription = "Toggle Zoom",
-                        tint = Color(0xFF38BDF8)
+                        tint = PrimaryCyan
                     )
                 }
             }
@@ -178,7 +188,7 @@ fun CompareLoupeView(
                 offset = sharedOffset,
                 onPick = onPickA,
                 onReject = onRejectA,
-                modifier = Modifier.weight(1f).border(1.dp, Color(0x3338BDF8))
+                modifier = Modifier.weight(1f).border(1.dp, CyanOutline)
             )
 
             // Pane B (Right / Bottom)
@@ -191,7 +201,7 @@ fun CompareLoupeView(
                 offset = sharedOffset,
                 onPick = onPickB,
                 onReject = onRejectB,
-                modifier = Modifier.weight(1f).border(1.dp, Color(0x22FFFFFF))
+                modifier = Modifier.weight(1f).border(1.dp, HairlineWhite)
             )
         }
     }
@@ -212,7 +222,7 @@ private fun ComparePane(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF090D12)),
+            .background(CompareBackground),
         contentAlignment = Alignment.Center
     ) {
         if (bitmap != null) {
@@ -230,9 +240,9 @@ private fun ComparePane(
                 contentScale = ContentScale.Fit
             )
         } else if (isLoading) {
-            CircularProgressIndicator(color = Color(0xFF38BDF8), modifier = Modifier.size(36.dp))
+            CircularProgressIndicator(color = PrimaryCyan, modifier = Modifier.size(36.dp))
         } else {
-            Text("No photo", color = Color(0xFF64748B), style = MaterialTheme.typography.bodySmall)
+            Text("No photo", color = TextMuted, style = MaterialTheme.typography.bodySmall)
         }
 
         // Top Info Overlay
@@ -246,7 +256,7 @@ private fun ComparePane(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    color = Color(0xCC000000),
+                    color = ScrimStrong,
                     shape = RoundedCornerShape(6.dp)
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
@@ -258,7 +268,7 @@ private fun ComparePane(
                         )
                         Text(
                             text = "${photo.shutterSpeed ?: ""}  ${photo.aperture ?: ""}  ISO ${photo.iso ?: ""}",
-                            color = Color(0xFF38BDF8),
+                            color = PrimaryCyan,
                             fontSize = 11.sp
                         )
                     }
@@ -267,10 +277,10 @@ private fun ComparePane(
                 // Cull badge
                 when (photo.cullStatus) {
                     CullStatus.PICK -> Box(
-                        modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFF10B981)).padding(horizontal = 6.dp, vertical = 2.dp)
+                        modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(RawCullTheme.colors.pick).padding(horizontal = 6.dp, vertical = 2.dp)
                     ) { Text("PICKED", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
                     CullStatus.REJECT -> Box(
-                        modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFFEF4444)).padding(horizontal = 6.dp, vertical = 2.dp)
+                        modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(RawCullTheme.colors.reject).padding(horizontal = 6.dp, vertical = 2.dp)
                     ) { Text("REJECTED", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
                     CullStatus.UNFLAGGED -> Unit
                 }
@@ -286,7 +296,7 @@ private fun ComparePane(
             ) {
                 Button(
                     onClick = onPick,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                    colors = ButtonDefaults.buttonColors(containerColor = RawCullTheme.colors.pick),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.weight(1f)
                 ) {
@@ -297,13 +307,13 @@ private fun ComparePane(
 
                 Button(
                     onClick = onReject,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E2630)),
+                    colors = ButtonDefaults.buttonColors(containerColor = ControlSurface),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Default.Close, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Close, contentDescription = null, tint = RawCullTheme.colors.reject, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Reject", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("Reject", color = RawCullTheme.colors.reject, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
             }
         }

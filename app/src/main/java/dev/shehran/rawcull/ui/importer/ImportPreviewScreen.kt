@@ -99,9 +99,10 @@ import dev.shehran.rawcull.importer.PreviewDay
 import dev.shehran.rawcull.ui.components.ZoomableLoupeView
 import dev.shehran.rawcull.ui.components.badgeText
 import dev.shehran.rawcull.ui.shell.LocalWindowLayout
-import dev.shehran.rawcull.ui.theme.AmberRating
-import dev.shehran.rawcull.ui.theme.EmeraldPick
 import dev.shehran.rawcull.ui.theme.PrimaryCyan
+import dev.shehran.rawcull.ui.theme.RawCullTheme
+import dev.shehran.rawcull.ui.theme.ScrimHeavy
+import dev.shehran.rawcull.ui.theme.ScrimStrong
 import dev.shehran.rawcull.ui.theme.TextMuted
 import dev.shehran.rawcull.ui.theme.TextSecondary
 import dev.shehran.rawcull.util.RawPreviewLoader
@@ -381,8 +382,8 @@ private fun PreviewTile(
             modifier = Modifier.align(Alignment.TopStart).testTag("preview_tile_check"),
         )
         Row(modifier = Modifier.align(Alignment.BottomStart).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TileBadge(asset.badgeText, Color(0xCC000000), Color.White)
-            if (imported) TileBadge("Imported", EmeraldPick, Color.Black)
+            TileBadge(asset.badgeText, ScrimStrong, Color.White)
+            if (imported) TileBadge("Imported", RawCullTheme.colors.pick, Color.Black)
         }
     }
 }
@@ -429,7 +430,7 @@ private fun SummaryBar(uiState: ImportUiState, onStart: () -> Unit, onBack: () -
         if (uiState.deleteFromCard) {
             Text(
                 text = "Verified files will be deleted from the card.",
-                color = AmberRating,
+                color = RawCullTheme.colors.star,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(horizontal = 16.dp).testTag("import_delete_notice"),
             )
@@ -542,7 +543,7 @@ private fun CardDisconnectedOverlay(onBackToSource: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xE6000000))
+            .background(ScrimHeavy)
             .clickable(onClick = {})
             .testTag("card_disconnected_overlay"),
         contentAlignment = Alignment.Center,

@@ -91,12 +91,10 @@ import dev.shehran.rawcull.ui.components.TagManagerDialog
 import dev.shehran.rawcull.ui.components.ZoomableLoupeView
 import dev.shehran.rawcull.ui.shell.LocalWindowLayout
 import dev.shehran.rawcull.ui.shell.WindowLayout
+import dev.shehran.rawcull.ui.theme.Dimens
 import dev.shehran.rawcull.ui.theme.PrimaryCyan
 import dev.shehran.rawcull.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
-
-private val FolderPaneWidth = 280.dp
-private val InspectorWidth = 320.dp
 
 /**
  * The whole archive: folder pane, content and inspector, as far as the window has room for them.
@@ -323,7 +321,7 @@ private fun LibraryContent(
 
         Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (folderPaneOpen && !fullScreenPhoto) {
-                Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.width(FolderPaneWidth).fillMaxHeight()) {
+                Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.width(Dimens.FolderPaneWidth).fillMaxHeight()) {
                     FolderPane(uiState, folderActions)
                 }
             }
@@ -343,7 +341,7 @@ private fun LibraryContent(
             if (inspectorOpen && !fullScreenPhoto) {
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier.width(InspectorWidth).fillMaxHeight().testTag("right_inspector_sidebar"),
+                    modifier = Modifier.width(Dimens.InspectorWidth).fillMaxHeight().testTag("right_inspector_sidebar"),
                 ) {
                     InspectorPanel(
                         uiState = uiState,

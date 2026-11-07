@@ -59,8 +59,19 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
-import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.ui.theme.FormatBadgeOrange
+import dev.shehran.rawcull.ui.theme.FormatBadgePurple
+import dev.shehran.rawcull.ui.theme.LoupeBackground
+import dev.shehran.rawcull.ui.theme.PillSurface
+import dev.shehran.rawcull.ui.theme.PrimaryCyan
+import dev.shehran.rawcull.ui.theme.PrimaryCyanVariant
+import dev.shehran.rawcull.ui.theme.RawCullTheme
+import dev.shehran.rawcull.ui.theme.ScrimMedium
+import dev.shehran.rawcull.ui.theme.ScrimStrong
+import dev.shehran.rawcull.ui.theme.TextMuted
+import dev.shehran.rawcull.ui.theme.TextSecondary
 import dev.shehran.rawcull.util.RawPreviewLoader
 
 @Composable
@@ -104,7 +115,7 @@ fun ZoomableLoupeView(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF080B0F))
+            .background(LoupeBackground)
             .pointerInput(photo?.id) {
                 detectTapGestures(
                     onDoubleTap = { tapOffset ->
@@ -163,20 +174,20 @@ fun ZoomableLoupeView(
                 verticalArrangement = Arrangement.Center
             ) {
                 CircularProgressIndicator(
-                    color = Color(0xFF38BDF8),
+                    color = PrimaryCyan,
                     modifier = Modifier.size(44.dp)
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = "Decoding RAW sensor data...",
-                    color = Color(0xFF94A3B8),
+                    color = TextSecondary,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
         } else {
             Text(
                 text = "Select a RAW photo to inspect",
-                color = Color(0xFF64748B),
+                color = TextMuted,
                 style = MaterialTheme.typography.bodyMedium
             )
         }
@@ -192,9 +203,9 @@ fun ZoomableLoupeView(
             ) {
                 // RAW format badge
                 val formatBg = when (photo.format) {
-                    PhotoFormat.ARW -> Color(0xFFEA580C)
-                    PhotoFormat.DNG -> Color(0xFF0284C7)
-                    else -> Color(0xFF7C3AED)
+                    PhotoFormat.ARW -> FormatBadgeOrange
+                    PhotoFormat.DNG -> PrimaryCyanVariant
+                    else -> FormatBadgePurple
                 }
                 Box(
                     modifier = Modifier
@@ -218,7 +229,7 @@ fun ZoomableLoupeView(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFF10B981))
+                                .background(RawCullTheme.colors.pick)
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -237,7 +248,7 @@ fun ZoomableLoupeView(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFFEF4444))
+                                .background(RawCullTheme.colors.reject)
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -260,18 +271,18 @@ fun ZoomableLoupeView(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xCC000000))
+                            .background(ScrimStrong)
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.Star,
                                 contentDescription = null,
-                                tint = Color(0xFFFBBF24),
+                                tint = RawCullTheme.colors.star,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("${photo.rating}★", color = Color(0xFFFBBF24), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            Text("${photo.rating}★", color = RawCullTheme.colors.star, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         }
                     }
                 }
@@ -282,7 +293,7 @@ fun ZoomableLoupeView(
                         modifier = Modifier
                             .size(18.dp)
                             .clip(CircleShape)
-                            .background(Color(photo.colorLabel.hexColor))
+                            .background(RawCullTheme.colors.label(photo.colorLabel))
                             .border(1.5.dp, Color.White, CircleShape)
                     )
                 }
@@ -302,7 +313,7 @@ fun ZoomableLoupeView(
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
                     .testTag("zoom_toggle_button"),
-                color = Color(0xCC111827),
+                color = PillSurface,
                 tonalElevation = 4.dp
             ) {
                 Row(
@@ -312,7 +323,7 @@ fun ZoomableLoupeView(
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = "Zoom Loupe",
-                        tint = Color(0xFF38BDF8),
+                        tint = PrimaryCyan,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -330,7 +341,7 @@ fun ZoomableLoupeView(
                 modifier = Modifier
                     .clip(CircleShape)
                     .testTag("one_to_one_zoom_button"),
-                color = if (scale > 1.2f) Color(0xFF0284C7) else Color(0xCC111827)
+                color = if (scale > 1.2f) PrimaryCyanVariant else PillSurface
             ) {
                 IconButton(
                     onClick = {
@@ -362,7 +373,7 @@ fun ZoomableLoupeView(
                 .padding(start = 12.dp)
                 .size(44.dp)
                 .clip(CircleShape)
-                .background(Color(0x99000000))
+                .background(ScrimMedium)
                 .testTag("prev_photo_button")
         ) {
             Icon(
@@ -380,7 +391,7 @@ fun ZoomableLoupeView(
                 .padding(end = 12.dp)
                 .size(44.dp)
                 .clip(CircleShape)
-                .background(Color(0x99000000))
+                .background(ScrimMedium)
                 .testTag("next_photo_button")
         ) {
             Icon(

@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import dev.shehran.rawcull.library.FolderNode
 import dev.shehran.rawcull.library.FolderTree
 import dev.shehran.rawcull.library.LibraryScope
+import dev.shehran.rawcull.ui.theme.HairlineWhite
 import dev.shehran.rawcull.ui.theme.PrimaryCyan
 import dev.shehran.rawcull.ui.theme.TextMuted
 import dev.shehran.rawcull.ui.theme.TextSecondary
@@ -80,7 +81,7 @@ fun FolderPane(uiState: LibraryUiState, actions: FolderPaneActions, modifier: Mo
                 onClick = actions.onAddLocation,
                 tag = "folder_pane_add_location",
             )
-            HorizontalDivider(color = Color(0x22FFFFFF), modifier = Modifier.padding(vertical = 6.dp))
+            HorizontalDivider(color = HairlineWhite, modifier = Modifier.padding(vertical = 6.dp))
         }
 
         if (uiState.activeLocation != null) {

@@ -41,6 +41,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import dev.shehran.rawcull.ui.theme.CardSurface
+import dev.shehran.rawcull.ui.theme.ControlSurface
+import dev.shehran.rawcull.ui.theme.OutlineWhite
+import dev.shehran.rawcull.ui.theme.PrimaryCyan
+import dev.shehran.rawcull.ui.theme.PrimaryCyanVariant
+import dev.shehran.rawcull.ui.theme.TagChipSelected
+import dev.shehran.rawcull.ui.theme.TagSurface
+import dev.shehran.rawcull.ui.theme.TextMuted
+import dev.shehran.rawcull.ui.theme.TextSecondary
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -60,7 +69,7 @@ fun TagManagerDialog(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .testTag("tag_manager_dialog"),
-            color = Color(0xFF131821),
+            color = CardSurface,
             tonalElevation = 8.dp
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
@@ -79,7 +88,7 @@ fun TagManagerDialog(
                         onClick = onDismiss,
                         modifier = Modifier.size(32.dp).testTag("close_tags_button")
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF94A3B8))
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = TextSecondary)
                     }
                 }
 
@@ -93,11 +102,11 @@ fun TagManagerDialog(
                     OutlinedTextField(
                         value = newTagInput,
                         onValueChange = { newTagInput = it },
-                        placeholder = { Text("Add new tag...", color = Color(0xFF64748B)) },
+                        placeholder = { Text("Add new tag...", color = TextMuted) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF38BDF8),
-                            unfocusedBorderColor = Color(0x33FFFFFF),
+                            focusedBorderColor = PrimaryCyan,
+                            unfocusedBorderColor = OutlineWhite,
                             focusedTextColor = Color.White,
                             unfocusedTextColor = Color.White
                         ),
@@ -113,7 +122,7 @@ fun TagManagerDialog(
                                 newTagInput = ""
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryCyanVariant),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.testTag("submit_tag_button")
                     ) {
@@ -126,7 +135,7 @@ fun TagManagerDialog(
                 Text(
                     text = "ACTIVE TAGS",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF94A3B8),
+                    color = TextSecondary,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
                 )
@@ -137,7 +146,7 @@ fun TagManagerDialog(
                     Text(
                         text = "No tags assigned yet",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF64748B)
+                        color = TextMuted
                     )
                 } else {
                     FlowRow(
@@ -149,7 +158,7 @@ fun TagManagerDialog(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0xFF0369A1))
+                                    .background(TagChipSelected)
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -174,7 +183,7 @@ fun TagManagerDialog(
                 Text(
                     text = "SUGGESTIONS",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF94A3B8),
+                    color = TextSecondary,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
                 )
@@ -190,13 +199,13 @@ fun TagManagerDialog(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFF1E2632))
+                                .background(TagSurface)
                                 .clickable { onAddTag(suggestion) }
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
                                 text = "+ $suggestion",
-                                color = Color(0xFF38BDF8),
+                                color = PrimaryCyan,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium
                             )
@@ -208,7 +217,7 @@ fun TagManagerDialog(
 
                 Button(
                     onClick = onDismiss,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E2630)),
+                    colors = ButtonDefaults.buttonColors(containerColor = ControlSurface),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {

@@ -60,9 +60,23 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
-import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.XmpSyncStatus
+import dev.shehran.rawcull.ui.theme.Dimens
+import dev.shehran.rawcull.ui.theme.CardSurface
+import dev.shehran.rawcull.ui.theme.CardSurfaceFloating
+import dev.shehran.rawcull.ui.theme.FormatOrange
+import dev.shehran.rawcull.ui.theme.GridBackground
+import dev.shehran.rawcull.ui.theme.HairlineWhite
+import dev.shehran.rawcull.ui.theme.PairedMint
+import dev.shehran.rawcull.ui.theme.PickBorder
+import dev.shehran.rawcull.ui.theme.PrimaryCyan
+import dev.shehran.rawcull.ui.theme.RawCullTheme
+import dev.shehran.rawcull.ui.theme.RejectBorder
+import dev.shehran.rawcull.ui.theme.ScrimStronger
+import dev.shehran.rawcull.ui.theme.TextMuted
+import dev.shehran.rawcull.ui.theme.TextSecondary
 import dev.shehran.rawcull.util.RawPreviewLoader
 
 @Composable
@@ -94,7 +108,7 @@ fun GridViewGallery(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF090D13))
+            .background(GridBackground)
             .testTag("grid_view_gallery")
     ) {
         if (photos.isEmpty()) {
@@ -104,17 +118,17 @@ fun GridViewGallery(
             ) {
                 Text(
                     text = "No photos to show",
-                    color = Color(0xFF64748B),
+                    color = TextMuted,
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
         } else {
             LazyVerticalGrid(
                 state = gridState,
-                columns = GridCells.Adaptive(minSize = 160.dp),
-                contentPadding = PaddingValues(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                columns = GridCells.Adaptive(minSize = Dimens.TileMinSize),
+                contentPadding = PaddingValues(Dimens.GridPadding),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.TileGap),
+                verticalArrangement = Arrangement.spacedBy(Dimens.TileGap),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(
@@ -126,7 +140,7 @@ fun GridViewGallery(
                     when (row) {
                         is GridRow.Header -> Text(
                             text = row.title,
-                            color = Color(0xFF94A3B8),
+                            color = TextSecondary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
@@ -163,7 +177,7 @@ fun GridViewGallery(
                     .padding(bottom = 20.dp, start = 16.dp, end = 16.dp)
                     .clip(RoundedCornerShape(30.dp))
                     .testTag("batch_actions_bar"),
-                color = Color(0xF0131821),
+                color = CardSurfaceFloating,
                 tonalElevation = 8.dp
             ) {
                 Row(
@@ -182,7 +196,7 @@ fun GridViewGallery(
 
                     Button(
                         onClick = onBatchPick,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                        colors = ButtonDefaults.buttonColors(containerColor = RawCullTheme.colors.pick),
                         shape = RoundedCornerShape(20.dp),
                         modifier = Modifier.height(36.dp).testTag("batch_pick_button")
                     ) {
@@ -193,7 +207,7 @@ fun GridViewGallery(
 
                     Button(
                         onClick = onBatchReject,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                        colors = ButtonDefaults.buttonColors(containerColor = RawCullTheme.colors.reject),
                         shape = RoundedCornerShape(20.dp),
                         modifier = Modifier.height(36.dp).testTag("batch_reject_button")
                     ) {
@@ -235,19 +249,19 @@ private fun GridPhotoCard(
     }
 
     val borderColor = when {
-        isChecked -> Color(0xFF10B981)
-        isCurrent -> Color(0xFF38BDF8)
-        photo.cullStatus == CullStatus.PICK -> Color(0x6610B981)
-        photo.cullStatus == CullStatus.REJECT -> Color(0x66EF4444)
-        else -> Color(0x22FFFFFF)
+        isChecked -> RawCullTheme.colors.pick
+        isCurrent -> PrimaryCyan
+        photo.cullStatus == CullStatus.PICK -> PickBorder
+        photo.cullStatus == CullStatus.REJECT -> RejectBorder
+        else -> HairlineWhite
     }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF131821))
-            .border(if (isCurrent || isChecked) 2.dp else 1.dp, borderColor, RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Dimens.TileCorner))
+            .background(CardSurface)
+            .border(if (isCurrent || isChecked) 2.dp else 1.dp, borderColor, RoundedCornerShape(Dimens.TileCorner))
             .clickable { onClick() }
     ) {
         Box(
@@ -265,7 +279,7 @@ private fun GridPhotoCard(
                     contentScale = ContentScale.Crop
                 )
             } else if (isLoading) {
-                CircularProgressIndicator(color = Color(0xFF38BDF8), modifier = Modifier.size(24.dp))
+                CircularProgressIndicator(color = PrimaryCyan, modifier = Modifier.size(24.dp))
             }
 
             // Top-Left: RAW format badge
@@ -274,12 +288,12 @@ private fun GridPhotoCard(
                     .align(Alignment.TopStart)
                     .padding(6.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0xDD000000))
+                    .background(ScrimStronger)
                     .padding(horizontal = 6.dp, vertical = 2.dp)
             ) {
                 Text(
                     text = photo.badgeText,
-                    color = if (photo.hasCompanion) Color(0xFFA7F3D0) else if (photo.format == PhotoFormat.ARW) Color(0xFFF97316) else Color(0xFF38BDF8),
+                    color = if (photo.hasCompanion) PairedMint else if (photo.format == PhotoFormat.ARW) FormatOrange else PrimaryCyan,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -294,7 +308,7 @@ private fun GridPhotoCard(
                 Icon(
                     imageVector = if (isChecked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
                     contentDescription = null,
-                    tint = if (isChecked) Color(0xFF10B981) else Color.White,
+                    tint = if (isChecked) RawCullTheme.colors.pick else Color.White,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(6.dp)
@@ -308,7 +322,7 @@ private fun GridPhotoCard(
                             .padding(6.dp)
                             .size(22.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF10B981)),
+                            .background(RawCullTheme.colors.pick),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
@@ -319,7 +333,7 @@ private fun GridPhotoCard(
                             .padding(6.dp)
                             .size(22.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFEF4444)),
+                            .background(RawCullTheme.colors.reject),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
@@ -335,13 +349,13 @@ private fun GridPhotoCard(
                         .align(Alignment.BottomStart)
                         .padding(6.dp)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(Color(0xDD000000))
+                        .background(ScrimStronger)
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(12.dp))
+                        Icon(Icons.Default.Star, contentDescription = null, tint = RawCullTheme.colors.star, modifier = Modifier.size(12.dp))
                         Spacer(modifier = Modifier.width(3.dp))
-                        Text(text = photo.rating.toString(), color = Color(0xFFFBBF24), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(text = photo.rating.toString(), color = RawCullTheme.colors.star, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -354,7 +368,7 @@ private fun GridPhotoCard(
                         .padding(6.dp)
                         .size(12.dp)
                         .clip(CircleShape)
-                        .background(Color(photo.colorLabel.hexColor))
+                        .background(RawCullTheme.colors.label(photo.colorLabel))
                         .border(1.dp, Color.White, CircleShape)
                 )
             }
@@ -364,7 +378,7 @@ private fun GridPhotoCard(
         Column(modifier = Modifier.padding(8.dp)) {
             Text(
                 text = photo.fileName,
-                color = if (isCurrent) Color(0xFF38BDF8) else Color.White,
+                color = if (isCurrent) PrimaryCyan else Color.White,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -375,7 +389,7 @@ private fun GridPhotoCard(
                 text = listOfNotNull(photo.shutterSpeed, photo.aperture, photo.iso?.let { "ISO $it" })
                     .joinToString(" • ")
                     .ifEmpty { " " },
-                color = Color(0xFF64748B),
+                color = TextMuted,
                 fontSize = 10.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

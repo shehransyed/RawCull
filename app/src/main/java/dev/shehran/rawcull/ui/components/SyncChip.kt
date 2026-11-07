@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.XmpSyncStatus
 import dev.shehran.rawcull.data.xmp.XMP_PARSE_ERROR
+import dev.shehran.rawcull.ui.theme.RawCullTheme
 
 val XmpSyncStatus.label: String
     get() = when (this) {
@@ -43,8 +44,6 @@ fun syncCounterText(saving: Int, errors: Int): String? {
     return parts.joinToString(" · ").ifEmpty { null }
 }
 
-private val ErrorRed = Color(0xFFEF4444)
-
 /** Whether the current photo's edits really are in its sidecar. */
 @Composable
 fun SyncChip(
@@ -52,12 +51,7 @@ fun SyncChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val (background, text) = when (status) {
-        XmpSyncStatus.SYNCED -> Color(0xCC064E3B) to Color(0xFFA7F3D0)
-        XmpSyncStatus.PENDING, XmpSyncStatus.WRITING -> Color(0xCC0C4A6E) to Color(0xFF38BDF8)
-        XmpSyncStatus.ERROR -> Color(0xCC7F1D1D) to Color(0xFFFECACA)
-        XmpSyncStatus.READ_ONLY -> Color(0xCC334155) to Color(0xFFCBD5E1)
-    }
+    val (background, text) = RawCullTheme.colors.sync(status)
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(6.dp))
@@ -77,7 +71,7 @@ fun SyncErrorDot(modifier: Modifier = Modifier) {
         modifier = modifier
             .size(8.dp)
             .clip(CircleShape)
-            .background(ErrorRed)
+            .background(RawCullTheme.colors.reject)
             .testTag("sync_error_dot")
     )
 }
@@ -110,7 +104,7 @@ fun SyncDetailsDialog(
             // Replacing only makes sense for a file that can't be read; it would discard a good one.
             if (photo.xmpError == XMP_PARSE_ERROR) {
                 TextButton(onClick = onReplaceSidecar, modifier = Modifier.testTag("replace_sidecar_button")) {
-                    Text("Replace sidecar", color = ErrorRed)
+                    Text("Replace sidecar", color = RawCullTheme.colors.reject)
                 }
             }
         },

@@ -74,8 +74,9 @@ import dev.shehran.rawcull.importer.ImportSessionState
 import dev.shehran.rawcull.importer.PathTemplate
 import dev.shehran.rawcull.ui.components.StorageChangeEffect
 import dev.shehran.rawcull.ui.shell.LocalWindowLayout
-import dev.shehran.rawcull.ui.theme.AmberRating
+import dev.shehran.rawcull.ui.theme.HairlineWhite
 import dev.shehran.rawcull.ui.theme.PrimaryCyan
+import dev.shehran.rawcull.ui.theme.RawCullTheme
 import dev.shehran.rawcull.ui.theme.TextMuted
 import dev.shehran.rawcull.ui.theme.TextSecondary
 
@@ -397,7 +398,7 @@ private fun DestinationPanel(uiState: ImportUiState, viewModel: ImportViewModel,
                     },
                 )
             }
-            if (uiState.destinationLocations.isNotEmpty()) HorizontalDivider(color = Color(0x22FFFFFF))
+            if (uiState.destinationLocations.isNotEmpty()) HorizontalDivider(color = HairlineWhite)
             DropdownMenuItem(
                 text = { Text("Add location…") },
                 onClick = {
@@ -409,11 +410,11 @@ private fun DestinationPanel(uiState: ImportUiState, viewModel: ImportViewModel,
         }
         if (!uiState.hasDestination) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("no_location_warning")) {
-                Icon(Icons.Default.Warning, contentDescription = null, tint = AmberRating, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Warning, contentDescription = null, tint = RawCullTheme.colors.star, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = if (uiState.destination == null) "Choose where photos should go." else "That location isn't connected.",
-                    color = AmberRating,
+                    color = RawCullTheme.colors.star,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

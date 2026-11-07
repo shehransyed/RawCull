@@ -59,6 +59,7 @@ import dev.shehran.rawcull.BuildConfig
 import dev.shehran.rawcull.data.model.ImportPreset
 import dev.shehran.rawcull.data.model.VerifyMode
 import dev.shehran.rawcull.ui.library.LocationUi
+import dev.shehran.rawcull.ui.theme.HairlineWhite
 import dev.shehran.rawcull.ui.theme.PrimaryCyan
 import dev.shehran.rawcull.ui.theme.TextMuted
 import dev.shehran.rawcull.ui.theme.TextSecondary
@@ -192,7 +193,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) 
 
 @Composable
 private fun SectionHeader(text: String) {
-    HorizontalDivider(color = Color(0x22FFFFFF), modifier = Modifier.padding(top = 16.dp))
+    HorizontalDivider(color = HairlineWhite, modifier = Modifier.padding(top = 16.dp))
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium,

@@ -54,9 +54,21 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
-import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.XmpSyncStatus
+import dev.shehran.rawcull.ui.theme.BarSurface
+import dev.shehran.rawcull.ui.theme.DarkroomSurfaceVariant
+import dev.shehran.rawcull.ui.theme.FormatOrange
+import dev.shehran.rawcull.ui.theme.HairlineWhite
+import dev.shehran.rawcull.ui.theme.PairedMint
+import dev.shehran.rawcull.ui.theme.PickBorder
+import dev.shehran.rawcull.ui.theme.PrimaryCyan
+import dev.shehran.rawcull.ui.theme.RawCullTheme
+import dev.shehran.rawcull.ui.theme.RejectBorder
+import dev.shehran.rawcull.ui.theme.ScrimMedium
+import dev.shehran.rawcull.ui.theme.ScrimStrong
+import dev.shehran.rawcull.ui.theme.TextChip
 import dev.shehran.rawcull.util.RawPreviewLoader
 
 @Composable
@@ -84,7 +96,7 @@ fun FilmstripBar(
             .fillMaxWidth()
             .height(115.dp)
             .testTag("filmstrip_bar"),
-        color = Color(0xFF0F141A),
+        color = BarSurface,
         tonalElevation = 4.dp,
     ) {
         LazyRow(
@@ -144,11 +156,11 @@ private fun FilmstripThumbnailItem(
     }
 
     val borderColor = when {
-        isCurrent -> Color(0xFF38BDF8)
-        isChecked -> Color(0xFF10B981)
-        photo.cullStatus == CullStatus.PICK -> Color(0x6610B981)
-        photo.cullStatus == CullStatus.REJECT -> Color(0x66EF4444)
-        else -> Color(0x22FFFFFF)
+        isCurrent -> PrimaryCyan
+        isChecked -> RawCullTheme.colors.pick
+        photo.cullStatus == CullStatus.PICK -> PickBorder
+        photo.cullStatus == CullStatus.REJECT -> RejectBorder
+        else -> HairlineWhite
     }
 
     val borderWidth = if (isCurrent || isChecked) 2.5.dp else 1.dp
@@ -158,7 +170,7 @@ private fun FilmstripThumbnailItem(
             .width(110.dp)
             .fillMaxHeight()
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF161E27))
+            .background(DarkroomSurfaceVariant)
             .border(borderWidth, borderColor, RoundedCornerShape(8.dp))
             .clickable { onClick() }
     ) {
@@ -180,7 +192,7 @@ private fun FilmstripThumbnailItem(
                 CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp,
-                    color = Color(0xFF38BDF8)
+                    color = PrimaryCyan
                 )
             }
 
@@ -190,12 +202,12 @@ private fun FilmstripThumbnailItem(
                     .align(Alignment.TopStart)
                     .padding(3.dp)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(Color(0xCC000000))
+                    .background(ScrimStrong)
                     .padding(horizontal = 4.dp, vertical = 1.dp)
             ) {
                 Text(
                     text = photo.badgeText,
-                    color = if (photo.hasCompanion) Color(0xFFA7F3D0) else if (photo.format == PhotoFormat.ARW) Color(0xFFF97316) else Color(0xFF38BDF8),
+                    color = if (photo.hasCompanion) PairedMint else if (photo.format == PhotoFormat.ARW) FormatOrange else PrimaryCyan,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -210,7 +222,7 @@ private fun FilmstripThumbnailItem(
                 Icon(
                     imageVector = if (isChecked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
                     contentDescription = "Select",
-                    tint = if (isChecked) Color(0xFF10B981) else Color.White,
+                    tint = if (isChecked) RawCullTheme.colors.pick else Color.White,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(3.dp)
@@ -224,7 +236,7 @@ private fun FilmstripThumbnailItem(
                             .padding(3.dp)
                             .size(18.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF10B981)),
+                            .background(RawCullTheme.colors.pick),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(12.dp))
@@ -235,7 +247,7 @@ private fun FilmstripThumbnailItem(
                             .padding(3.dp)
                             .size(18.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFEF4444)),
+                            .background(RawCullTheme.colors.reject),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
@@ -249,17 +261,17 @@ private fun FilmstripThumbnailItem(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .background(Color(0x99000000))
+                    .background(ScrimMedium)
                     .padding(horizontal = 4.dp, vertical = 1.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (photo.rating > 0) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(10.dp))
+                        Icon(Icons.Default.Star, contentDescription = null, tint = RawCullTheme.colors.star, modifier = Modifier.size(10.dp))
                         Text(
                             text = photo.rating.toString(),
-                            color = Color(0xFFFBBF24),
+                            color = RawCullTheme.colors.star,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -273,7 +285,7 @@ private fun FilmstripThumbnailItem(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(Color(photo.colorLabel.hexColor))
+                            .background(RawCullTheme.colors.label(photo.colorLabel))
                     )
                 }
             }
@@ -282,7 +294,7 @@ private fun FilmstripThumbnailItem(
         // Bottom File Name Label
         Text(
             text = photo.fileName,
-            color = if (isCurrent) Color(0xFF38BDF8) else Color(0xFFCBD5E1),
+            color = if (isCurrent) PrimaryCyan else TextChip,
             fontSize = 10.sp,
             fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
             maxLines = 1,

@@ -62,14 +62,22 @@ import dev.shehran.rawcull.ui.components.formatsPresent
 import dev.shehran.rawcull.ui.components.pairChipLabel
 import dev.shehran.rawcull.ui.components.syncCounterText
 import dev.shehran.rawcull.ui.shell.LocalWindowLayout
-import dev.shehran.rawcull.ui.theme.AmberRating
 import dev.shehran.rawcull.ui.theme.DarkroomSurfaceVariant
-import dev.shehran.rawcull.ui.theme.EmeraldPick
+import dev.shehran.rawcull.ui.theme.ErrorContainer
+import dev.shehran.rawcull.ui.theme.ErrorText
+import dev.shehran.rawcull.ui.theme.FormatCyan
+import dev.shehran.rawcull.ui.theme.FormatOrange
+import dev.shehran.rawcull.ui.theme.HairlineWhite
+import dev.shehran.rawcull.ui.theme.OutlineWhite
+import dev.shehran.rawcull.ui.theme.PairedMint
 import dev.shehran.rawcull.ui.theme.PrimaryCyan
 import dev.shehran.rawcull.ui.theme.PrimaryCyanVariant
-import dev.shehran.rawcull.ui.theme.RoseReject
+import dev.shehran.rawcull.ui.theme.RawCullTheme
+import dev.shehran.rawcull.ui.theme.TextChip
 import dev.shehran.rawcull.ui.theme.TextMuted
 import dev.shehran.rawcull.ui.theme.TextSecondary
+import dev.shehran.rawcull.ui.theme.WarningContainer
+import dev.shehran.rawcull.ui.theme.WarningText
 
 /** Everything the top bar can ask for. */
 class LibraryTopBarActions(
@@ -175,12 +183,12 @@ private fun SyncCounter(uiState: LibraryUiState, onToggleErrors: () -> Unit) {
         fontSize = 10.sp,
         fontWeight = FontWeight.Bold,
         maxLines = 1,
-        color = if (hasErrors) Color(0xFFFECACA) else PrimaryCyan,
+        color = if (hasErrors) ErrorText else PrimaryCyan,
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
             .clickable(enabled = hasErrors, onClick = onToggleErrors)
             .minimumInteractiveComponentSize()
-            .background(if (hasErrors) Color(0xCC7F1D1D) else DarkroomSurfaceVariant)
+            .background(if (hasErrors) ErrorContainer else DarkroomSurfaceVariant)
             .padding(horizontal = 6.dp, vertical = 3.dp)
             .testTag("sync_counter"),
     )
@@ -281,7 +289,7 @@ private fun FilterChipsRow(uiState: LibraryUiState, onUpdateFilter: ((FilterOpti
         DamFilterChip(
             "Picks (${uiState.picksCount})",
             filter.cullFilter == CullFilterMode.PICKS_ONLY,
-            EmeraldPick,
+            RawCullTheme.colors.pick,
             cull(CullFilterMode.PICKS_ONLY),
         )
         DamFilterChip(
@@ -292,7 +300,7 @@ private fun FilterChipsRow(uiState: LibraryUiState, onUpdateFilter: ((FilterOpti
         DamFilterChip(
             "Rejects (${uiState.rejectsCount})",
             filter.cullFilter == CullFilterMode.REJECTS_ONLY,
-            RoseReject,
+            RawCullTheme.colors.reject,
             cull(CullFilterMode.REJECTS_ONLY),
         )
 
@@ -302,7 +310,7 @@ private fun FilterChipsRow(uiState: LibraryUiState, onUpdateFilter: ((FilterOpti
             DamFilterChip(
                 "$label (${uiState.pairedCount})",
                 filter.pairFilter == PairMode.RAW_AND_RASTER,
-                Color(0xFFA7F3D0),
+                PairedMint,
             ) {
                 onUpdateFilter {
                     it.copy(pairFilter = if (it.pairFilter == PairMode.RAW_AND_RASTER) null else PairMode.RAW_AND_RASTER)
@@ -317,10 +325,10 @@ private fun FilterChipsRow(uiState: LibraryUiState, onUpdateFilter: ((FilterOpti
 
         ChipDivider()
 
-        DamFilterChip("★ 5 Only", filter.minRating == 5, AmberRating) {
+        DamFilterChip("★ 5 Only", filter.minRating == 5, RawCullTheme.colors.star) {
             onUpdateFilter { it.copy(minRating = if (it.minRating == 5) 0 else 5) }
         }
-        DamFilterChip("★ 3+ Stars", filter.minRating == 3, AmberRating) {
+        DamFilterChip("★ 3+ Stars", filter.minRating == 3, RawCullTheme.colors.star) {
             onUpdateFilter { it.copy(minRating = if (it.minRating == 3) 0 else 3) }
         }
     }
@@ -328,12 +336,12 @@ private fun FilterChipsRow(uiState: LibraryUiState, onUpdateFilter: ((FilterOpti
 
 @Composable
 private fun ChipDivider() {
-    Box(modifier = Modifier.height(20.dp).width(1.dp).background(Color(0x33FFFFFF)))
+    Box(modifier = Modifier.height(20.dp).width(1.dp).background(OutlineWhite))
 }
 
 private fun formatChipColor(format: PhotoFormat): Color = when (format) {
-    PhotoFormat.ARW -> Color(0xFFF97316)
-    PhotoFormat.DNG -> Color(0xFF06B6D4)
+    PhotoFormat.ARW -> FormatOrange
+    PhotoFormat.DNG -> FormatCyan
     else -> PrimaryCyan
 }
 
@@ -351,13 +359,13 @@ private fun DamFilterChip(
     ) {
         Text(
             text = label,
-            color = if (selected) activeColor else Color(0xFFCBD5E1),
+            color = if (selected) activeColor else TextChip,
             fontSize = 11.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             modifier = Modifier
                 .clip(RoundedCornerShape(16.dp))
                 .background(if (selected) activeColor.copy(alpha = 0.2f) else DarkroomSurfaceVariant)
-                .border(1.dp, if (selected) activeColor else Color(0x22FFFFFF), RoundedCornerShape(16.dp))
+                .border(1.dp, if (selected) activeColor else HairlineWhite, RoundedCornerShape(16.dp))
                 .padding(horizontal = 10.dp, vertical = 4.dp),
         )
     }
@@ -399,24 +407,24 @@ private fun LocationUnavailableBanner(onRetry: () -> Unit, onRelink: () -> Unit)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF3B2A0B))
+            .background(WarningContainer)
             .padding(start = 14.dp, end = 6.dp)
             .testTag("location_unavailable_banner"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Default.Warning, contentDescription = null, tint = AmberRating, modifier = Modifier.size(16.dp))
+        Icon(Icons.Default.Warning, contentDescription = null, tint = RawCullTheme.colors.star, modifier = Modifier.size(16.dp))
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = "Location not connected",
-            color = Color(0xFFFDE68A),
+            color = WarningText,
             fontSize = 12.sp,
             modifier = Modifier.weight(1f),
         )
         TextButton(onClick = onRelink, modifier = Modifier.testTag("location_relink_button")) {
-            Text("Relink", color = AmberRating)
+            Text("Relink", color = RawCullTheme.colors.star)
         }
         TextButton(onClick = onRetry, modifier = Modifier.testTag("location_retry_button")) {
-            Text("Retry", color = AmberRating, fontWeight = FontWeight.Bold)
+            Text("Retry", color = RawCullTheme.colors.star, fontWeight = FontWeight.Bold)
         }
     }
 }

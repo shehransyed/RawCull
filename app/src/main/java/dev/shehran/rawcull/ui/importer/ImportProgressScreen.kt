@@ -44,7 +44,7 @@ import dev.shehran.rawcull.data.model.ImportJob
 import dev.shehran.rawcull.data.model.ImportJobStatus
 import dev.shehran.rawcull.importer.FailedFile
 import dev.shehran.rawcull.importer.ImportReport
-import dev.shehran.rawcull.ui.theme.AmberRating
+import dev.shehran.rawcull.ui.theme.RawCullTheme
 import dev.shehran.rawcull.ui.theme.TextMuted
 import dev.shehran.rawcull.ui.theme.TextSecondary
 
@@ -231,7 +231,7 @@ private fun CreatedFolders(report: ImportReport) {
 @Composable
 private fun FileList(title: String, files: List<FailedFile>) {
     Column(modifier = Modifier.testTag("import_failed_list")) {
-        Text(title, color = AmberRating, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        Text(title, color = RawCullTheme.colors.star, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
         files.forEach { file ->
             Text("${file.name}: ${file.reason}", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
         }

@@ -11,13 +11,13 @@ enum class CullStatus {
     REJECT
 }
 
-enum class ColorLabel(val hexColor: Long, val labelName: String) {
-    NONE(0x00000000, "None"),
-    RED(0xFFEF4444, "Red (Select)"),
-    YELLOW(0xFFF59E0B, "Yellow (Review)"),
-    GREEN(0xFF10B981, "Green (Approved)"),
-    BLUE(0xFF3B82F6, "Blue (Work)"),
-    PURPLE(0xFF8B5CF6, "Purple (Special)")
+enum class ColorLabel(val labelName: String) {
+    NONE("None"),
+    RED("Red (Select)"),
+    YELLOW("Yellow (Review)"),
+    GREEN("Green (Approved)"),
+    BLUE("Blue (Work)"),
+    PURPLE("Purple (Special)")
 }
 
 /** Root of the bundled demo shoot; it is a pseudo-folder and never mixes with real catalogs. */
