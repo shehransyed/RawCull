@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.toIntRect
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.preview.PreviewKeys
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.XmpSyncStatus
 import dev.shehran.rawcull.library.FolderSection
@@ -112,6 +113,8 @@ fun GridViewGallery(
     LaunchedEffect(gridState) {
         snapshotFlow { gridState.layoutInfo.maxSpan }.collect(onColumnsChanged)
     }
+    val indexOfKey = remember(photos) { photos.withIndex().associate<IndexedValue<PhotoAsset>, Any, Int> { it.value.id to it.index } }
+    GridPrefetch(gridState, indexOfKey, photos.size, gridThumbnailPx()) { PreviewKeys.source(photos[it]) }
     val selecting = selectedIds.isNotEmpty()
     val selectedItem = remember(photos, sections, selectedPhotoId) {
         val index = photos.indexOfFirst { it.id == selectedPhotoId }
@@ -245,6 +248,10 @@ fun GridViewGallery(
     }
 }
 
+/** Adaptive cells are narrower than twice their minimum, so this always covers the tile. */
+@Composable
+private fun gridThumbnailPx(): Int = with(LocalDensity.current) { (Dimens.TileMinSize * 2).roundToPx() }
+
 /** The photo tile under [point], in the grid's own coordinates. */
 private fun LazyGridState.photoIdAt(point: Offset): String? {
     val hit = point.round()
@@ -288,8 +295,7 @@ private fun GridPhotoCard(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Adaptive cells are narrower than twice their minimum, so this always covers the tile.
-    val thumbnailPx = with(LocalDensity.current) { (Dimens.TileMinSize * 2).roundToPx() }
+    val thumbnailPx = gridThumbnailPx()
 
     val borderColor = when {
         isChecked -> RawCullTheme.colors.pick

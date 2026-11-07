@@ -56,6 +56,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
+import dev.shehran.rawcull.data.preview.PreviewKeys
+import dev.shehran.rawcull.ui.shell.WidthClass
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -91,6 +95,7 @@ import dev.shehran.rawcull.ui.components.CullingHistory
 import dev.shehran.rawcull.ui.components.CullingSideBar
 import dev.shehran.rawcull.ui.components.FilmstripBar
 import dev.shehran.rawcull.ui.components.GridViewGallery
+import dev.shehran.rawcull.ui.components.LoupePrefetch
 import dev.shehran.rawcull.ui.components.StorageChangeEffect
 import dev.shehran.rawcull.ui.components.SyncDetailsDialog
 import dev.shehran.rawcull.ui.components.TagManagerDialog
@@ -556,8 +561,18 @@ private fun LibraryMainView(
             modifier = Modifier.fillMaxSize(),
         )
         DamViewMode.LOUPE -> {
+            var loupeSize by remember { mutableStateOf(IntSize.Zero) }
+            val photos = uiState.filteredPhotos
+            val currentIndex = remember(photos, uiState.selectedPhotoId) { photos.indexOfFirst { it.id == uiState.selectedPhotoId } }
+            LoupePrefetch(
+                current = currentIndex,
+                count = photos.size,
+                compact = layout.width == WidthClass.COMPACT,
+                widthPx = loupeSize.width,
+                heightPx = loupeSize.height,
+            ) { PreviewKeys.source(photos[it]) }
             val loupe = @Composable { loupeModifier: Modifier ->
-                Box(modifier = loupeModifier) {
+                Box(modifier = loupeModifier.onSizeChanged { loupeSize = it }) {
                     ZoomableLoupeView(
                         photo = photo,
                         onNext = viewModel::nextPhoto,

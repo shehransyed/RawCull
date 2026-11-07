@@ -100,6 +100,8 @@ import dev.shehran.rawcull.ui.theme.ScrimHeavy
 import dev.shehran.rawcull.ui.theme.ScrimStrong
 import dev.shehran.rawcull.ui.theme.TextMuted
 import dev.shehran.rawcull.ui.theme.TextSecondary
+import dev.shehran.rawcull.data.preview.PreviewKeys
+import dev.shehran.rawcull.ui.components.GridPrefetch
 import dev.shehran.rawcull.ui.components.PhotoThumbnail
 
 private val TILE_MIN_SIZE = 120.dp
@@ -239,6 +241,12 @@ private fun PreviewGrid(uiState: ImportUiState, viewModel: ImportViewModel, modi
         }
     }
     val gridState = rememberLazyGridState()
+    val tiles = remember(rows) { rows.mapNotNull { (it as? PreviewRow.Tile)?.candidate } }
+    val indexOfKey = remember(rows) {
+        rows.filterIsInstance<PreviewRow.Tile>().withIndex().associate<IndexedValue<PreviewRow.Tile>, Any, Int> { it.value.key to it.index }
+    }
+    val thumbnailPx = with(LocalDensity.current) { (TILE_MIN_SIZE * 2).roundToPx() }
+    GridPrefetch(gridState, indexOfKey, tiles.size, thumbnailPx) { PreviewKeys.source(tiles[it]) }
 
     if (rows.isEmpty()) {
         Box(modifier, contentAlignment = Alignment.Center) {
