@@ -1,7 +1,6 @@
 package dev.shehran.rawcull.ui.shell
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,7 +28,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -48,6 +46,8 @@ import dev.shehran.rawcull.ui.importer.ImportSourceScreen
 import dev.shehran.rawcull.ui.importer.ImportViewModel
 import dev.shehran.rawcull.ui.library.LibraryScreen
 import dev.shehran.rawcull.ui.library.LibraryViewModel
+import dev.shehran.rawcull.ui.settings.SettingsScreen
+import dev.shehran.rawcull.ui.settings.SettingsViewModel
 
 val LocalWindowLayout = staticCompositionLocalOf { WindowLayout(WidthClass.COMPACT, isHeightCompact = false) }
 
@@ -174,7 +174,7 @@ private fun AppNavDisplay(
                         stacks.resetTo(TopLevelTab.IMPORT)
                     },
                 )
-                AppKey.Settings -> ComingNext("Settings")
+                AppKey.Settings -> SettingsScreen(viewModel = viewModel(factory = SettingsViewModel.Factory))
             }
         }
     }
@@ -220,12 +220,5 @@ private fun ImportRunningRow(job: ImportJob, onClick: () -> Unit) {
             progress = { job.doneBytes.toFloat() / total },
             modifier = Modifier.fillMaxWidth().height(2.dp),
         )
-    }
-}
-
-@Composable
-private fun ComingNext(title: String) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

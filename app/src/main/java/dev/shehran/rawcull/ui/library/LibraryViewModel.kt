@@ -162,6 +162,7 @@ class LibraryViewModel(
             locations.observeAll().collect {
                 knownLocations = it
                 refreshAvailability()
+                onLocationsChanged(it)
             }
         }
 
@@ -423,6 +424,42 @@ class LibraryViewModel(
             repository.loadSampleShoot()
         } else if (available) {
             scanCoordinator.start(location.treeUri)
+        }
+    }
+
+    /** Settings can remove or relink what's on screen; the Library has to follow. */
+    private suspend fun onLocationsChanged(all: List<LibraryLocation>) {
+        val active = _uiState.value.activeLocation ?: return
+        val current = all.firstOrNull { it.id == active.id }
+        when {
+            current == null -> leaveRemovedLocation(all)
+            current.treeUri != active.treeUri -> activate(current)
+            current.displayName != active.displayName ->
+                _uiState.update { it.copy(activeLocation = current) }.also { currentLocation.value = current }
+        }
+    }
+
+    private suspend fun leaveRemovedLocation(remaining: List<LibraryLocation>) {
+        val next = remaining.maxByOrNull { it.lastOpenedAt }
+        if (next != null) {
+            activate(next)
+            return
+        }
+        scanCoordinator.cancel()
+        currentLocation.value = null
+        scope.value = LibraryScope.All
+        settings.setActiveLocation(null)
+        _uiState.update {
+            it.copy(
+                activeLocation = null,
+                scope = LibraryScope.All,
+                photos = emptyList(),
+                filteredPhotos = emptyList(),
+                selectedPhotoId = null,
+                comparePhotoId = null,
+                currentHistogram = null,
+                viewMode = DamViewMode.GRID,
+            )
         }
     }
 
