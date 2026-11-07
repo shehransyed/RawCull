@@ -17,23 +17,28 @@ import dev.shehran.rawcull.data.model.ExportConfig
 import dev.shehran.rawcull.data.model.ExportMode
 import dev.shehran.rawcull.data.model.ExportProgress
 import dev.shehran.rawcull.data.model.FilterOptions
+import dev.shehran.rawcull.data.model.LibraryLocation
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.RecentSource
 import dev.shehran.rawcull.data.model.SortOrder
 import dev.shehran.rawcull.data.model.XmpSyncStatus
+import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.RawCatalogRepository
 import dev.shehran.rawcull.data.repository.SettingsRepository
 import dev.shehran.rawcull.data.repository.StoredFolder
 import dev.shehran.rawcull.data.scan.ScanCoordinator
 import dev.shehran.rawcull.data.scan.ScanState
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
+import dev.shehran.rawcull.library.LibraryRestore
+import dev.shehran.rawcull.library.LibraryScope
 import dev.shehran.rawcull.util.HistogramCalculator
 import dev.shehran.rawcull.util.HistogramData
 import dev.shehran.rawcull.util.RawPreviewLoader
 import dev.shehran.rawcull.util.SafPermissions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -73,6 +78,8 @@ data class DamUiState(
     val filterOptions: FilterOptions = FilterOptions(),
     val sourceFolderName: String = "No source",
     val currentRootUri: String? = null,
+    val activeLocationId: Long? = null,
+    val scope: LibraryScope = LibraryScope.All,
     val isSourceAvailable: Boolean = true,
     val isRestoring: Boolean = true, // True until the launch-time source check has finished
     val recentSources: List<RecentSourceUi> = emptyList(),
@@ -127,10 +134,14 @@ class RawCullViewModel(
     private val appContext: Context,
     private val repository: RawCatalogRepository,
     private val settings: SettingsRepository,
+    private val locations: LocationRepository,
     private val scanCoordinator: ScanCoordinator,
     private val writeQueue: XmpWriteQueue,
 ) : ViewModel() {
     private val currentRootUri = MutableStateFlow<String?>(null)
+    private val scope = MutableStateFlow<LibraryScope>(LibraryScope.All)
+    private var pendingSelectionId: String? = null
+    private var saveSelectionJob: Job? = null
 
     private val _uiState = MutableStateFlow(DamUiState())
     val uiState: StateFlow<DamUiState> = _uiState.asStateFlow()
@@ -156,8 +167,10 @@ class RawCullViewModel(
         }
 
         viewModelScope.launch {
-            currentRootUri
-                .flatMapLatest { root -> root?.let(repository::observeByRoot) ?: flowOf(emptyList()) }
+            combine(currentRootUri, scope) { root, activeScope -> root to activeScope }
+                .flatMapLatest { (root, activeScope) ->
+                    root?.let { repository.observeScope(it, activeScope) } ?: flowOf(emptyList())
+                }
                 .collect(::updatePhotosList)
         }
     }
@@ -173,7 +186,9 @@ class RawCullViewModel(
         val filtered = applyFilterAndSort(photoList, filter)
         val previousIds = current.filteredPhotos.map { it.id }
         val nextIds = filtered.map { it.id }
-        val selectedId = SelectionLogic.reconcile(previousIds, nextIds, current.selectedPhotoId)
+        val restored = pendingSelectionId?.takeIf { it in nextIds }
+        if (nextIds.isNotEmpty()) pendingSelectionId = null
+        val selectedId = restored ?: SelectionLogic.reconcile(previousIds, nextIds, current.selectedPhotoId)
 
         _uiState.value = current.copy(
             photos = photoList,
@@ -187,7 +202,14 @@ class RawCullViewModel(
     }
 
     private fun onSelectionChanged() {
-        _uiState.value.selectedPhotoId?.let(scanCoordinator::prioritize)
+        val id = _uiState.value.selectedPhotoId
+        id?.let(scanCoordinator::prioritize)
+        // Culling moves through photos quickly, and only where it stops matters on the next launch.
+        saveSelectionJob?.cancel()
+        saveSelectionJob = viewModelScope.launch {
+            delay(SAVE_SELECTION_DELAY_MS)
+            settings.setSelectedAsset(id)
+        }
     }
 
     private fun applyFilterAndSort(
@@ -385,13 +407,41 @@ class RawCullViewModel(
             }
         }
 
-        val source = settings.lastSource()?.takeIf { it.uri in persisted } ?: return
-        val uri = Uri.parse(source.uri)
-        if (isAvailable(uri)) {
-            openSource(uri, source.displayName)
-        } else {
-            setRoot(source.uri, source.displayName, isAvailable = false)
-        }
+        val session = settings.librarySession()
+        val restored = LibraryRestore.resolve(
+            locations.getAll(),
+            session.activeLocationId,
+            session.activeFolder,
+            session.selectedAssetId,
+        )
+        val location = restored.location ?: return
+        pendingSelectionId = restored.selectedAssetId
+        activate(location, restored.scope)
+    }
+
+    /** Shows the cached rows at once and starts the background scan (D12). */
+    private suspend fun activate(location: LibraryLocation, activeScope: LibraryScope = LibraryScope.All) {
+        val available = locations.isAvailable(location)
+        setRoot(location.treeUri, location.displayName, isAvailable = available)
+        _uiState.update { it.copy(activeLocationId = location.id, scope = activeScope) }
+        scope.value = activeScope
+        locations.touch(location.id)
+        if (settings.librarySession().activeLocationId != location.id) settings.setActiveLocation(location.id)
+        if (available && !location.isDemo) scanCoordinator.start(location.treeUri)
+    }
+
+    fun setScope(next: LibraryScope) {
+        scope.value = next
+        _uiState.update { it.copy(scope = next) }
+        viewModelScope.launch { settings.setActiveFolder(next.savedFolder) }
+    }
+
+    /** Back in the foreground: the active folder is what's worth checking for changes (D12). */
+    fun onAppStart() {
+        val state = _uiState.value
+        val root = state.currentRootUri ?: return
+        if (state.isDemoSource || !state.isSourceAvailable) return
+        scanCoordinator.rescanSubtree(root, state.scope.savedFolder)
     }
 
     private suspend fun isAvailable(uri: Uri): Boolean =
@@ -455,7 +505,12 @@ class RawCullViewModel(
     fun closeSource() {
         scanCoordinator.cancel()
         setRoot(null, "No source")
-        viewModelScope.launch { settings.clearLastSource() }
+        _uiState.update { it.copy(activeLocationId = null, scope = LibraryScope.All) }
+        scope.value = LibraryScope.All
+        viewModelScope.launch {
+            settings.clearLastSource()
+            settings.setActiveLocation(null)
+        }
     }
 
     private fun showMessage(message: String) {
@@ -479,7 +534,8 @@ class RawCullViewModel(
             val name = withContext(Dispatchers.IO) { SafPermissions.displayName(appContext, uri) }
             val evicted = settings.recordSourceOpened(RecentSource(uri.toString(), name, System.currentTimeMillis()))
             evicted.forEach { releaseIfUnused(it.uri) }
-            openSource(uri, name)
+            val location = locations.add(uri.toString())
+            if (location == null) showMessage("Android didn't grant access to that folder.") else activate(location)
         }
     }
 
@@ -508,11 +564,6 @@ class RawCullViewModel(
         }
         histogramKey = null
         currentRootUri.value = rootUri
-    }
-
-    private fun openSource(uri: Uri, folderName: String) {
-        setRoot(uri.toString(), folderName)
-        scanCoordinator.start(uri.toString())
     }
 
     private fun onScanState(state: ScanState) {
@@ -570,7 +621,7 @@ class RawCullViewModel(
                 scanStatusText = "Loading the demo shoot..."
             )
             repository.loadSampleShoot()
-            setRoot(DEMO_ROOT_URI, "Demo shoot")
+            activate(locations.demo())
             _uiState.value = _uiState.value.copy(isScanning = false, scanStatusText = "")
         }
     }
@@ -750,6 +801,8 @@ class RawCullViewModel(
     }
 
     companion object {
+        private const val SAVE_SELECTION_DELAY_MS = 500L
+
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as RawCullApp
@@ -757,6 +810,7 @@ class RawCullViewModel(
                     appContext = app,
                     repository = app.container.catalogRepository,
                     settings = app.container.settingsRepository,
+                    locations = app.container.locationRepository,
                     scanCoordinator = app.container.scanCoordinator,
                     writeQueue = app.container.xmpWriteQueue,
                 )

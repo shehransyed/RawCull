@@ -1,6 +1,7 @@
 package dev.shehran.rawcull.data.local
 
 import androidx.room.Dao
+import androidx.room.MapColumn
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
@@ -13,6 +14,7 @@ import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.XmpSyncStatus
 import dev.shehran.rawcull.data.xmp.XMP_PARSE_ERROR
 import dev.shehran.rawcull.data.xmp.XmpRows
+import dev.shehran.rawcull.library.FolderQuery
 import dev.shehran.rawcull.util.xmp.CullState
 import dev.shehran.rawcull.util.xmp.XmpField
 import kotlinx.coroutines.flow.Flow
@@ -27,6 +29,52 @@ interface RawPhotoDao : XmpRows {
 
     @Query("SELECT id FROM photo_assets WHERE rootUri = :rootUri")
     suspend fun getIdsByRoot(rootUri: String): List<String>
+
+    /** Photos per folder of a Location, for the folder tree. */
+    @Query("SELECT relativeDir, COUNT(*) AS photoCount FROM photo_assets WHERE rootUri = :rootUri GROUP BY relativeDir")
+    fun observeFolderCounts(
+        rootUri: String,
+    ): Flow<Map<@MapColumn("relativeDir") String, @MapColumn("photoCount") Int>>
+
+    /** A folder and everything under it; an empty [folder] is the whole Location. */
+    fun observeScope(rootUri: String, folder: String): Flow<List<PhotoAsset>> =
+        observeScopeMatching(rootUri, folder, FolderQuery.descendantsPattern(folder))
+
+    @Query(
+        """
+        SELECT * FROM photo_assets
+        WHERE rootUri = :rootUri
+            AND (:folder = '' OR relativeDir = :folder OR relativeDir LIKE :descendants ESCAPE '\')
+        ORDER BY dateTaken ASC, fileName ASC
+        """
+    )
+    fun observeScopeMatching(rootUri: String, folder: String, descendants: String): Flow<List<PhotoAsset>>
+
+    suspend fun getScope(rootUri: String, folder: String): List<PhotoAsset> =
+        getScopeMatching(rootUri, folder, FolderQuery.descendantsPattern(folder))
+
+    @Query(
+        """
+        SELECT * FROM photo_assets
+        WHERE rootUri = :rootUri
+            AND (:folder = '' OR relativeDir = :folder OR relativeDir LIKE :descendants ESCAPE '\')
+        """
+    )
+    suspend fun getScopeMatching(rootUri: String, folder: String, descendants: String): List<PhotoAsset>
+
+    @Query(
+        """
+        SELECT * FROM photo_assets WHERE lastImportJobId = :jobId
+        ORDER BY dateTaken ASC, fileName ASC
+        """
+    )
+    fun observeByImportJob(jobId: Long): Flow<List<PhotoAsset>>
+
+    @Query("SELECT COUNT(*) FROM photo_assets WHERE rootUri = :rootUri AND xmpSyncStatus IN ('PENDING', 'WRITING')")
+    suspend fun countUnsaved(rootUri: String): Int
+
+    @Query("DELETE FROM photo_assets WHERE rootUri = :rootUri")
+    suspend fun deleteByRoot(rootUri: String)
 
     @Query("SELECT * FROM photo_assets WHERE id = :id LIMIT 1")
     override suspend fun getPhotoById(id: String): PhotoAsset?

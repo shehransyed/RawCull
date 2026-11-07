@@ -32,10 +32,52 @@ class SafTreeWalker(private val resolver: ContentResolver) {
      * went away. An incomplete walk must fail rather than look like a shorter listing, since the
      * merge step deletes whatever is missing from it.
      */
-    suspend fun walk(treeUri: Uri, onProgress: (Int, Int) -> Unit = { _, _ -> }): WalkResult {
+    suspend fun walk(treeUri: Uri, onProgress: (Int, Int) -> Unit = { _, _ -> }): WalkResult =
+        walkFrom(treeUri, rootDirectory(treeUri), onProgress)
+
+    /**
+     * Like [walk], but only [relativeDir] and what's under it. Entries keep their full relative
+     * dirs. A folder that no longer exists gives an empty result; a lost volume throws, as in [walk].
+     */
+    suspend fun walkSubtree(
+        treeUri: Uri,
+        relativeDir: String,
+        onProgress: (Int, Int) -> Unit = { _, _ -> },
+    ): WalkResult {
+        var directory = rootDirectory(treeUri)
+        if (relativeDir.isNotEmpty()) {
+            for (segment in relativeDir.split('/')) {
+                directory = findChildDirectory(treeUri, directory, segment) ?: return WalkResult(emptyList(), 0)
+            }
+        }
+        return walkFrom(treeUri, directory, onProgress)
+    }
+
+    private fun rootDirectory(treeUri: Uri): Directory {
         val rootId = DocumentsContract.getTreeDocumentId(treeUri)
         val rootUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, rootId).toString()
-        val pending = ArrayDeque(listOf(Directory(rootId, rootUri, relativeDir = "", depth = 0)))
+        return Directory(rootId, rootUri, relativeDir = "", depth = 0)
+    }
+
+    /** One children query per path segment; nothing here reads the files themselves. */
+    private fun findChildDirectory(treeUri: Uri, parent: Directory, name: String): Directory? {
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parent.docId)
+        val cursor = resolver.query(childrenUri, PROJECTION, null, null, null)
+            ?: throw FileNotFoundException("Could not list ${parent.relativeDir.ifEmpty { "source root" }}")
+        cursor.use {
+            while (it.moveToNext()) {
+                if (it.getString(COLUMN_NAME) != name || it.getString(COLUMN_MIME) != Document.MIME_TYPE_DIR) continue
+                val docId = it.getString(COLUMN_ID) ?: continue
+                val relativeDir = if (parent.relativeDir.isEmpty()) name else "${parent.relativeDir}/$name"
+                val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId).toString()
+                return Directory(docId, docUri, relativeDir, parent.depth + 1)
+            }
+        }
+        return null
+    }
+
+    private suspend fun walkFrom(treeUri: Uri, start: Directory, onProgress: (Int, Int) -> Unit): WalkResult {
+        val pending = ArrayDeque(listOf(start))
         val entries = ArrayList<ScannedEntry>()
         var dirsVisited = 0
 

@@ -13,7 +13,16 @@ data class MergeResult(
 /** Reconciles a fresh listing with the stored catalog, keeping user state on existing rows. */
 object ScanMerger {
 
-    fun merge(rootUri: String, existing: Map<String, PhotoAsset>, drafts: List<AssetDraft>): MergeResult {
+    /**
+     * @param listedSince when the listing began. A row touched since then is kept even if the
+     * listing missed it: the import worker inserts rows directly, and this scan can't have seen them.
+     */
+    fun merge(
+        rootUri: String,
+        existing: Map<String, PhotoAsset>,
+        drafts: List<AssetDraft>,
+        listedSince: Long = Long.MAX_VALUE,
+    ): MergeResult {
         val toUpsert = ArrayList<PhotoAsset>()
         val sidecarLastModified = HashMap<String, Long>()
         val seenIds = HashSet<String>(drafts.size * 2)
@@ -27,7 +36,8 @@ object ScanMerger {
             val merged = if (stored == null) newAsset(id, rootUri, draft) else refresh(stored, draft)
             if (merged != stored) toUpsert += merged
         }
-        return MergeResult(toUpsert, existing.keys.filterNot { it in seenIds }, sidecarLastModified)
+        val toDelete = existing.values.filter { it.id !in seenIds && it.lastModified < listedSince }.map { it.id }
+        return MergeResult(toUpsert, toDelete, sidecarLastModified)
     }
 
     private fun newAsset(id: String, rootUri: String, draft: AssetDraft): PhotoAsset = PhotoAsset(

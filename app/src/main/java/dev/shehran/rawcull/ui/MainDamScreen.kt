@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LifecycleStartEffect
 import dev.shehran.rawcull.ui.components.ExportDialog
 import dev.shehran.rawcull.ui.components.SettingsSheet
 import dev.shehran.rawcull.ui.components.SyncDetailsDialog
@@ -49,6 +50,10 @@ fun MainDamScreen(
     LifecycleResumeEffect(Unit) {
         viewModel.refreshSources()
         onPauseOrDispose { }
+    }
+    LifecycleStartEffect(Unit) {
+        viewModel.onAppStart()
+        onStopOrDispose { }
     }
     StorageChangeEffect(onChanged = viewModel::refreshSources)
 

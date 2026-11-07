@@ -19,6 +19,7 @@ import dev.shehran.rawcull.data.xmp.SidecarReconciler
 import dev.shehran.rawcull.data.xmp.SidecarStores
 import dev.shehran.rawcull.data.xmp.XMP_TOOLKIT
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
+import dev.shehran.rawcull.library.LibraryScope
 import dev.shehran.rawcull.util.SamplePhotosGenerator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -45,6 +46,14 @@ class RawCatalogRepository(
     private val converters = Converters()
 
     fun observeByRoot(rootUri: String): Flow<List<PhotoAsset>> = dao.observeByRoot(rootUri)
+
+    fun observeScope(rootUri: String, scope: LibraryScope): Flow<List<PhotoAsset>> = when (scope) {
+        LibraryScope.All -> dao.observeScope(rootUri, "")
+        is LibraryScope.Folder -> dao.observeScope(rootUri, scope.relativeDir)
+        is LibraryScope.LatestImport -> dao.observeByImportJob(scope.jobId)
+    }
+
+    fun observeFolderCounts(rootUri: String): Flow<Map<String, Int>> = dao.observeFolderCounts(rootUri)
 
     /** Generates the demo shoot once, so flags set on it survive reopening it. */
     suspend fun loadSampleShoot() = withContext(Dispatchers.IO) {

@@ -4,7 +4,9 @@ import android.content.Context
 import android.util.Log
 import dev.shehran.rawcull.data.local.AppDatabase
 import dev.shehran.rawcull.data.local.RawPhotoDao
+import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.RawCatalogRepository
+import dev.shehran.rawcull.data.repository.SafLocationAccess
 import dev.shehran.rawcull.data.repository.SettingsRepository
 import dev.shehran.rawcull.data.scan.ScanCoordinator
 import dev.shehran.rawcull.data.xmp.LocalSidecarStore
@@ -36,6 +38,13 @@ class AppContainer(context: Context) {
     )
     val catalogRepository: RawCatalogRepository =
         RawCatalogRepository(appContext, database, photoDao, xmpWriteQueue, sidecarStores, settingsRepository)
+    val locationRepository: LocationRepository = LocationRepository(
+        locations = database.locationDao(),
+        photos = photoDao,
+        access = SafLocationAccess(appContext),
+        flushXmp = { xmpWriteQueue.flushNow() },
+        isGrantInUse = { treeUri -> treeUri in settingsRepository.volumeGrants.first().values },
+    )
     val scanCoordinator: ScanCoordinator =
         ScanCoordinator(appContext, database, photoDao, applicationScope, sidecarStores, xmpWriteQueue)
 }

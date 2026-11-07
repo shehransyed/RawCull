@@ -30,6 +30,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -91,6 +92,16 @@ class ScanCoordinator(
         }
     }
 
+    /**
+     * Re-walks one folder of [rootUri] and merges only what's inside it. Does nothing while a scan
+     * is running, because a full scan covers the folder anyway.
+     */
+    @Synchronized
+    fun rescanSubtree(rootUri: String, relativeDir: String) {
+        if (job?.isActive == true) return
+        job = scope.launch(Dispatchers.IO) { scan(rootUri, relativeDir) }
+    }
+
     @Synchronized
     fun cancel() {
         job?.cancel()
@@ -105,12 +116,13 @@ class ScanCoordinator(
         queue?.prioritize(id)
     }
 
-    private suspend fun scan(rootUri: String) {
+    private suspend fun scan(rootUri: String, subtree: String = "") {
         try {
-            val listing = runPhaseA(rootUri)
+            val listing = runPhaseA(rootUri, subtree)
             runPhaseB(rootUri, listing)
             writeQueue.recover() // A card that just came back can take what failed while it was out.
-            _state.value = ScanState.Complete(rootUri, listing.photoCount, listing.folderCount)
+            val folders = dao.observeFolderCounts(rootUri).first()
+            _state.value = ScanState.Complete(rootUri, folders.values.sum(), folders.size)
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
@@ -136,13 +148,16 @@ class ScanCoordinator(
         val sidecarLastModified: Map<String, Long>,
     )
 
-    private suspend fun runPhaseA(rootUri: String): Listing {
+    private suspend fun runPhaseA(rootUri: String, subtree: String): Listing {
         val started = SystemClock.elapsedRealtime()
+        val listedSince = System.currentTimeMillis()
         val treeUri = Uri.parse(rootUri)
         _state.value = ScanState.Listing(rootUri, dirsVisited = 0, filesSeen = 0)
 
         val walk = try {
-            walker.walk(treeUri) { dirs, files -> _state.value = ScanState.Listing(rootUri, dirs, files) }
+            walker.walkSubtree(treeUri, subtree) { dirs, files ->
+                _state.value = ScanState.Listing(rootUri, dirs, files)
+            }
         } catch (e: IllegalStateException) {
             // Providers can surface a dying volume this way; here it can't be a local bug in Room.
             throw IOException("Walk failed", e)
@@ -155,8 +170,8 @@ class ScanCoordinator(
         }
 
         val merge = database.withTransaction {
-            val existing = dao.getByRoot(rootUri).associateBy { it.id }
-            val result = ScanMerger.merge(rootUri, existing, grouping.assets)
+            val existing = dao.getScope(rootUri, subtree).associateBy { it.id }
+            val result = ScanMerger.merge(rootUri, existing, grouping.assets, listedSince)
             result.toUpsert.chunked(DB_CHUNK).forEach { dao.upsertAll(it) }
             result.toDelete.chunked(DB_CHUNK).forEach { dao.deleteByIds(it) }
             result
@@ -166,7 +181,7 @@ class ScanCoordinator(
         val filesPerSecond = if (elapsed > 0) walk.entries.size * 1000L / elapsed else walk.entries.size.toLong()
         Log.i(
             TAG,
-            "phaseA durationMs=$elapsed walkMs=$walkMillis files=${walk.entries.size} dirs=${walk.dirsVisited} " +
+            "phaseA subtree=\"$subtree\" durationMs=$elapsed walkMs=$walkMillis files=${walk.entries.size} dirs=${walk.dirsVisited} " +
                 "assets=${grouping.assets.size} orphanSidecars=${grouping.orphanSidecars.size} " +
                 "upserted=${merge.toUpsert.size} deleted=${merge.toDelete.size} filesPerSec=$filesPerSecond",
         )

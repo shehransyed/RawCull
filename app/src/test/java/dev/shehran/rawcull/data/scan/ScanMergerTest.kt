@@ -190,4 +190,23 @@ class ScanMergerTest {
 
         assertEquals(listOf(gone.id), result.toDelete)
     }
+
+    @Test
+    fun `a row the listing missed is deleted`() {
+        val gone = storedRow().copy(lastModified = 100L)
+        assertEquals(listOf(gone.id), ScanMerger.merge(root, mapOf(gone.id to gone), emptyList(), listedSince = 200L).toDelete)
+    }
+
+    @Test
+    fun `a row inserted after the listing began survives it`() {
+        val imported = storedRow().copy(lastModified = 300L, lastImportJobId = 7L)
+        assertTrue(ScanMerger.merge(root, mapOf(imported.id to imported), emptyList(), listedSince = 200L).toDelete.isEmpty())
+    }
+
+    @Test
+    fun `a rescan keeps the import a row came from`() {
+        val imported = storedRow().copy(lastImportJobId = 7L)
+        val row = ScanMerger.merge(root, mapOf(imported.id to imported), listOf(draft(lastModified = 2_000L))).toUpsert.single()
+        assertEquals(7L, row.lastImportJobId)
+    }
 }
