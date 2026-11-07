@@ -61,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -122,7 +123,7 @@ fun LibraryScreen(
     var showInspectorSheet by rememberSaveable { mutableStateOf(false) }
     var relinkTargetId by rememberSaveable { mutableStateOf<Long?>(null) }
     val folderPaneOpen = layout.showsFolderPane && (folderPaneChoice ?: true)
-    val inspectorOpen = layout.showsSideInspector && (inspectorChoice ?: layout.showsFolderPane)
+    val inspectorOpen = layout.showsSideInspector && (inspectorChoice ?: layout.opensInspectorByDefault)
 
     val addLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let(viewModel::addLocation)
@@ -211,6 +212,8 @@ fun LibraryScreen(
                 onTryDemo = viewModel::openDemoLibrary,
             )
             else -> ModalNavigationDrawer(
+                // A closed sheet waits just left of this area, which is where the rail is.
+                modifier = Modifier.clipToBounds(),
                 drawerState = drawerState,
                 gesturesEnabled = !layout.showsFolderPane && (drawerState.isOpen || !viewingPhoto),
                 drawerContent = {
@@ -420,7 +423,8 @@ private fun LibraryMainView(
                     if (fullScreenPhoto) {
                         IconButton(
                             onClick = { viewModel.setViewMode(DamViewMode.GRID) },
-                            modifier = Modifier.align(Alignment.TopStart).testTag("loupe_back_button"),
+                            // Bottom corner: the loupe's own badges fill the top of the photo.
+                            modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).testTag("loupe_back_button"),
                         ) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to grid", tint = Color.White)
                         }

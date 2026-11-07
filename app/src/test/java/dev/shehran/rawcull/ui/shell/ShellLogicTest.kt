@@ -60,8 +60,14 @@ class ShellLogicTest {
     }
 
     @Test
-    fun `large windows get the wide rail`() {
+    fun `large windows get the wide rail and an open inspector`() {
         assertTrue(WindowLayout.of(1280, 800).usesWideRail)
+        assertTrue(WindowLayout.of(1280, 800).opensInspectorByDefault)
+    }
+
+    @Test
+    fun `a portrait tablet keeps room for the photo`() {
+        assertFalse(WindowLayout.of(840, 1280).opensInspectorByDefault)
     }
 
     @Test

@@ -21,6 +21,9 @@ data class WindowLayout(val width: WidthClass, val isHeightCompact: Boolean) {
     val showsSideInspector: Boolean get() = width >= WidthClass.MEDIUM
     val showsSideBySide: Boolean get() = width >= WidthClass.MEDIUM
 
+    /** Below this, folder pane plus inspector leave the photo too little room, so it starts closed. */
+    val opensInspectorByDefault: Boolean get() = width >= WidthClass.LARGE
+
     /** A phone on its side has height to spare for neither a bottom culling bar nor a filmstrip. */
     val cullingBarAtSide: Boolean get() = isHeightCompact && width >= WidthClass.MEDIUM
     val showsFilmstrip: Boolean get() = !isHeightCompact

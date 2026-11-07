@@ -3,11 +3,10 @@ package dev.shehran.rawcull.ui.settings
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import dev.shehran.rawcull.RawCullApp
+import dev.shehran.rawcull.AppContainer
 import dev.shehran.rawcull.data.local.ImportPresetDao
 import dev.shehran.rawcull.data.model.ImportPreset
 import dev.shehran.rawcull.data.model.LibraryLocation
@@ -121,9 +120,9 @@ class SettingsViewModel(
     }
 
     companion object {
-        val Factory: ViewModelProvider.Factory = viewModelFactory {
+        /** Takes [container] directly: Nav3's entry store has no application in its creation extras. */
+        fun factory(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                val container = (this[APPLICATION_KEY] as RawCullApp).container
                 SettingsViewModel(
                     settings = container.settingsRepository,
                     locations = container.locationRepository,

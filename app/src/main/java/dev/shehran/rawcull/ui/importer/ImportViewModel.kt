@@ -76,7 +76,14 @@ data class ImportUiState(
         get() = summary.selectedPhotos > 0 && hasDestination && !isShortOfSpace && !isStarting &&
             session != ImportSessionState.SourceLost
     val selectedPreset: ImportPreset? get() = presets.firstOrNull { it.id == selectedPresetId }
-    val isDraftModified: Boolean get() = selectedPreset?.sameSettingsAs(draft) == false
+
+    /** A preset without a Location of its own just takes the one suggested, which isn't an edit. */
+    val isDraftModified: Boolean
+        get() {
+            val preset = selectedPreset ?: return false
+            val baseline = if (preset.locationId == null) preset.copy(locationId = draft.locationId) else preset
+            return !baseline.sameSettingsAs(draft)
+        }
     val destination: LibraryLocation?
         get() = locations.firstOrNull { it.location.id == draft.locationId }?.location
     val isDestinationAvailable: Boolean
@@ -84,6 +91,13 @@ data class ImportUiState(
     val destinationLocations: List<LocationUi> get() = locations.filterNot { it.location.isDemo }
     val hasDestination: Boolean get() = destination != null && isDestinationAvailable
     val firstPhotoDate: Long? get() = candidates.mapNotNull { it.folderDate }.minOrNull()
+
+    /** The earliest photo the import will really take; hidden ones don't count. */
+    val firstImportDate: Long?
+        get() {
+            val selected = ImportPreview.selectedIds(candidates, options, overrides)
+            return candidates.filter { it.id in selected }.mapNotNull { it.folderDate }.minOrNull()
+        }
     val canContinue: Boolean get() = candidates.isNotEmpty() && hasDestination
 }
 

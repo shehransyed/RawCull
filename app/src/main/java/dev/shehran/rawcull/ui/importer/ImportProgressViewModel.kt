@@ -2,11 +2,10 @@ package dev.shehran.rawcull.ui.importer
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import dev.shehran.rawcull.RawCullApp
+import dev.shehran.rawcull.AppContainer
 import dev.shehran.rawcull.data.importer.ImportController
 import dev.shehran.rawcull.data.importer.ImportStart
 import dev.shehran.rawcull.data.local.ImportJobDao
@@ -80,9 +79,9 @@ class ImportProgressViewModel(
     }
 
     companion object {
-        fun factory(jobId: Long): ViewModelProvider.Factory = viewModelFactory {
+        /** Takes [container] directly: Nav3's entry store has no application in its creation extras. */
+        fun factory(container: AppContainer, jobId: Long): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                val container = (this[APPLICATION_KEY] as RawCullApp).container
                 ImportProgressViewModel(jobId, container.database.importJobDao(), container.importController)
             }
         }

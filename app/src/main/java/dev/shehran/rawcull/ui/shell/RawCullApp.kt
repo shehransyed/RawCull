@@ -29,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -38,6 +39,7 @@ import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.rememberDecoratedNavEntries
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import dev.shehran.rawcull.RawCullApp as ApplicationClass
 import dev.shehran.rawcull.data.model.ImportJob
 import dev.shehran.rawcull.ui.importer.ImportPreviewScreen
 import dev.shehran.rawcull.ui.importer.ImportProgressScreen
@@ -135,6 +137,7 @@ private fun AppNavDisplay(
     importViewModel: ImportViewModel,
     onImmersiveChange: (Boolean) -> Unit,
 ) {
+    val container = (LocalContext.current.applicationContext as ApplicationClass).container
     val entryProvider: (AppKey) -> NavEntry<AppKey> = { key ->
         NavEntry(key) {
             when (key) {
@@ -161,7 +164,7 @@ private fun AppNavDisplay(
                 is AppKey.ImportProgress -> ImportProgressScreen(
                     viewModel = viewModel(
                         key = "import-progress-${key.jobId}",
-                        factory = ImportProgressViewModel.factory(key.jobId),
+                        factory = ImportProgressViewModel.factory(container, key.jobId),
                     ),
                     onCullInLibrary = { job ->
                         libraryViewModel.openImport(job)
@@ -174,7 +177,7 @@ private fun AppNavDisplay(
                         stacks.resetTo(TopLevelTab.IMPORT)
                     },
                 )
-                AppKey.Settings -> SettingsScreen(viewModel = viewModel(factory = SettingsViewModel.Factory))
+                AppKey.Settings -> SettingsScreen(viewModel = viewModel(factory = SettingsViewModel.factory(container)))
             }
         }
     }

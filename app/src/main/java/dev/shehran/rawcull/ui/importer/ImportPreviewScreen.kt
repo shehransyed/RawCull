@@ -406,7 +406,7 @@ private fun SummaryBar(uiState: ImportUiState, onStart: () -> Unit, onBack: () -
     val context = LocalContext.current
     val summary = uiState.summary
     val size = Formatter.formatShortFileSize(context, summary.bytes)
-    val path = ImportDestination.previewPath(uiState.destination, uiState.draft, uiState.firstPhotoDate)
+    val path = ImportDestination.previewPath(uiState.destination, uiState.draft, uiState.firstImportDate)
 
     Column(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
         Text(
