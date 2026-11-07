@@ -18,6 +18,9 @@ import dev.shehran.rawcull.ui.shell.RawCullApp as RawCullScreen
 import dev.shehran.rawcull.ui.shell.ShellViewModel
 import dev.shehran.rawcull.ui.theme.RawCullTheme
 import dev.shehran.rawcull.ui.components.LocalPreviewWarmup
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.shehran.rawcull.ui.components.LocalShowPreviewTiming
 
 class MainActivity : ComponentActivity() {
     private val viewModel: LibraryViewModel by viewModels { LibraryViewModel.Factory }
@@ -31,9 +34,11 @@ class MainActivity : ComponentActivity() {
             RawCullTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     val container = (application as RawCullApp).container
+                    val showTiming by container.settingsRepository.showPreviewTiming.collectAsStateWithLifecycle(initialValue = false)
                     CompositionLocalProvider(
                         LocalPreviewRepository provides container.previewRepository,
                         LocalPreviewWarmup provides container.previewWarmup,
+                        LocalShowPreviewTiming provides (BuildConfig.DEBUG && showTiming),
                     ) {
                         RawCullScreen(libraryViewModel = viewModel, shellViewModel = shellViewModel)
                     }

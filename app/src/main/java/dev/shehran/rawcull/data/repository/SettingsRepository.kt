@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.json.JSONException
 import org.json.JSONObject
+import androidx.datastore.preferences.core.intPreferencesKey
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore("rawcull_settings")
 
@@ -59,6 +60,20 @@ class SettingsRepository(context: Context) {
             autoAdvance = prefs[KEY_AUTO_ADVANCE] ?: false,
             swipeToFlag = prefs[KEY_SWIPE_TO_FLAG] ?: true,
         )
+    }
+
+    /** D6: how big the thumbnail cache may get. */
+    val previewCacheLimitMb: Flow<Int> = dataStore.data.map { it[KEY_PREVIEW_CACHE_LIMIT_MB] ?: DEFAULT_PREVIEW_CACHE_LIMIT_MB }
+
+    /** Debug builds: timings over the loupe. */
+    val showPreviewTiming: Flow<Boolean> = dataStore.data.map { it[KEY_SHOW_PREVIEW_TIMING] ?: false }
+
+    suspend fun setPreviewCacheLimitMb(mb: Int) {
+        dataStore.edit { it[KEY_PREVIEW_CACHE_LIMIT_MB] = mb }
+    }
+
+    suspend fun setShowPreviewTiming(enabled: Boolean) {
+        dataStore.edit { it[KEY_SHOW_PREVIEW_TIMING] = enabled }
     }
 
     /** Which tree each volume UUID was granted, so a re-inserted card opens without the picker. */
@@ -200,6 +215,10 @@ class SettingsRepository(context: Context) {
         val KEY_AUTO_ADVANCE = booleanPreferencesKey("auto_advance")
         val KEY_SWIPE_TO_FLAG = booleanPreferencesKey("swipe_to_flag")
         val KEY_LEGACY_PREVIEW_CACHE_CLEARED = booleanPreferencesKey("legacy_preview_cache_cleared")
+        val KEY_PREVIEW_CACHE_LIMIT_MB = intPreferencesKey("preview_cache_limit_mb")
+        val KEY_SHOW_PREVIEW_TIMING = booleanPreferencesKey("show_preview_timing")
+        const val DEFAULT_PREVIEW_CACHE_LIMIT_MB = 1024
+        val PREVIEW_CACHE_LIMITS_MB = listOf(256, 512, 1024, 2048, 4096)
 
         fun encodeGrants(grants: Map<String, String>): String {
             val json = JSONObject()

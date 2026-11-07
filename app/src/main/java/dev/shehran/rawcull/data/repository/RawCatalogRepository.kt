@@ -52,6 +52,10 @@ class RawCatalogRepository(
     /** One read, not an observer: for work over a whole Location, such as building previews. */
     suspend fun photosIn(rootUri: String): List<PhotoAsset> = withContext(Dispatchers.IO) { dao.getByRoot(rootUri) }
 
+    /** A folder and everything under it, read once; an empty [folder] is the whole Location. */
+    suspend fun photosInFolder(rootUri: String, folder: String): List<PhotoAsset> =
+        withContext(Dispatchers.IO) { dao.getScope(rootUri, folder) }
+
     override fun observeScope(rootUri: String, scope: LibraryScope): Flow<List<PhotoAsset>> = when (scope) {
         LibraryScope.All -> dao.observeScope(rootUri, "")
         is LibraryScope.Folder -> dao.observeScope(rootUri, scope.relativeDir)

@@ -42,5 +42,7 @@ class FakePreviewRepository : PreviewRepository {
 
     override suspend fun clearCache() = Unit
 
+    override fun clearMemory() = Unit
+
     override suspend fun forget(sources: List<PreviewSource>) = Unit
 }

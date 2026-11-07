@@ -91,6 +91,15 @@ class ThumbnailStore(
         }
     }
 
+    /** These thumbnails and their scans, files included. */
+    suspend fun remove(keys: Collection<String>) = withContext(io) {
+        keys.chunked(SQL_BATCH).forEach { batch ->
+            batch.forEach { key -> dao.thumbnail(key)?.let { File(root, it.path).delete() } }
+            dao.deleteThumbnails(batch)
+            dao.deleteScans(batch)
+        }
+    }
+
     suspend fun clear() = withContext(io) {
         dao.clearThumbnails()
         dao.clearScans()

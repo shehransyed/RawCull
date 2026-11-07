@@ -74,6 +74,18 @@ class ThumbnailStoreTest {
     }
 
     @Test
+    fun `removing forgets the file, the row and the scan`() = runBlocking {
+        put("1")
+        put("2")
+        dao.putScan(ScanRow(key("1"), "[]", 1, now))
+        store.remove(listOf(key("1")))
+        assertNull(store.read(key("1")))
+        assertNull(dao.scan(key("1")))
+        assertTrue(store.contains(key("2")))
+        assertEquals(1, root.walkTopDown().count { it.isFile })
+    }
+
+    @Test
     fun `nothing temporary stays behind`() = runBlocking {
         put("b")
         assertEquals(1, root.walkTopDown().count { it.isFile })

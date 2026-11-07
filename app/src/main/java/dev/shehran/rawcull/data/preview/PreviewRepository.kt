@@ -132,6 +132,9 @@ interface PreviewRepository {
 
     suspend fun clearCache()
 
+    /** Drops what RAM holds and keeps the disk, for the benchmark's disk stage. */
+    fun clearMemory()
+
     /** Forgets RAM and disk for these photos, for a cold benchmark run. */
     suspend fun forget(sources: List<PreviewSource>)
 }

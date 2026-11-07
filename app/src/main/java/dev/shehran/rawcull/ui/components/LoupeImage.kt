@@ -38,6 +38,7 @@ import dev.shehran.rawcull.data.preview.RegionSource
 import dev.shehran.rawcull.preview.RegionMath
 import dev.shehran.rawcull.preview.SourceRect
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.staticCompositionLocalOf
 
 /** D11: a tile is decoded this long after the last change to the zoom or pan. */
 private const val TILE_SETTLE_MS = 120L
@@ -56,8 +57,25 @@ private class RegionHolder {
     }
 }
 
-/** What the loupe is showing, for the inspector and the zoom pill. */
-data class LoupeContent(val image: PreviewImage?, val unavailable: String?)
+/** Debug builds: R5.9's timing overlay over the loupe. */
+val LocalShowPreviewTiming = staticCompositionLocalOf { false }
+
+/**
+ * What the loupe is showing, for the pill and the timing overlay.
+ *
+ * @param fromMemory the image was already in RAM, so its timing is from when it was made.
+ */
+data class LoupeContent(val image: PreviewImage?, val unavailable: String?, val fromMemory: Boolean = false)
+
+/** "Embedded JPEG 1616 × 1080 · FILE 131 ms (open 21 · scan 0 · read 1 · decode 100)". */
+fun previewTimingText(content: LoupeContent): String? {
+    val image = content.image ?: return null
+    val source = image.info?.description ?: "${image.bitmap.width} × ${image.bitmap.height}"
+    if (content.fromMemory) return "$source · RAM"
+    val t = image.timing
+    fun ms(value: Double) = "%.0f".format(value)
+    return "$source · ${t.hit} ${ms(t.totalMs)} ms (open ${ms(t.openMs)} · scan ${ms(t.scanMs)} · read ${ms(t.readMs)} · decode ${ms(t.decodeMs)})"
+}
 
 /**
  * One photo in the loupe (D8, D10, D11), shared by the single loupe and compare. The fit preview
@@ -83,6 +101,7 @@ fun LoupeImage(
     val key = source?.key
     var image by remember(key) { mutableStateOf<PreviewImage?>(null) }
     var unavailable by remember(key) { mutableStateOf<String?>(null) }
+    var fromMemory by remember(key) { mutableStateOf(false) }
     var tile by remember(key) { mutableStateOf<Tile?>(null) }
     val thumbnail = remember(key) { source?.let { previews?.peekThumbnail(it, PLACEHOLDER_THUMBNAIL_PX) } }
     val holder = remember(key) { RegionHolder() }
@@ -92,7 +111,8 @@ fun LoupeImage(
     val height = zoom.viewHeight
     LaunchedEffect(key, width, height) {
         if (source == null || previews == null || width <= 0 || height <= 0) return@LaunchedEffect
-        val ready = previews.peekFit(source, width, height)
+        val peeked = previews.peekFit(source, width, height)
+        val ready = peeked
             ?: when (val result = previews.fitPreview(source, width, height, PreviewLane.LOUPE_CURRENT)) {
                 is PreviewResult.Ready -> result.image
                 is PreviewResult.Unavailable -> {
@@ -101,12 +121,13 @@ fun LoupeImage(
                 }
             }
         if (ready != null) {
+            fromMemory = peeked != null
             image = ready
             unavailable = null
         }
     }
 
-    LaunchedEffect(image, unavailable) { onContent(LoupeContent(image, unavailable)) }
+    LaunchedEffect(image, unavailable, fromMemory) { onContent(LoupeContent(image, unavailable, fromMemory)) }
 
     // Each photo starts at fit (R4's behaviour).
     DisposableEffect(key) {

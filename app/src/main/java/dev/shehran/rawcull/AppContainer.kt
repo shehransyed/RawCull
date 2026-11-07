@@ -49,10 +49,10 @@ import dev.shehran.rawcull.data.preview.PreviewKeys
 import dev.shehran.rawcull.data.preview.PreviewWarmup
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.drop
 
 private const val LEGACY_PREVIEW_CACHE_DIR = "rawcull_preview_cache"
 private const val THUMBNAIL_DIR = "previews/v1"
-private const val DEFAULT_PREVIEW_CACHE_MB = 1024L
 private const val BYTES_PER_MB = 1024L * 1024
 private const val PREVIEW_IO_THREADS = 4
 private const val PREVIEW_DECODE_THREADS = 3
@@ -136,7 +136,7 @@ class AppContainer(context: Context) {
     private val thumbnailStore: ThumbnailStore = ThumbnailStore(
         dao = previewDatabase.dao(),
         root = File(appContext.cacheDir, THUMBNAIL_DIR),
-        limitBytes = { DEFAULT_PREVIEW_CACHE_MB * BYTES_PER_MB },
+        limitBytes = { settingsRepository.previewCacheLimitMb.first() * BYTES_PER_MB },
     )
     val previewRepository: PreviewRepository = DefaultPreviewRepository(
         files = SafPreviewFiles(appContext),
@@ -161,6 +161,7 @@ class AppContainer(context: Context) {
 
     init {
         applicationScope.launch { thumbnailStore.reconcile() }
+        applicationScope.launch { settingsRepository.previewCacheLimitMb.drop(1).collect { thumbnailStore.evict() } }
         applicationScope.launch { warmFinishedImports() }
     }
 

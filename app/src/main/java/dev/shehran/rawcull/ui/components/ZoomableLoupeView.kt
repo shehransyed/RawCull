@@ -138,6 +138,23 @@ fun ZoomableLoupeView(
 
         SwipeBadge(swipe, Modifier.align(Alignment.Center))
 
+        if (LocalShowPreviewTiming.current) {
+            previewTimingText(content)?.let { text ->
+                Text(
+                    text = text,
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 64.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(ScrimStrong)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .testTag("preview_timing_overlay"),
+                )
+            }
+        }
+
         // Top-Left Overlays: File format, Star Rating, Cull Badge
         if (photo != null) {
             Row(

@@ -369,13 +369,12 @@ class DefaultPreviewRepository(
         store.clear()
     }
 
+    override fun clearMemory() = memory.clear()
+
     override suspend fun forget(sources: List<PreviewSource>) {
         val keys = sources.mapTo(HashSet()) { it.key }
         memory.remove { key -> key.substringBefore(KEY_SEPARATOR) in keys }
-        keys.chunked(SQL_BATCH).forEach {
-            dao.deleteThumbnails(it)
-            dao.deleteScans(it)
-        }
+        store.remove(keys)
     }
 
     private fun logTiming(source: PreviewSource, lane: PreviewLane, what: String, t: PreviewTiming) {

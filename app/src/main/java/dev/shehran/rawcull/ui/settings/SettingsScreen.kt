@@ -200,6 +200,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) 
 
                 if (BuildConfig.DEBUG) {
                     SectionHeader("DEVELOPER")
+                    PreviewDeveloperSection(uiState, viewModel)
                     TextButton(onClick = viewModel::addSyntheticPhotos, modifier = Modifier.testTag("settings_add_synthetic")) {
                         Text("Add 50,000 synthetic photos to the demo library", color = PrimaryCyan)
                     }
