@@ -184,7 +184,14 @@ class ImportEngine(
         }
 
         private suspend fun flushCounters() {
-            jobs.updateProgress(jobId, doneFiles.get(), doneBytes.get() + inFlightBytes.get(), skippedFiles.get(), failedFiles.get())
+            jobs.updateProgress(
+                jobId,
+                doneFiles.get(),
+                doneBytes.get() + inFlightBytes.get(),
+                skippedFiles.get(),
+                failedFiles.get(),
+                activeMillis = initial.activeMillis + (clock() - startedAt),
+            )
         }
 
         private suspend fun reportProgress() {

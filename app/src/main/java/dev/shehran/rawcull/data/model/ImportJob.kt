@@ -1,5 +1,6 @@
 package dev.shehran.rawcull.data.model
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -43,6 +44,8 @@ data class ImportJob(
     val doneBytes: Long = 0,
     val skippedFiles: Int = 0,
     val failedFiles: Int = 0,
+    @ColumnInfo(defaultValue = "0")
+    val activeMillis: Long = 0, // Time spent running, so pauses count towards neither elapsed time nor speed
 )
 
 enum class ImportItemState {

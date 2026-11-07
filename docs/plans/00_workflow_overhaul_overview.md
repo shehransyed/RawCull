@@ -1,6 +1,6 @@
-# RawCull — Workflow Overhaul (import-first): Overview of Rounds R3–R6
+# RawCull — Workflow Overhaul (import-first): Overview of Rounds R3–R7
 
-Status: **PLANNED** · 2026-11-06 · Base: `main` @ `73eb70f` (R0–R2 merged)
+Status: **R3 implemented (on-device testing) · R4 ready** · updated 2026-11-07 · Base: `main` @ `73eb70f` (R0–R2 merged); R3 on local `feature/r3-shell-library-import` @ `a53eccb`
 Source of requirements: the "RapidReady → RawCull: Workflow Reference" doc (https://claude.ai/artifact/LZE1ekdGgE2v3wdrymAhxV), section 8 answers, and the decision log in `rawcull/01_roadmap_and_decisions.md`.
 
 ## What changes
@@ -29,18 +29,20 @@ The card is never culled in place any more and never enters the catalog.
 | Video | Ignore |
 | Design | Current Android design guidance; responsive on tablets and phones, portrait and landscape |
 | Plan shape | Several rounds, each shipping a working app |
+| Updates (2026-11-07) | Every round's build installs over the previous one as an update (version bump first, forward-only migrations, same key) |
 
 ## Rounds
 
 | Round | Name | Ships | Plan |
 |---|---|---|---|
-| **R3** | Adaptive shell + Library + Import | New app shell (Import / Library / Settings) that adapts to every window size and orientation; Locations; whole-library catalog with folder tree and *Latest Import*; the three-step Import wizard with a verified, resumable background copy, duplicate index and delete-from-card; a full Settings screen. Retires the Welcome screen, recent sources and the export dialog. | `R3_shell_library_import.md` (**ready**) |
-| R4 | Culling UX + reject deletion | Full Lightroom shortcut set; auto-advance; undo/redo; filter bar (flag, min rating, colour, tag with counts, search, sort); touch gestures (swipe up = pick, down = reject, haptics); long-press multi-select; **Delete rejects** via MediaStore trash (Android 11+, media on shared storage) else permanent with warning, sidecars included; sticky folder headers (O8); enrichment order follows the active sort (O9). | to plan after R3 lands |
+| **R3** | Adaptive shell + Library + Import | New app shell (Import / Library / Settings) that adapts to every window size and orientation; Locations; whole-library catalog with folder tree and *Latest Import*; the three-step Import wizard with a verified, resumable background copy, duplicate index and delete-from-card; a full Settings screen. Retires the Welcome screen, recent sources and the export dialog. | `R3_shell_library_import.md` (**implemented**, testing on the tablet) |
+| **R4** | Culling UX + reject deletion | Update-safe builds; full Lightroom shortcut set with help sheet; auto-advance; undo/redo; filter bar (flags, rating with operator, colours, tags with counts, search, sort; per Location); loupe swipe gestures + haptics; long-press / drag multi-select with batch actions; **Delete rejects** via MediaStore trash (Android 11+) else permanent with warning, sidecars included; sticky folder headers (O8); enrichment follows the visible order (O9); 50k-row performance check; theme tokens; R3 leftovers (plausible dates, old card rows, active import time). | `R4_culling_ux_reject_deletion.md` (**ready**) |
 | R5 | Preview speed & quality | Embedded large preview via TIFF IFD / CR3 / RAF parsing with RapidReady's 256 KB → 2 MB → end-of-file tiers; one file-descriptor open; persistent thumbnail cache index; prefetch (grid ±3 rows, loupe +3/+5 ahead, 1 behind, 100 ms debounce); true 1:1 region decode. Covers O10. Used by the library and the import preview. | to plan |
 | R6 | Extras | Full window + slideshow (immersive, 2/3/5/10 s, loop, crossfade, culling keys); focus peaking (AGSL `RuntimeShader` on API 33+, CPU fallback below); histogram modes (overlay/full, log/linear); collections (virtual albums, manual order, ordered export); GPS editing (paste a Maps link / DMS / DD, batch apply, written to XMP `exif:GPS*`). | to plan |
+| R7 | Design pass (UI/UX) | Visual and interaction polish driven by Shehran's field use of R3–R6: hierarchy, density, typography, motion, empty states, copy, accessibility audit; built on the theme tokens R4.1 introduces. Input: the friction log Shehran keeps while using the app. | to plan after real-world use |
 
-R5 is independent of R4 and can swap order if previews feel like the bigger pain after R3.
+R5 is independent of R4 and can swap order if previews feel like the bigger pain. R7 can move earlier if a usability problem blocks real use; small blocking UX bugs are fixed in whichever round is next, not saved for R7.
 
-## Before or alongside R3
+## Before or alongside each round
 
-The R0–R2 manual acceptance checklists (real card, real RAWs, real Lightroom) are still open. R3 reuses the scanner and XMP stack, so running them early catches problems before more is built on top. Especially: O1 (does the tablet allow the card root?), O3 (does Lightroom keep the `rawcull` namespace?) and the real scan timing.
+The R0–R3 manual acceptance checklists (real card, real RAWs, real Lightroom) are still partly open. Later rounds reuse the scanner, XMP and import stacks, so running them early catches problems before more is built on top. Especially: O1 (does the tablet allow the card root?), O3 (does Lightroom keep the `rawcull` namespace?), real scan timing and real copy/verify speeds.

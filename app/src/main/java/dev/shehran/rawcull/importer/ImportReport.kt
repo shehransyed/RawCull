@@ -18,7 +18,9 @@ data class ImportReport(
 ) {
     companion object {
         fun of(job: ImportJob, items: List<ImportJobItem>): ImportReport {
-            val elapsed = job.startedAt?.let { start -> job.finishedAt?.minus(start) }
+            // Jobs from before v6 have no active time, so wall-clock time is the best they can show.
+            val wallClock = job.startedAt?.let { start -> job.finishedAt?.minus(start) }
+            val elapsed = wallClock?.let { job.activeMillis.takeIf { active -> active > 0 } ?: it }
             return ImportReport(
                 currentFile = items.firstOrNull {
                     it.state == ImportItemState.COPYING || it.state == ImportItemState.VERIFYING

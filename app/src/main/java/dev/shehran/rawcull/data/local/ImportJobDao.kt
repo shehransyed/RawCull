@@ -69,11 +69,11 @@ interface ImportJobDao {
     @Query(
         """
         UPDATE import_jobs SET doneFiles = :doneFiles, doneBytes = :doneBytes,
-            skippedFiles = :skippedFiles, failedFiles = :failedFiles
+            skippedFiles = :skippedFiles, failedFiles = :failedFiles, activeMillis = :activeMillis
         WHERE id = :id
         """
     )
-    suspend fun updateProgress(id: Long, doneFiles: Int, doneBytes: Long, skippedFiles: Int, failedFiles: Int)
+    suspend fun updateProgress(id: Long, doneFiles: Int, doneBytes: Long, skippedFiles: Int, failedFiles: Int, activeMillis: Long)
 
     @Query("UPDATE import_jobs SET status = :status WHERE id = :id")
     suspend fun setStatus(id: Long, status: ImportJobStatus)

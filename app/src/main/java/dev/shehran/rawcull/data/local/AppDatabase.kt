@@ -27,9 +27,12 @@ import dev.shehran.rawcull.data.model.StructureMode
         ImportJob::class,
         ImportJobItem::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 4, to = 5, spec = AppDatabase.SeedStandardPreset::class)],
+    autoMigrations = [
+        AutoMigration(from = 4, to = 5, spec = AppDatabase.SeedStandardPreset::class),
+        AutoMigration(from = 5, to = 6),
+    ],
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

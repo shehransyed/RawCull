@@ -73,6 +73,159 @@ class MigrationTest {
         }
     }
 
+    /** Every round must install over the last one, so everything a tester has built up has to survive. */
+    @Test
+    fun migrate5To6KeepsTheLibraryAndStartsActiveTimeAtZero() {
+        helper.createDatabase(DB_NAME, 5).use { db ->
+            db.insert(
+                "library_locations",
+                SQLiteDatabase.CONFLICT_ABORT,
+                ContentValues().apply {
+                    put("id", 7L)
+                    put("treeUri", "content://tree/library")
+                    put("displayName", "Archive")
+                    put("addedAt", 1L)
+                    put("lastOpenedAt", 2L)
+                },
+            )
+            db.insert(
+                "import_presets",
+                SQLiteDatabase.CONFLICT_ABORT,
+                ContentValues().apply {
+                    put("name", "Weddings")
+                    put("locationId", 7L)
+                    put("structureMode", "CUSTOM")
+                    put("datePattern", "{year}/{year}-{month}-{day}")
+                    put("customPattern", "{year}/{project}")
+                    put("projectName", "Smith")
+                },
+            )
+            db.insert(
+                "import_jobs",
+                SQLiteDatabase.CONFLICT_ABORT,
+                ContentValues().apply {
+                    put("id", 3L)
+                    put("createdAt", 10L)
+                    put("startedAt", 11L)
+                    put("finishedAt", 5011L)
+                    put("status", "COMPLETED")
+                    put("sourceTreeUri", "content://tree/card")
+                    put("sourceLabel", "SD card")
+                    put("locationId", 7L)
+                    put("template", "{year}")
+                    put("verifyMode", "FULL")
+                    put("deleteSourceAfter", 0)
+                    put("totalFiles", 1)
+                    put("totalBytes", 100L)
+                    put("doneFiles", 1)
+                    put("doneBytes", 100L)
+                    put("skippedFiles", 0)
+                    put("failedFiles", 0)
+                },
+            )
+            db.insert(
+                "import_job_items",
+                SQLiteDatabase.CONFLICT_ABORT,
+                ContentValues().apply {
+                    put("jobId", 3L)
+                    put("groupKey", "DSC00001")
+                    put("sourceUri", "content://tree/card/file")
+                    put("sourceName", "DSC00001.ARW")
+                    put("sizeBytes", 100L)
+                    put("targetRelativeDir", "2026")
+                    put("targetName", "DSC00001.ARW")
+                    put("state", "DONE")
+                    put("sourceDeleted", 0)
+                    put("role", "PRIMARY")
+                    put("captureDate", 5L)
+                },
+            )
+            db.insert(
+                "imported_files",
+                SQLiteDatabase.CONFLICT_ABORT,
+                ContentValues().apply {
+                    put("headHash", "abc123")
+                    put("sizeBytes", 100L)
+                    put("originalName", "DSC00001.ARW")
+                    put("targetUri", "content://tree/library/file")
+                    put("importedAt", 20L)
+                    put("jobId", 3L)
+                },
+            )
+            db.insert(
+                "photo_assets",
+                SQLiteDatabase.CONFLICT_ABORT,
+                ContentValues().apply {
+                    put("id", "asset-1")
+                    put("rootUri", "content://tree/library")
+                    put("relativeDir", "2026")
+                    put("parentDocUri", "content://tree/library/dir")
+                    put("fileName", "DSC00001.ARW")
+                    put("fileUri", "content://tree/library/file")
+                    put("format", "ARW")
+                    put("fileSizeBytes", 100L)
+                    put("fileLastModified", 5L)
+                    put("dateTaken", 7L)
+                    put("metadataLoaded", 1)
+                    put("cullStatus", "PICK")
+                    put("rating", 4)
+                    put("colorLabel", "GREEN")
+                    put("tags", "[\"Wedding\"]")
+                    put("width", 0)
+                    put("height", 0)
+                    put("orientation", 0)
+                    put("lastModified", 9L)
+                    put("pairMode", "RAW_ONLY")
+                    put("xmpSyncStatus", "PENDING")
+                    put("xmpPendingFields", 3)
+                    put("lastImportJobId", 3L)
+                },
+            )
+        }
+
+        helper.runMigrationsAndValidate(DB_NAME, 6, true).use { db ->
+            db.query("SELECT displayName FROM library_locations WHERE id = 7").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("Archive", cursor.getString(0))
+            }
+            db.query("SELECT customPattern, projectName FROM import_presets WHERE name = 'Weddings'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("{year}/{project}", cursor.getString(0))
+                assertEquals("Smith", cursor.getString(1))
+            }
+            db.query("SELECT status, doneBytes, finishedAt, activeMillis FROM import_jobs WHERE id = 3").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("COMPLETED", cursor.getString(0))
+                assertEquals(100L, cursor.getLong(1))
+                assertEquals(5011L, cursor.getLong(2))
+                assertEquals(0L, cursor.getLong(3))
+            }
+            db.query("SELECT state FROM import_job_items WHERE jobId = 3").use { cursor ->
+                assertEquals(1, cursor.count)
+                assertTrue(cursor.moveToFirst())
+                assertEquals("DONE", cursor.getString(0))
+            }
+            db.query("SELECT headHash, jobId FROM imported_files").use { cursor ->
+                assertEquals(1, cursor.count)
+                assertTrue(cursor.moveToFirst())
+                assertEquals("abc123", cursor.getString(0))
+                assertEquals(3L, cursor.getLong(1))
+            }
+            db.query(
+                "SELECT cullStatus, rating, tags, xmpSyncStatus, xmpPendingFields, lastImportJobId " +
+                    "FROM photo_assets WHERE id = 'asset-1'",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("PICK", cursor.getString(0))
+                assertEquals(4, cursor.getInt(1))
+                assertEquals("[\"Wedding\"]", cursor.getString(2))
+                assertEquals("PENDING", cursor.getString(3))
+                assertEquals(3, cursor.getInt(4))
+                assertEquals(3L, cursor.getLong(5))
+            }
+        }
+    }
+
     private companion object {
         const val DB_NAME = "migration-test.db"
     }

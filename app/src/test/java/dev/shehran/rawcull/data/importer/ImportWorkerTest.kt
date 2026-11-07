@@ -176,6 +176,17 @@ class ImportWorkerTest {
     }
 
     @Test
+    fun `active time carries over from an earlier run`() = runBlocking<Unit> {
+        val jobId = job(listOf(item("A.ARW")))
+        database.importJobDao().updateProgress(jobId, 0, 0, 0, 0, activeMillis = 5_000)
+
+        val job = run(jobId)
+
+        assertTrue(job.activeMillis >= 5_000)
+        assertTrue(job.activeMillis < 60_000)
+    }
+
+    @Test
     fun `the finished job is reported`() = runBlocking<Unit> {
         val jobId = job(listOf(item("A.ARW")))
         run(jobId)

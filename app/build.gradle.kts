@@ -6,14 +6,14 @@ plugins {
 
 android {
   namespace = "dev.shehran.rawcull"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
+  compileSdk { version = release(37) }
 
   defaultConfig {
     applicationId = "dev.shehran.rawcull"
     minSdk = 24
     targetSdk = 36
-    versionCode = 5
-    versionName = "0.5.0"
+    versionCode = 6
+    versionName = "0.6.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -28,6 +28,7 @@ android {
         keyPassword = System.getenv("KEY_PASSWORD")
       }
     }
+    // Changing the debug key breaks in-place updates on test devices.
     val debugKeystore = file("${rootDir}/debug.keystore")
     if (debugKeystore.exists()) {
       create("debugConfig") {

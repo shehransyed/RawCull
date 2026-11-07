@@ -31,5 +31,13 @@ Android photo culling + import-first DAM (tablets and phones, any orientation or
 - I/O runs on `Dispatchers.IO`; nothing blocks the main thread; long work is cancellable.
 - Colors: use the existing palette (bg #07090D, surface #0F141B, cyan #38BDF8, pick #10B981, reject #EF4444, stars #FBBF24). Move toward theme tokens when touching a component.
 
+## Every round is an update
+A round's build must install over the previous round's and keep the tester's library, ratings and settings.
+- Bump `versionCode` in a round's first commit, and never lower it.
+- Room migrations only go forward, each with a migration test from the previous version with data.
+- Never rename or drop a DataStore key without a migration.
+- Never change `applicationId` or the debug signing key.
+- Never ask the tester to uninstall.
+
 ## Planning docs
 Feature plans live in `docs/plans/`. Implement exactly one plan at a time, one commit per numbered task, and append "Implementation notes" (deviations, open questions, measurements) to the plan when done.

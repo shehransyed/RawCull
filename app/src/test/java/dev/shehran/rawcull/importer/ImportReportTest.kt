@@ -78,6 +78,16 @@ class ImportReportTest {
     }
 
     @Test
+    fun `time stopped counts towards neither elapsed time nor speed`() {
+        val report = ImportReport.of(
+            job.copy(startedAt = 1000, finishedAt = 41_000, doneBytes = 4000, activeMillis = 2000),
+            emptyList(),
+        )
+        assertEquals(2000L, report.elapsedMillis)
+        assertEquals(2000L, report.averageBytesPerSecond)
+    }
+
+    @Test
     fun `speed needs two samples`() {
         val meter = SpeedMeter()
         assertNull(meter.bytesPerSecond)
