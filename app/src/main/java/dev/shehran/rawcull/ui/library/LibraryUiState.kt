@@ -7,6 +7,7 @@ import dev.shehran.rawcull.data.model.ImportJob
 import dev.shehran.rawcull.data.model.LibraryLocation
 import dev.shehran.rawcull.data.model.PhotoCollection
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.SortOrder
 import dev.shehran.rawcull.data.repository.ViewingPrefs
 import dev.shehran.rawcull.library.DeletionPlan
 import dev.shehran.rawcull.library.FilterCounts
@@ -93,6 +94,7 @@ data class LibraryUiState(
     val targetCollectionId: Long? = null, // What B adds to (D6)
     val photoCollections: List<PhotoCollection> = emptyList(), // The current photo's collections: inspector chips
     val showAddToCollection: Boolean = false,
+    val reordering: Boolean = false, // R7 D7: asked for; it only holds while [canReorder] does, see [inReorderMode]
     val zoomRequest: Int = 0, // Bumped by Z and Space; the loupe on screen toggles its zoom
 ) {
     /** Derived, not stored: enrichment re-sorts the list, and the selection must follow the photo. */
@@ -151,4 +153,21 @@ data class LibraryUiState(
     /** B's target, if it still exists in this Location and can hold photos. */
     val targetCollection: PhotoCollection?
         get() = collections.firstOrNull { it.id == targetCollectionId && !it.isSet }
+
+    /** A collection's own sort when one is open (D7), else null. */
+    val collectionSort: SortOrder?
+        get() = activeCollection?.let { SortOrder.forCollection(it.sortOrder) }
+
+    /** The sort on screen. */
+    val sortOrder: SortOrder get() = SortOrder.effective(filterOptions.sortOrder, collectionSort)
+
+    /** Whether filters hide anything right now (Ctrl+L can turn them off without forgetting them). */
+    val filtersHide: Boolean get() = filtersEnabled && filterOptions.isActive
+
+    /** Whether Reorder is offered: a collection in custom order. It's refused while [filtersHide]. */
+    val offersReorder: Boolean get() = collectionSort == SortOrder.CUSTOM
+
+    val canReorder: Boolean get() = offersReorder && !filtersHide
+
+    val inReorderMode: Boolean get() = reordering && canReorder
 }

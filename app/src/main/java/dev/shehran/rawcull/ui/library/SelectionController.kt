@@ -27,7 +27,8 @@ internal class SelectionController(
                 val anchor = selectionAnchor ?: state.selectedPhotoId ?: id
                 store.update { it.copy(selectedPhotoIds = it.selectedPhotoIds + GridNavigation.range(view.visibleIds, anchor, id)) }
             }
-            ctrlHeld || state.isSelecting -> togglePhotoSelection(id)
+            // Reorder mode has no long press to start a selection, so a tap builds the block to move.
+            ctrlHeld || state.isSelecting || state.inReorderMode -> togglePhotoSelection(id)
             else -> {
                 view.selectPhoto(id)
                 store.setViewMode(DamViewMode.LOUPE)
@@ -37,6 +38,7 @@ internal class SelectionController(
 
     /** A long press: the start of a selection, which dragging then extends. */
     fun beginDragSelection(id: String) {
+        if (store.value.inReorderMode) return // R7 D7: a long press there drags photos
         selectionAnchor = id
         dragBaseline = store.value.selectedPhotoIds
         store.update { it.copy(selectedPhotoIds = it.selectedPhotoIds + id) }

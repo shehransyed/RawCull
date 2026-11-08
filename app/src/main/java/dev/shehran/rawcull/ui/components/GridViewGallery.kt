@@ -108,6 +108,7 @@ fun GridViewGallery(
     onColumnsChanged: (Int) -> Unit,
     onClearFilters: (() -> Unit)?, // Set when something in the scope is hidden, not when it's empty
     modifier: Modifier = Modifier,
+    reorder: GridReorder? = null, // R7 D7: a long press drags photos instead of selecting them
 ) {
     val gridState = rememberLazyGridState()
     LaunchedEffect(gridState) {
@@ -137,10 +138,21 @@ fun GridViewGallery(
     // toggle straight back off the photo the long press just selected.
     var ignoreNextClick by remember { mutableStateOf(false) }
     val currentDragTo by rememberUpdatedState(onDragSelectTo)
+    val reorderDrag = remember { ReorderDrag() }
+    val currentReorder by rememberUpdatedState(reorder)
+    val currentPhotos by rememberUpdatedState(photos)
+    val currentSelectedIds by rememberUpdatedState(selectedIds)
+    LaunchedEffect(reorder != null) { if (reorder == null) reorderDrag.clear() }
     LaunchedEffect(autoScroll != 0f) {
         while (autoScroll != 0f) {
             gridState.scrollBy(autoScroll)
-            dragPoint?.let { point -> gridState.photoIdAt(point)?.let(currentDragTo) }
+            dragPoint?.let { point ->
+                if (currentReorder != null) {
+                    reorderDrag.aim(point, gridState, currentPhotos.map { it.id })
+                } else {
+                    gridState.photoIdAt(point)?.let(currentDragTo)
+                }
+            }
             withFrameNanos { }
         }
     }
@@ -185,7 +197,23 @@ fun GridViewGallery(
                             ignoreNextClick = false
                         }
                     }
-                    .pointerInput(Unit) {
+                    .reorderDrag(
+                        enabled = reorder != null,
+                        onDrop = { pressed, before -> currentReorder?.onDrop?.invoke(pressed, before) },
+                        grid = gridState,
+                        drag = reorderDrag,
+                        ids = { currentPhotos.map { it.id } },
+                        selectedIds = { currentSelectedIds },
+                        edgeZonePx = zone,
+                        scrollPxPerFrame = AUTO_SCROLL_PX_PER_FRAME,
+                    ) { point, speed ->
+                        dragPoint = point
+                        autoScroll = speed
+                        dragSelecting = point != null
+                        if (point != null) ignoreNextClick = true
+                    }
+                    .pointerInput(reorder == null) {
+                        if (reorder != null) return@pointerInput
                         detectDragGesturesAfterLongPress(
                             onDragStart = { point ->
                                 gridState.photoIdAt(point)?.let(onDragSelectStart)
@@ -239,7 +267,9 @@ fun GridViewGallery(
                                 if (ignoreNextClick) ignoreNextClick = false else onPhotoClick(index)
                             },
                             onLongClick = { onDragSelectStart(photo.id) },
-                            modifier = Modifier.testTag("grid_card_$index")
+                            modifier = Modifier
+                                .testTag("grid_card_$index")
+                                .reorderMarks(reorderDrag, photo.id, index == photos.lastIndex, PrimaryCyan, Dimens.TileGap),
                         )
                     }
                 }

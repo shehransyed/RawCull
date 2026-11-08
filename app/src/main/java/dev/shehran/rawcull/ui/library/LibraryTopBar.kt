@@ -80,6 +80,7 @@ class LibraryTopBarActions(
     val onDeleteRejects: () -> Unit,
     val onAddToCollection: () -> Unit,
     val onRemoveFromCollection: () -> Unit,
+    val onReorder: () -> Unit,
     val onRescan: () -> Unit,
     val onRetryLocation: () -> Unit,
     val onRelinkLocation: () -> Unit,
@@ -131,6 +132,7 @@ fun LibraryTopBar(
                     )
                 }
                 SyncCounter(uiState, actions.onToggleSyncErrors)
+                if (uiState.offersReorder) ReorderButton(uiState.filtersHide, actions.onReorder)
                 ViewModeToggle(uiState.viewMode, showLabels = layout.showsFolderPane, onSetViewMode = actions.onSetViewMode)
                 IconButton(
                     onClick = actions.onToggleFilterBar,

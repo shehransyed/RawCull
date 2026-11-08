@@ -43,6 +43,8 @@ sealed interface LibraryKeyAction {
     data object ToggleFilters : LibraryKeyAction
     data object EditTags : LibraryKeyAction
     data object ToggleInTargetCollection : LibraryKeyAction
+    /** Reorder mode only: moves the selection, else the current photo, in the custom order. */
+    data class MoveInOrder(val move: OrderMove) : LibraryKeyAction
     data object DeleteRejects : LibraryKeyAction
     data object ShowHelp : LibraryKeyAction
     data object Escape : LibraryKeyAction
@@ -61,6 +63,7 @@ object LibraryKeymap {
         VIEWS("Views"),
         EDITING("Editing and selection"),
         FILTERS("Filters"),
+        ORDER("Custom order (reorder mode)"),
     }
 
     private class Binding(
@@ -70,14 +73,20 @@ object LibraryKeymap {
         val description: String,
         val ctrl: Boolean = false,
         val shift: Boolean = false,
+        val alt: Boolean = false,
     ) {
+        val press get() = Press(key, ctrl, shift, alt)
+
         val keys: String
             get() = buildString {
                 if (ctrl) append("Ctrl+")
                 if (shift) append("Shift+")
+                if (alt) append("Alt+")
                 append(key.label)
             }
     }
+
+    private data class Press(val key: LibraryKey, val ctrl: Boolean, val shift: Boolean, val alt: Boolean)
 
     private fun cull(key: LibraryKey, edit: CullEdit, group: Group, description: String, ctrl: Boolean = false) =
         Binding(key, LibraryKeyAction.Cull(edit), group, description, ctrl)
@@ -140,10 +149,16 @@ object LibraryKeymap {
         add(Binding(LibraryKey.F, LibraryKeyAction.FocusSearch, Group.FILTERS, "Search", ctrl = true))
         add(Binding(LibraryKey.Backslash, LibraryKeyAction.ToggleFilterBar, Group.FILTERS, "Show or hide the filter bar"))
         add(Binding(LibraryKey.L, LibraryKeyAction.ToggleFilters, Group.FILTERS, "Filters on or off", ctrl = true))
+
+        fun order(key: LibraryKey, move: OrderMove, description: String) =
+            Binding(key, LibraryKeyAction.MoveInOrder(move), Group.ORDER, description, alt = true)
+        add(order(LibraryKey.Left, OrderMove.EARLIER, "Move the selection one place earlier"))
+        add(order(LibraryKey.Right, OrderMove.LATER, "Move the selection one place later"))
+        add(order(LibraryKey.Home, OrderMove.START, "Move the selection to the start"))
+        add(order(LibraryKey.End, OrderMove.END, "Move the selection to the end"))
     }
 
-    private val byPress: Map<Triple<LibraryKey, Boolean, Boolean>, Binding> =
-        bindings.associateBy { Triple(it.key, it.ctrl, it.shift) }
+    private val byPress: Map<Press, Binding> = bindings.associateBy { it.press }
 
     /**
      * @param meta treated as Ctrl, for macOS-style keyboards.
@@ -161,15 +176,14 @@ object LibraryKeymap {
         slideshowActive: Boolean = false,
     ): LibraryKeyAction? {
         if (textFieldFocused) return LibraryKeyAction.Escape.takeIf { key == LibraryKey.Escape }
-        if (alt) return null
         val control = ctrl || meta
         // In a slideshow Space pauses, since zooming there would stop the show anyway.
         if (slideshowActive && key == LibraryKey.Space && !control && !shift) return LibraryKeyAction.SlideshowPause
 
-        byPress[Triple(key, control, shift)]?.let { return withAdvance(it.action, capsLock) }
+        byPress[Press(key, control, shift, alt)]?.let { return withAdvance(it.action, capsLock) }
         // Shift on a culling key means "and advance"; it has no binding of its own.
-        if (shift) {
-            val action = byPress[Triple(key, control, false)]?.action
+        if (shift && !alt) {
+            val action = byPress[Press(key, control, false, false)]?.action
             if (action is LibraryKeyAction.Cull) return action.copy(advance = true)
         }
         return null

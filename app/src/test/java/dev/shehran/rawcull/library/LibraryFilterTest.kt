@@ -161,6 +161,14 @@ class LibraryFilterTest {
     }
 
     @Test
+    fun `custom order keeps the rows as they come, in one run`() {
+        val rows = listOf(photo("c", dir = "two", rating = 1), photo("a", dir = "one"), photo("b", dir = "two"))
+        val result = view(rows, FilterOptions(flags = setOf(CullStatus.UNFLAGGED)), SortOrder.CUSTOM, spans = true)
+        assertEquals(listOf("c", "a", "b"), result.rows.map { it.id })
+        assertTrue(result.sections.isEmpty())
+    }
+
+    @Test
     fun `a scope with one folder has no sections`() {
         assertTrue(view(listOf(photo("a"), photo("b")), spans = false).sections.isEmpty())
     }

@@ -3,6 +3,7 @@ package dev.shehran.rawcull.ui.library
 import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.LibraryLocation
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.SortOrder
 import dev.shehran.rawcull.data.repository.SettingsRepository
 import dev.shehran.rawcull.data.scan.ScanCoordinator
 import dev.shehran.rawcull.library.LibraryFilter
@@ -14,6 +15,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,7 +55,8 @@ internal class ViewController(
     fun start() {
         store.scope.launch {
             // mapLatest drops a run the next change has made pointless.
-            combine(rows, filter, filtersEnabled, ::FilterRun)
+            val collectionSort = store.state.map { it.collectionSort }.distinctUntilChanged()
+            combine(rows, filter, filtersEnabled, collectionSort, ::FilterRun)
                 .mapLatest { run -> withContext(Dispatchers.Default) { computeView(run) } }
                 .collect(::publish)
         }
@@ -68,7 +72,12 @@ internal class ViewController(
         visibleIdSet = emptySet()
     }
 
-    private class FilterRun(val rows: List<PhotoAsset>, val filter: FilterOptions, val enabled: Boolean)
+    private class FilterRun(
+        val rows: List<PhotoAsset>,
+        val filter: FilterOptions,
+        val enabled: Boolean,
+        val collectionSort: SortOrder?,
+    )
 
     private class ComputedView(
         val source: List<PhotoAsset>,
@@ -81,7 +90,8 @@ internal class ViewController(
         val started = System.nanoTime()
         val active = if (run.enabled) run.filter else run.filter.cleared()
         val spansFolders = run.rows.asSequence().map { it.relativeDir }.distinct().take(2).count() > 1
-        val view = LibraryFilter.apply(run.rows, active, run.filter.sortOrder, spansFolders)
+        val sort = SortOrder.effective(run.filter.sortOrder, run.collectionSort)
+        val view = LibraryFilter.apply(run.rows, active, sort, spansFolders)
         val ids = view.rows.map { it.id }
         val idSet = ids.toHashSet()
         if (ids != visibleIds) scanCoordinator.setVisibleOrder(ids) // O9

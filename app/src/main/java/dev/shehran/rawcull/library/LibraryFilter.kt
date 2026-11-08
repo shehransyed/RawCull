@@ -91,6 +91,7 @@ object LibraryFilter {
         SortOrder.NAME_DESC -> rows.sortedByDescending { it.fileName }
         SortOrder.RATING_DESC -> rows.sortedByDescending { it.rating }
         SortOrder.SIZE_DESC -> rows.sortedByDescending { it.fileSizeBytes }
+        SortOrder.CUSTOM -> rows // A collection's rows arrive in its stored order
     }
 
     /** Undated photos go last in both directions: they have no place in the timeline. */

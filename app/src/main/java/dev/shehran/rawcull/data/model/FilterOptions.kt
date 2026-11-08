@@ -36,5 +36,19 @@ enum class SortOrder(val label: String) {
     NAME_ASC("File Name (A-Z)"),
     NAME_DESC("File Name (Z-A)"),
     RATING_DESC("Rating (Highest)"),
-    SIZE_DESC("File Size (Largest)")
+    SIZE_DESC("File Size (Largest)"),
+    CUSTOM("Custom order"), // Only in a collection (R7 D7): its members' stored positions
+    ;
+
+    companion object {
+        /** A collection's stored sort; null or a name this version doesn't know is its default, custom order. */
+        fun forCollection(stored: String?): SortOrder = entries.firstOrNull { it.name == stored } ?: CUSTOM
+
+        /** The sort that applies: a collection's own, else the Location's, which can't be custom. */
+        fun effective(locationSort: SortOrder, collectionSort: SortOrder?): SortOrder =
+            collectionSort ?: locationSort.takeIf { it != CUSTOM } ?: DATE_ASC
+
+        /** What the sort menu offers in a collection, or elsewhere. */
+        fun offered(inCollection: Boolean): List<SortOrder> = if (inCollection) entries else entries - CUSTOM
+    }
 }

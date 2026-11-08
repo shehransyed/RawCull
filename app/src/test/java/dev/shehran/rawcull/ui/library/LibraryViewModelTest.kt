@@ -15,6 +15,8 @@ import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.LibraryLocation
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.PhotoCollection
+import dev.shehran.rawcull.library.OrderMove
+import dev.shehran.rawcull.data.model.SortOrder
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.preview.FakePreviewRepository
 import dev.shehran.rawcull.data.repository.CollectionChange
@@ -817,8 +819,9 @@ class LibraryViewModelTest {
         val id = collectionOf(location, "Keepers", "c", "ghost", "a")
 
         onMain { setScope(LibraryScope.Collection(id)) }
-        // Order is the usual sort until R7.5 adds Custom order.
-        waitUntil { state.filteredPhotos.map { it.id }.toSet() == setOf("a", "c") }
+        // A collection opens in its custom order (R7.5).
+        waitUntil { state.filteredPhotos.map { it.id } == listOf("c", "a") }
+        assertEquals(SortOrder.CUSTOM, state.sortOrder)
 
         assertEquals("Keepers", state.scopeTitle)
         assertEquals(2, state.totalCount)
@@ -968,6 +971,109 @@ class LibraryViewModelTest {
 
         waitUntil { state.snackbarMessage?.contains("already") == true }
         assertEquals(1, state.collections.count { it.name.equals("dup", ignoreCase = true) })
+    }
+
+    // --- Custom order (R7.5) ---
+
+    private fun shown() = state.filteredPhotos.map { it.id }
+
+    /** A collection of [ids] in that order, open and in reorder mode. */
+    private fun reordering(vararg ids: String): Long {
+        val location = open(*ids.map { photo(it) }.toTypedArray())
+        val id = collectionOf(location, "Order", *ids)
+        waitUntil { state.collections.any { it.id == id } }
+        onMain { setScope(LibraryScope.Collection(id)) }
+        waitUntil { shown() == ids.toList() }
+        onMain { startReorder() }
+        waitUntil { state.inReorderMode }
+        return id
+    }
+
+    @Test
+    fun `each collection keeps its own sort and the Location's stays`() {
+        val location = open(photo("a"), photo("b"), photo("c"))
+        val id = collectionOf(location, "Sorted", "c", "a", "b")
+        waitUntil { state.collections.any { it.id == id } }
+        onMain { setScope(LibraryScope.Collection(id)) }
+        waitUntil { shown() == listOf("c", "a", "b") }
+
+        onMain { setSortOrder(SortOrder.NAME_ASC) }
+
+        waitUntil { shown() == listOf("a", "b", "c") }
+        waitUntil { runBlocking { collectionRepo.get(id)?.sortOrder } == "NAME_ASC" }
+        assertFalse(state.offersReorder)
+        onMain { setScope(LibraryScope.All) }
+        waitUntil { state.scope == LibraryScope.All }
+        assertEquals(SortOrder.DATE_ASC, state.sortOrder)
+        assertEquals(SortOrder.DATE_ASC, state.filterOptions.sortOrder)
+        onMain { setSortOrder(SortOrder.CUSTOM) } // Not offered outside a collection
+        assertEquals(SortOrder.DATE_ASC, state.filterOptions.sortOrder)
+    }
+
+    @Test
+    fun `reorder is refused while filters hide photos`() {
+        val location = open(photo("a", rating = 2), photo("b"))
+        val id = collectionOf(location, "Filtered", "a", "b")
+        waitUntil { state.collections.any { it.id == id } }
+        onMain { setScope(LibraryScope.Collection(id)) }
+        onMain { updateFilter { it.copy(rating = 1) } }
+        waitUntil { shown() == listOf("a") }
+
+        onMain { startReorder() }
+
+        waitUntil { state.snackbarMessage == "Clear filters to reorder." }
+        assertFalse(state.reordering)
+        onMain { toggleFilters() } // Off without forgetting them: now there's nothing hidden
+        waitUntil { shown() == listOf("a", "b") }
+        onMain { startReorder() }
+        waitUntil { state.inReorderMode }
+        onMain { toggleFilters() }
+        waitUntil { !state.inReorderMode }
+    }
+
+    @Test
+    fun `a drop moves a scattered selection as one block and it's stored`() {
+        val id = reordering("a", "b", "c", "d", "e")
+        select("d", "b")
+
+        onMain { dropInOrder("d", beforeId = "a") }
+
+        waitUntil { members(id) == listOf("b", "d", "a", "c", "e") }
+        waitUntil { shown() == listOf("b", "d", "a", "c", "e") }
+        onMain { dropInOrder("c", beforeId = null) } // Not selected: only c moves
+        waitUntil { members(id) == listOf("b", "d", "a", "e", "c") }
+    }
+
+    @Test
+    fun `alt keys move the current photo and stop at the edges`() {
+        val id = reordering("a", "b", "c")
+        onMain { selectPhotoIndex(0) }
+        waitUntil { state.selectedPhotoId == "a" }
+
+        onMain { moveInOrder(OrderMove.EARLIER) }
+        onMain { moveInOrder(OrderMove.LATER) }
+        waitUntil { members(id) == listOf("b", "a", "c") }
+        onMain { moveInOrder(OrderMove.END) }
+        onMain { moveInOrder(OrderMove.LATER) }
+        onMain { moveInOrder(OrderMove.START) }
+        waitUntil { members(id) == listOf("a", "b", "c") && shown() == listOf("a", "b", "c") }
+
+        onMain { stepBack() } // Esc leaves reorder mode
+        waitUntil { !state.reordering }
+        onMain { moveInOrder(OrderMove.END) }
+        runBlocking(main) { } // Let anything it started run
+        assertEquals(listOf("a", "b", "c"), members(id))
+    }
+
+    @Test
+    fun `new photos go to the end of the custom order`() {
+        val id = reordering("a", "b", "c")
+        onMain { dropInOrder("c", beforeId = "a") }
+        waitUntil { members(id) == listOf("c", "a", "b") }
+
+        runBlocking { collectionRepo.add(id, listOf("z")) }
+
+        assertEquals(listOf("c", "a", "b", "z"), members(id))
     }
 
     private companion object {

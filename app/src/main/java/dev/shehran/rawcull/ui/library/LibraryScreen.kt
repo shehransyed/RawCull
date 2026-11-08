@@ -96,6 +96,7 @@ import dev.shehran.rawcull.ui.components.CullingActionBar
 import dev.shehran.rawcull.ui.components.CullingHistory
 import dev.shehran.rawcull.ui.components.CullingSideBar
 import dev.shehran.rawcull.ui.components.FilmstripBar
+import dev.shehran.rawcull.ui.components.GridReorder
 import dev.shehran.rawcull.ui.components.GridViewGallery
 import dev.shehran.rawcull.ui.components.LoupePrefetch
 import dev.shehran.rawcull.ui.components.StorageChangeEffect
@@ -297,6 +298,7 @@ fun LibraryScreen(
         onClear = viewModel::clearFilters,
         onToggleEnabled = viewModel::toggleFilters,
         onDeleteRejects = { viewModel.requestDeleteRejects() },
+        onSort = viewModel::setSortOrder,
         onSearchFocusChanged = { textFieldFocused = it },
         onSearchFocused = { focusSearch = false },
     )
@@ -500,7 +502,9 @@ private fun LibraryContent(
     Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(insets)) {
         if (showPanes) {
             LibraryTopBar(
-                selectionRow = if (uiState.isSelecting) {
+                selectionRow = if (uiState.inReorderMode) {
+                    { ReorderBar(uiState.selectedPhotoIds.size, viewModel::clearSelection, viewModel::endReorder) }
+                } else if (uiState.isSelecting) {
                     {
                         SelectionTopBar(
                             count = uiState.selectedPhotoIds.size,
@@ -533,6 +537,7 @@ private fun LibraryContent(
                     onDeleteRejects = { viewModel.requestDeleteRejects() },
                     onAddToCollection = viewModel::openAddToCollection,
                     onRemoveFromCollection = viewModel::removeFromCollection,
+                    onReorder = viewModel::startReorder,
                     onRescan = viewModel::rescan,
                     onRetryLocation = viewModel::retryLocation,
                     onRelinkLocation = onRelink,
@@ -605,6 +610,7 @@ private fun LibraryMainView(
     onOpenInspectorSheet: () -> Unit,
 ) {
     val photo = uiState.currentPhoto
+    val reorder = remember(viewModel) { GridReorder(viewModel::dropInOrder) }
     when (uiState.viewMode) {
         DamViewMode.GRID -> PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
@@ -622,6 +628,7 @@ private fun LibraryMainView(
                 onColumnsChanged = viewModel::setGridColumns,
                 onClearFilters = viewModel::clearFilters.takeIf { uiState.totalCount > 0 },
                 modifier = Modifier.fillMaxSize(),
+                reorder = reorder.takeIf { uiState.inReorderMode },
             )
         }
         DamViewMode.COMPARE -> CompareLoupeView(
@@ -830,6 +837,7 @@ private fun onLibraryKey(action: LibraryKeyAction, viewModel: LibraryViewModel, 
         LibraryKeyAction.ToggleFilters -> viewModel.toggleFilters()
         LibraryKeyAction.EditTags -> viewModel.openTagDialog()
         LibraryKeyAction.ToggleInTargetCollection -> viewModel.toggleInTargetCollection()
+        is LibraryKeyAction.MoveInOrder -> viewModel.moveInOrder(action.move)
         LibraryKeyAction.DeleteRejects -> viewModel.requestDeleteRejects()
         LibraryKeyAction.ShowHelp -> screen.onShowHelp()
         LibraryKeyAction.Escape -> screen.onEscape()

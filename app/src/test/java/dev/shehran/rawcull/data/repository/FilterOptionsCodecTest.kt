@@ -67,6 +67,12 @@ class FilterOptionsCodecTest {
     }
 
     @Test
+    fun `custom order survives a round trip`() {
+        val options = FilterOptions(sortOrder = SortOrder.CUSTOM)
+        assertEquals(options, FilterOptionsCodec.decode(FilterOptionsCodec.encode(options)))
+    }
+
+    @Test
     fun `garbage and unknown values fall back`() {
         assertEquals(FilterOptions(), FilterOptionsCodec.decode("not json"))
         assertEquals(FilterOptions(), FilterOptionsCodec.decode(null))

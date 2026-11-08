@@ -17,6 +17,7 @@ import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.ImportJob
+import dev.shehran.rawcull.data.model.SortOrder
 import dev.shehran.rawcull.data.preview.PreviewRepository
 import dev.shehran.rawcull.data.repository.CollectionRepository
 import dev.shehran.rawcull.data.repository.LocationRepository
@@ -30,6 +31,7 @@ import dev.shehran.rawcull.library.SlideshowClock
 import dev.shehran.rawcull.library.GridNavigation
 import dev.shehran.rawcull.library.LibraryScope
 import dev.shehran.rawcull.library.LoupeSwipe
+import dev.shehran.rawcull.library.OrderMove
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -65,6 +67,7 @@ class LibraryViewModel(
         store, repository, settings, locations, collections, jobs, scanCoordinator, startupFinished, view, culling, deletion, histogram,
     )
     private val collectionControl = CollectionController(store, collections, settings, view, location::setScope)
+    private val ordering = OrderController(store, collections, view)
 
     val uiState: StateFlow<LibraryUiState> = store.state.asStateFlow()
 
@@ -144,6 +147,7 @@ class LibraryViewModel(
             state.slideshow != null || state.fullWindow -> exitFullWindow()
             state.showTagDialog -> dismissTagDialog()
             state.syncDetailsPhotoId != null -> dismissSyncDetails()
+            state.inReorderMode -> endReorder()
             state.isSelecting -> clearSelection()
             state.viewMode != DamViewMode.GRID -> setViewMode(DamViewMode.GRID)
             state.scope != LibraryScope.All -> setScope(LibraryScope.All)
@@ -315,6 +319,17 @@ class LibraryViewModel(
     fun removeFromCollection() = collectionControl.removeFromActive()
 
     fun undoCollectionChange() = collectionControl.undo()
+
+    // --- SORT AND CUSTOM ORDER (R7 D7) ---
+    fun setSortOrder(order: SortOrder) = ordering.setSort(order)
+
+    fun startReorder() = ordering.startReorder()
+
+    fun endReorder() = ordering.endReorder()
+
+    fun dropInOrder(pressedId: String, beforeId: String?) = ordering.drop(pressedId, beforeId)
+
+    fun moveInOrder(move: OrderMove) = ordering.move(move)
 
     /** Re-checks volumes after a resume or a media broadcast; a scan isn't reading while idle. */
     fun refreshSources() = location.refreshSources()

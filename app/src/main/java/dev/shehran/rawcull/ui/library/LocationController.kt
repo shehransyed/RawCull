@@ -136,6 +136,7 @@ internal class LocationController(
                 activeLocation = location,
                 isLocationAvailable = available,
                 scope = activeScope,
+                reordering = false,
                 expandedFolders = emptySet(),
                 photos = if (switching) emptyList() else it.photos,
                 filteredPhotos = if (switching) emptyList() else it.filteredPhotos,
@@ -235,7 +236,7 @@ internal class LocationController(
     fun setScope(next: LibraryScope) {
         if (next == scope.value) return
         scope.value = next
-        store.update { it.copy(scope = next, selectedPhotoIds = emptySet()) }
+        store.update { it.copy(scope = next, selectedPhotoIds = emptySet(), reordering = false) }
         store.scope.launch { saveScope(next) }
     }
 

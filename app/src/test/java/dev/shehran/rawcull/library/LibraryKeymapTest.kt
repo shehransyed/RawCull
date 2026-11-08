@@ -168,6 +168,19 @@ class LibraryKeymapTest {
     }
 
     @Test
+    fun `alt and the arrows, Home and End move in the custom order`() {
+        assertEquals(LibraryKeyAction.MoveInOrder(OrderMove.EARLIER), LibraryKeymap.actionFor(Left, alt = true))
+        assertEquals(LibraryKeyAction.MoveInOrder(OrderMove.LATER), LibraryKeymap.actionFor(Right, alt = true))
+        assertEquals(LibraryKeyAction.MoveInOrder(OrderMove.START), LibraryKeymap.actionFor(Home, alt = true))
+        assertEquals(LibraryKeyAction.MoveInOrder(OrderMove.END), LibraryKeymap.actionFor(End, alt = true))
+        // Without Alt they still move around, and Shift doesn't turn them into something else.
+        assertEquals(LibraryKeyAction.Previous, LibraryKeymap.actionFor(Left))
+        assertNull(LibraryKeymap.actionFor(Left, alt = true, shift = true))
+        assertTrue(LibraryKeymap.boundKeys.containsAll(listOf("Alt+←", "Alt+→", "Alt+Home", "Alt+End")))
+        assertTrue(LibraryKeymap.helpGroups.any { group -> group.rows.any { it.keys == "Alt+Home" } })
+    }
+
+    @Test
     fun `alt combinations belong to the system`() {
         assertNull(LibraryKeymap.actionFor(P, alt = true))
         assertNull(LibraryKeymap.actionFor(Tab, alt = true))

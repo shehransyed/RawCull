@@ -95,6 +95,7 @@ class FilterActions(
     val onSearchFocusChanged: (Boolean) -> Unit,
     val onSearchFocused: () -> Unit,
     val onDeleteRejects: () -> Unit,
+    val onSort: (SortOrder) -> Unit = { order -> onUpdate { it.copy(sortOrder = order) } },
 )
 
 /** The full bar, for windows wide enough to hold it. It wraps, so that no control ends up out of reach. */
@@ -124,7 +125,7 @@ fun FilterBar(
         FormatChips(uiState, actions)
         ChipDivider()
         SearchField(uiState.filterOptions.searchQuery, actions, focusSearch, Modifier.width(SEARCH_WIDTH))
-        SortMenu(uiState.filterOptions.sortOrder, actions)
+        SortMenu(uiState.sortOrder, uiState.activeCollection != null, actions)
         EnabledToggle(uiState.filtersEnabled, actions)
         if (uiState.filterOptions.isActive) ClearButton(actions)
         DeleteRejectsButton(uiState, actions)
@@ -212,7 +213,7 @@ fun FilterSheetContent(
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            SortMenu(uiState.filterOptions.sortOrder, actions)
+            SortMenu(uiState.sortOrder, uiState.activeCollection != null, actions)
             Spacer(Modifier.weight(1f))
             EnabledToggle(uiState.filtersEnabled, actions)
             if (uiState.filterOptions.isActive) ClearButton(actions)
@@ -446,7 +447,7 @@ private fun PlainField(
 }
 
 @Composable
-private fun SortMenu(sort: SortOrder, actions: FilterActions) {
+private fun SortMenu(sort: SortOrder, inCollection: Boolean, actions: FilterActions) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         TextButton(onClick = { expanded = true }, modifier = Modifier.testTag("filter_sort_button")) {
@@ -455,7 +456,7 @@ private fun SortMenu(sort: SortOrder, actions: FilterActions) {
             Text(sort.label, color = TextChip, fontSize = 12.sp, maxLines = 1)
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            SortOrder.entries.forEach { order ->
+            SortOrder.offered(inCollection).forEach { order ->
                 DropdownMenuItem(
                     text = { Text(order.label) },
                     leadingIcon = {
@@ -463,7 +464,7 @@ private fun SortMenu(sort: SortOrder, actions: FilterActions) {
                     },
                     onClick = {
                         expanded = false
-                        actions.onUpdate { it.copy(sortOrder = order) }
+                        actions.onSort(order)
                     },
                     modifier = Modifier.testTag("filter_sort_${order.name.lowercase()}"),
                 )
