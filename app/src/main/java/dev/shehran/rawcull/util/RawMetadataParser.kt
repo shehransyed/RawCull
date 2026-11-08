@@ -3,6 +3,7 @@ package dev.shehran.rawcull.util
 import android.content.Context
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
+import dev.shehran.rawcull.data.model.GeoPoint
 import dev.shehran.rawcull.data.model.PhotoFormat
 import java.io.FileDescriptor
 import java.io.FileNotFoundException
@@ -24,6 +25,7 @@ data class ExtractedRawMetadata(
     val height: Int,
     val orientation: Int,
     val parsed: Boolean = true, // False for fallback values that weren't read from the file
+    val location: GeoPoint? = null, // The EXIF GPS position; none for a (0, 0) fix, which cameras write for "no fix"
 )
 
 object RawMetadataParser {
@@ -98,8 +100,16 @@ object RawMetadataParser {
             dateTaken = dateTaken,
             width = width,
             height = height,
-            orientation = orientation
+            orientation = orientation,
+            location = location(exif),
         )
+    }
+
+    private fun location(exif: ExifInterface): GeoPoint? {
+        val latLong = exif.latLong ?: return null
+        if (latLong[0] == 0.0 && latLong[1] == 0.0) return null
+        val altitude = exif.getAltitude(Double.NaN).takeUnless { it.isNaN() }
+        return GeoPoint(latLong[0], latLong[1], altitude)
     }
 
     private fun formatShutterSpeed(value: String?): String? {

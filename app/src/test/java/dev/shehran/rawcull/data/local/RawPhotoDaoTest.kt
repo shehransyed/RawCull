@@ -17,6 +17,9 @@ import dev.shehran.rawcull.data.model.XmpSyncStatus
 import dev.shehran.rawcull.data.xmp.XMP_PARSE_ERROR
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import dev.shehran.rawcull.data.model.GeoPoint
+import dev.shehran.rawcull.data.model.location
+import dev.shehran.rawcull.util.xmp.XmpField
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -92,6 +95,65 @@ class RawPhotoDaoTest {
         assertEquals(200L, stored.dateTaken)
         assertEquals("ILCE-7M4", stored.cameraModel)
         assertTrue(stored.metadataLoaded)
+    }
+
+    private val camera = GeoPoint(10.0, 20.0, 5.0)
+    private val sidecar = GeoPoint(40.0, -79.0)
+
+    @Test
+    fun `the camera's location fills a row with none and marks it in the file`() = runTest {
+        dao.upsertAll(listOf(row()))
+        dao.updateMetadataBatch(
+            listOf(EnrichmentResult(metadata().copy(gpsInFile = true), xmp = null, exifLocation = camera)),
+        )
+        val stored = dao.getPhotoById("a")!!
+        assertEquals(camera, stored.location)
+        assertTrue(stored.gpsInFile)
+    }
+
+    @Test
+    fun `a sidecar's location beats the camera's`() = runTest {
+        dao.upsertAll(listOf(row()))
+        dao.updateMetadataBatch(
+            listOf(
+                EnrichmentResult(metadata().copy(gpsInFile = true), xmp(50L).copy(location = sidecar), exifLocation = camera),
+            ),
+        )
+        assertEquals(sidecar, dao.getPhotoById("a")!!.location)
+        assertTrue(dao.getPhotoById("a")!!.gpsInFile)
+    }
+
+    @Test
+    fun `a sidecar without a location falls back to the camera's`() = runTest {
+        dao.upsertAll(listOf(row()))
+        dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp(50L), exifLocation = camera)))
+        assertEquals(camera, dao.getPhotoById("a")!!.location)
+    }
+
+    @Test
+    fun `no location anywhere leaves none`() = runTest {
+        dao.upsertAll(listOf(row()))
+        dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp(50L))))
+        assertNull(dao.getPhotoById("a")!!.location)
+    }
+
+    @Test
+    fun `a location edited in RawCull isn't replaced by the file's`() = runTest {
+        dao.upsertAll(listOf(row()))
+        dao.markPending("a", XmpField.GPS.bit)
+        dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp = null, exifLocation = camera)))
+        assertNull("pending row: not filled", dao.getPhotoById("a")!!.location)
+
+        dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp(50L).copy(location = sidecar))))
+        assertNull("pending row: sidecar not applied", dao.getPhotoById("a")!!.location)
+    }
+
+    @Test
+    fun `a rescan without a fresh sidecar read keeps the row's location`() = runTest {
+        dao.upsertAll(listOf(row()))
+        dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp(50L).copy(location = sidecar))))
+        dao.updateMetadataBatch(listOf(EnrichmentResult(metadata(), xmp = null, exifLocation = camera)))
+        assertEquals(sidecar, dao.getPhotoById("a")!!.location)
     }
 
     @Test

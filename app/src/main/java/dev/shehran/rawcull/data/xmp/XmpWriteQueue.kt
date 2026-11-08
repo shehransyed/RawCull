@@ -1,6 +1,7 @@
 package dev.shehran.rawcull.data.xmp
 
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.location
 import dev.shehran.rawcull.data.model.XmpSyncStatus
 import dev.shehran.rawcull.util.xmp.CullState
 import dev.shehran.rawcull.util.xmp.ParsedCullState
@@ -203,13 +204,13 @@ class XmpWriteQueue(
 
         // A new or empty sidecar has nothing of its own, so the catalog supplies every field.
         val doc = mainDoc ?: XmpDocument.newEmpty(toolkit)
-        XmpMapper.apply(doc, state, settings, if (mainDoc != null) pending else XmpField.ALL, now())
+        XmpMapper.apply(doc, state, settings, if (mainDoc != null) pending else newSidecarFields(pending), now())
 
         val uri = main?.uri ?: store.create(row)
         val mtime = store.write(uri, doc.toBytes())
         if (extra != null) {
             val merged = extraDoc ?: XmpDocument.newEmpty(toolkit)
-            XmpMapper.apply(merged, state, settings, if (extraDoc != null) pending else XmpField.ALL, now())
+            XmpMapper.apply(merged, state, settings, if (extraDoc != null) pending else newSidecarFields(pending), now())
             store.write(extra.uri, merged.toBytes())
         }
         rows.finishSynced(row.id, uri, mtime, mainDoc?.let { XmpMapper.read(it).merge(state, pending) })
@@ -236,12 +237,15 @@ class XmpWriteQueue(
     }
 }
 
+/** A new sidecar takes every field except a location the user hasn't edited (which may be the camera's). */
+private fun newSidecarFields(pending: Set<XmpField>): Set<XmpField> = XmpField.NEW_SIDECAR + (pending intersect setOf(XmpField.GPS))
+
 /** A crash between creating a sidecar and writing it leaves an empty file, which holds nothing to keep. */
 private fun SidecarContent.isBlank(): Boolean = bytes.all { it.toInt().toChar().isWhitespace() }
 
 private fun PhotoAsset.sidecarUris(): List<String> = listOfNotNull(xmpFileUri, darktableXmpUri).distinct()
 
-private fun PhotoAsset.cullState() = CullState(rating, cullStatus, colorLabel, tags)
+private fun PhotoAsset.cullState() = CullState(rating, cullStatus, colorLabel, tags, location)
 
 /** The catalog state after a sync: pending fields as the user set them, the rest as the file has them. */
 private fun ParsedCullState.merge(state: CullState, pending: Set<XmpField>) = CullState(
@@ -249,4 +253,5 @@ private fun ParsedCullState.merge(state: CullState, pending: Set<XmpField>) = Cu
     cullStatus = if (XmpField.PICK in pending) state.cullStatus else cullStatus ?: state.cullStatus,
     colorLabel = if (XmpField.LABEL in pending) state.colorLabel else colorLabel,
     tags = if (XmpField.TAGS in pending) state.tags else tags,
+    location = if (XmpField.GPS in pending) state.location else location ?: state.location,
 )

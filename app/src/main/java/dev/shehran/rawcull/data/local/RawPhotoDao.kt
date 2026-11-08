@@ -124,9 +124,40 @@ interface RawPhotoDao : XmpRows {
                     mtime = xmp.lastModified,
                 )
             }
+            // XMP first, else the file's EXIF. Without a fresh read of the sidecar, the row's own
+            // location stands and the camera's only fills a gap.
+            if (result.xmp != null) {
+                val point = result.xmp.location ?: result.exifLocation
+                applyLocationFromFile(result.metadata.id, point?.latitude, point?.longitude, point?.altitude)
+            } else {
+                result.exifLocation?.let { fillLocation(result.metadata.id, it.latitude, it.longitude, it.altitude) }
+            }
             if (result.sidecarUnreadable) markSidecarUnreadable(result.metadata.id, XMP_PARSE_ERROR)
         }
     }
+
+    /** Same guard as [applyXmpFromFile]: a location edited in RawCull isn't replaced by the file's. */
+    @Query(
+        """
+        UPDATE photo_assets SET gpsLatitude = :latitude, gpsLongitude = :longitude, gpsAltitude = :altitude
+        WHERE id = :id AND xmpSyncStatus NOT IN ('PENDING', 'WRITING') AND xmpPendingFields = 0
+        """
+    )
+    suspend fun applyLocationFromFile(id: String, latitude: Double?, longitude: Double?, altitude: Double?)
+
+    @Query(
+        """
+        UPDATE photo_assets SET gpsLatitude = :latitude, gpsLongitude = :longitude, gpsAltitude = :altitude
+        WHERE id = :id AND gpsLatitude IS NULL AND (xmpPendingFields & :gpsBit) = 0
+        """
+    )
+    suspend fun fillLocation(
+        id: String,
+        latitude: Double,
+        longitude: Double,
+        altitude: Double?,
+        gpsBit: Int = XmpField.GPS.bit,
+    )
 
     @Update(entity = PhotoAsset::class)
     suspend fun applyMetadata(metadata: List<EnrichedMetadata>)

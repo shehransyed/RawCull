@@ -2,6 +2,7 @@ package dev.shehran.rawcull.util.xmp
 
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
+import dev.shehran.rawcull.data.model.GeoPoint
 import java.util.Date
 
 data class XmpPrefs(val rejectAsNegativeRating: Boolean = true)
@@ -12,6 +13,8 @@ data class CullState(
     val cullStatus: CullStatus,
     val colorLabel: ColorLabel,
     val tags: List<String>,
+    /** The location shown for the photo; written to the sidecar only when [XmpField.GPS] is pending. */
+    val location: GeoPoint? = null,
 )
 
 /** What a sidecar says about a photo. */
@@ -23,6 +26,8 @@ data class ParsedCullState(
     /** The label as written, which may be a custom one that [colorLabel] can only show as NONE. */
     val rawLabel: String?,
     val tags: List<String>,
+    /** The sidecar's own `exif:GPS*` location, null if it has none. */
+    val location: GeoPoint? = null,
 )
 
 /** The user-editable fields. A row's pending set says which ones the catalog is the authority on. */
@@ -30,11 +35,15 @@ enum class XmpField(val bit: Int) {
     RATING(1),
     PICK(2),
     LABEL(4),
-    TAGS(8);
+    TAGS(8),
+    GPS(16);
 
     companion object {
         val ALL: Set<XmpField> = entries.toSet()
         val ALL_BITS: Int = entries.fold(0) { bits, field -> bits or field.bit }
+
+        /** What a brand-new sidecar gets unasked: a location is written only for rows that were edited. */
+        val NEW_SIDECAR: Set<XmpField> = ALL - GPS
 
         fun fromBits(bits: Int): Set<XmpField> = entries.filterTo(LinkedHashSet()) { bits and it.bit != 0 }
     }
@@ -63,6 +72,7 @@ object XmpMapper {
         }
         if (XmpField.LABEL in fields) writeLabel(doc, state.colorLabel, onFile)
         if (XmpField.TAGS in fields && onFile.tags != state.tags) doc.setSubjects(state.tags)
+        if (XmpField.GPS in fields) XmpGps.write(doc, state.location)
         doc.touchMetadataDate(now)
     }
 
@@ -74,6 +84,7 @@ object XmpMapper {
             colorLabel = labelOf(doc.label),
             rawLabel = doc.label,
             tags = doc.subjects,
+            location = XmpGps.read(doc),
         )
     }
 

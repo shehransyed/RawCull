@@ -2,6 +2,7 @@ package dev.shehran.rawcull.util.xmp
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.shehran.rawcull.data.model.GeoPoint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -89,6 +90,26 @@ class XmpDocumentDeviceTest {
             assertTrue(saved, saved.trimEnd().endsWith("<?xpacket end=\"w\"?>"))
         }
         assertFalse("xpacket" in load("no_xpacket.xmp").toBytes().toString(Charsets.UTF_8))
+    }
+
+    @Test
+    fun locationReadsAndWritesOnTheDevice() {
+        // The Lightroom fixture holds exif:GPSLatitude="23,46.1234N" and exif:GPSLongitude="90,22.5678E".
+        val doc = load("lightroom_classic_develop.xmp")
+        val onFile = XmpGps.read(doc)!!
+        assertEquals(23.0 + 46.1234 / 60.0, onFile.latitude, 1e-7)
+        assertEquals(90.0 + 22.5678 / 60.0, onFile.longitude, 1e-7)
+
+        XmpGps.write(doc, GeoPoint(-33.8688, -151.2093, 58.25))
+        val saved = XmpDocument.parse(doc.toBytes()).getOrThrow()
+        val read = XmpGps.read(saved)!!
+        assertEquals(-33.8688, read.latitude, 1e-7)
+        assertEquals(-151.2093, read.longitude, 1e-7)
+        assertEquals(58.25, read.altitude!!, 0.005)
+        assertEquals(listOf("Wedding", "Dhaka", "Golden Hour"), saved.subjects)
+
+        XmpGps.write(doc, null)
+        assertTrue(XmpGps.read(XmpDocument.parse(doc.toBytes()).getOrThrow()) == null)
     }
 
     @Test

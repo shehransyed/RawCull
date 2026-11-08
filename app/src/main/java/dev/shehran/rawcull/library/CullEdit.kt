@@ -3,6 +3,7 @@ package dev.shehran.rawcull.library
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.location
 import dev.shehran.rawcull.util.xmp.CullState
 
 /** One culling action, independent of how many photos it lands on. */
@@ -40,7 +41,7 @@ data class CullChange(
     }
 }
 
-fun PhotoAsset.toCullState() = CullState(rating, cullStatus, colorLabel, tags)
+fun PhotoAsset.toCullState() = CullState(rating, cullStatus, colorLabel, tags, location)
 
 object CullEdits {
     private val FLAG_ORDER = listOf(CullStatus.REJECT, CullStatus.UNFLAGGED, CullStatus.PICK)

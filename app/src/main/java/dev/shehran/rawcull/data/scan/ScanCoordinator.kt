@@ -309,9 +309,11 @@ class ScanCoordinator(
                 focalLength = metadata.focalLength,
                 exposureBias = metadata.exposureBias,
                 orientation = metadata.orientation,
+                gpsInFile = metadata.location != null,
             ),
             xmp = sidecar.xmp,
             sidecarUnreadable = sidecar.unreadable,
+            exifLocation = metadata.location,
         )
     }
 
@@ -352,6 +354,7 @@ class ScanCoordinator(
                 colorLabel = parsed.colorLabel,
                 tagsJson = converters.fromTagsList(parsed.tags),
                 lastModified = content.lastModified ?: sidecarLastModified ?: 0L,
+                location = parsed.location,
             )
         )
     }

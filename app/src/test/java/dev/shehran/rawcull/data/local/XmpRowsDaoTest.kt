@@ -70,7 +70,7 @@ class XmpRowsDaoTest {
         dao.updateTags("a", """["x"]""")
 
         assertEquals(XmpSyncStatus.PENDING, stored("a").xmpSyncStatus)
-        assertEquals(XmpField.ALL_BITS, stored("a").xmpPendingFields)
+        assertEquals(XmpField.ALL_BITS and XmpField.GPS.bit.inv(), stored("a").xmpPendingFields)
         assertEquals(listOf("x"), stored("a").tags)
         assertEquals(XmpField.RATING.bit, stored("b").xmpPendingFields)
         assertEquals(XmpSyncStatus.SYNCED, stored("c").xmpSyncStatus)
