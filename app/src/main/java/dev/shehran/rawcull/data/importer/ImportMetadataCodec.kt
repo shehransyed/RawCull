@@ -1,5 +1,6 @@
 package dev.shehran.rawcull.data.importer
 
+import dev.shehran.rawcull.data.model.GeoPoint
 import dev.shehran.rawcull.util.ExtractedRawMetadata
 import org.json.JSONException
 import org.json.JSONObject
@@ -23,6 +24,13 @@ object ImportMetadataCodec {
             .put("width", metadata.width)
             .put("height", metadata.height)
             .put("orientation", metadata.orientation)
+            .apply {
+                metadata.location?.let { point ->
+                    put("lat", point.latitude)
+                    put("lon", point.longitude)
+                    putOpt("alt", point.altitude)
+                }
+            }
             .toString()
     }
 
@@ -43,10 +51,16 @@ object ImportMetadataCodec {
                 width = parsed.optInt("width"),
                 height = parsed.optInt("height"),
                 orientation = parsed.optInt("orientation"),
+                location = parsed.location(), // Absent in jobs scanned before R8: no location
             )
         } catch (e: JSONException) {
             null
         }
+    }
+
+    private fun JSONObject.location(): GeoPoint? {
+        if (!has("lat") || !has("lon")) return null
+        return GeoPoint(getDouble("lat"), getDouble("lon"), if (has("alt")) getDouble("alt") else null)
     }
 
     private fun JSONObject.text(key: String): String? = if (has(key)) getString(key) else null

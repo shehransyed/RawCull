@@ -12,6 +12,8 @@ import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
 import dev.shehran.rawcull.data.local.AppDatabase
 import dev.shehran.rawcull.data.model.ColorLabel
+import dev.shehran.rawcull.data.model.GeoPoint
+import dev.shehran.rawcull.data.model.location
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.ImportItemRole
 import dev.shehran.rawcull.data.model.ImportItemState
@@ -266,6 +268,49 @@ class ImportWorkerTest {
         assertEquals(CullStatus.UNFLAGGED, row.cullStatus)
         assertEquals(items(jobId).getValue("A.xmp").targetUri, row.xmpFileUri)
         assertNotNull(row.xmpLastSyncedMtime)
+    }
+
+    @Test
+    fun `an imported row takes the camera's location and knows it's in the file`() = runBlocking<Unit> {
+        val metadata = """{"date":9000,"width":100,"height":50,"orientation":1,"lat":10.5,"lon":-20.25,"alt":30.0}"""
+        val jobId = job(listOf(item("A.ARW", metadataJson = metadata)))
+
+        run(jobId)
+
+        val row = database.rawPhotoDao().observeByImportJob(jobId).first().single()
+        assertEquals(GeoPoint(10.5, -20.25, 30.0), row.location)
+        assertTrue(row.gpsInFile)
+        assertTrue(row.metadataLoaded)
+    }
+
+    @Test
+    fun `an imported sidecar's location comes before the camera's`() = runBlocking<Unit> {
+        val metadata = """{"date":9000,"width":100,"height":50,"orientation":1,"lat":10.5,"lon":-20.25}"""
+        val sidecar = ("""<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">""" +
+            """<rdf:Description xmlns:exif="http://ns.adobe.com/exif/1.0/" exif:GPSLatitude="40,30.0N" exif:GPSLongitude="79,0.0W"/>""" +
+            """</rdf:RDF></x:xmpmeta>""").toByteArray()
+        val jobId = job(
+            listOf(
+                item("A.ARW", metadataJson = metadata),
+                item("A.xmp", group = "A", role = ImportItemRole.ADOBE_SIDECAR, content = sidecar),
+            ),
+        )
+
+        run(jobId)
+
+        val row = database.rawPhotoDao().observeByImportJob(jobId).first().single()
+        assertEquals(GeoPoint(40.5, -79.0), row.location)
+        assertTrue(row.gpsInFile)
+        assertEquals(0, row.xmpPendingFields) // Nothing to write back: the camera's stays out of the sidecar
+    }
+
+    @Test
+    fun `a row imported without any location has none`() = runBlocking<Unit> {
+        val jobId = job(listOf(item("A.ARW", metadataJson = """{"date":9000}""")))
+        run(jobId)
+        val row = database.rawPhotoDao().observeByImportJob(jobId).first().single()
+        assertNull(row.location)
+        assertFalse(row.gpsInFile)
     }
 
     private fun xmp(rating: Int) =

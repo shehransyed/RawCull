@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Edit
@@ -32,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -42,9 +44,14 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.shehran.rawcull.data.model.GeoPoint
@@ -92,6 +99,10 @@ fun LocationCard(
         else -> LocationSource.SIDECAR
     }
     val targets = if (selectedCount > 1) "$selectedCount selected photos" else null
+    val startEditing = {
+        draft = location?.let(GeoInput::plain).orEmpty()
+        editing = true
+    }
 
     Surface(
         modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).testTag("location_card"),
@@ -118,13 +129,17 @@ fun LocationCard(
                 Text(source.label, color = TextMuted, fontSize = 11.sp, modifier = Modifier.testTag("location_source"))
             }
             if (targets != null) Text("Edits apply to the $targets", color = TextMuted, fontSize = 11.sp)
+            Button(
+                onClick = startEditing,
+                enabled = photo != null,
+                modifier = Modifier.padding(top = 4.dp).testTag(if (location == null) "location_add" else "location_edit"),
+            ) {
+                Icon(if (location == null) Icons.Default.AddLocationAlt else Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text(locationActionLabel(location != null, selectedCount), modifier = Modifier.padding(start = 8.dp))
+            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                CardButton(Icons.Default.Edit, "Edit", enabled = photo != null, tag = "location_edit") {
-                    draft = location?.let(GeoInput::plain).orEmpty()
-                    editing = true
-                }
-                CardButton(Icons.Default.ContentCopy, "Copy", enabled = location != null, tag = "location_copy") {
-                    location?.let { copy(context, it) }
+                if (location != null) {
+                    CardButton(Icons.Default.ContentCopy, "Copy", enabled = true, tag = "location_copy") { copy(context, location) }
                 }
                 CardButton(Icons.Default.ContentPaste, "Paste", enabled = photo != null, tag = "location_paste") {
                     val text = clipboardText(context)
@@ -137,15 +152,16 @@ fun LocationCard(
                         }
                     }
                 }
-                CardButton(Icons.Default.Map, "Open in Maps", enabled = location != null, tag = "location_maps") {
-                    location?.let { openInMaps(context, it) }
+                if (location != null) {
+                    CardButton(Icons.Default.Map, "Open in Maps", enabled = true, tag = "location_maps") { openInMaps(context, location) }
+                    // Only the sidecar's can go; a camera location is in the file (R7 D13).
+                    CardButton(
+                        Icons.Default.LocationOff,
+                        "Clear",
+                        enabled = source == LocationSource.SIDECAR,
+                        tag = "location_clear",
+                    ) { onEdit(CullEdit.ClearLocation) }
                 }
-                CardButton(
-                    Icons.Default.LocationOff,
-                    "Clear",
-                    enabled = source == LocationSource.SIDECAR,
-                    tag = "location_clear",
-                ) { onEdit(CullEdit.ClearLocation) }
             }
         }
     }
@@ -160,6 +176,14 @@ fun LocationCard(
             onDismiss = { editing = false },
         )
     }
+}
+
+/** The card's main button: add when there's no location, edit when there is (R8 D6). */
+internal fun locationActionLabel(hasLocation: Boolean, selectedCount: Int): String = when {
+    selectedCount > 1 && hasLocation -> "Edit location of $selectedCount photos"
+    selectedCount > 1 -> "Add location to $selectedCount photos"
+    hasLocation -> "Edit"
+    else -> "Add location"
 }
 
 @Composable
@@ -179,9 +203,18 @@ fun LocationEditSheet(
     onApply: (GeoPoint) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var text by rememberSaveable { mutableStateOf(initial) }
-    val parsed = remember(text) { GeoInput.parse(text) }
+    var text by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(initial, selection = TextRange(initial.length)))
+    }
+    val parsed = remember(text.text) { GeoInput.parse(text.text) }
+    val focus = remember { FocusRequester() }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
+        // Inside the sheet, which is its own window: from outside, the field isn't there yet (R7.9).
+        val keyboard = LocalSoftwareKeyboardController.current
+        LaunchedEffect(Unit) {
+            focus.requestFocus()
+            keyboard?.show()
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -204,7 +237,7 @@ fun LocationEditSheet(
                 supportingText = { Text("40.4461, -79.9822 · 40°26'46\"N 79°58'56\"W · a Google, Apple or OpenStreetMap link · add , 120 m for altitude") },
                 minLines = 1,
                 maxLines = 4,
-                modifier = Modifier.fillMaxWidth().testTag("location_input"),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("location_input"),
             )
             when (val result = parsed) {
                 is GeoParse.Ok -> Text(
@@ -213,7 +246,7 @@ fun LocationEditSheet(
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.testTag("location_preview"),
                 )
-                is GeoParse.Invalid -> if (text.isNotBlank()) {
+                is GeoParse.Invalid -> if (text.text.isNotBlank()) {
                     Text(result.reason, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("location_error"))
                 }
             }

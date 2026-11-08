@@ -28,6 +28,7 @@ import dev.shehran.rawcull.importer.SourceReadException
 import dev.shehran.rawcull.importer.StreamingHasher
 import dev.shehran.rawcull.importer.TargetWriteException
 import dev.shehran.rawcull.importer.sha256Of
+import dev.shehran.rawcull.library.FileLocation
 import dev.shehran.rawcull.util.xmp.ParsedCullState
 import dev.shehran.rawcull.util.xmp.XmpDocument
 import dev.shehran.rawcull.util.xmp.XmpMapper
@@ -578,6 +579,7 @@ class ImportEngine(
             val format = PhotoFormat.fromFileName(primary.targetName)
             val lastModified = info?.lastModified ?: 0L
             val metadataLoaded = metadata != null && (sidecar == null || sidecarState != null)
+            val place = FileLocation.pick(sidecar = sidecarState?.location, exif = metadata?.location)
 
             val fileFields: PhotoAsset.() -> PhotoAsset = {
                 copy(
@@ -627,6 +629,10 @@ class ImportEngine(
                 focalLength = metadata?.focalLength,
                 exposureBias = metadata?.exposureBias,
                 orientation = metadata?.orientation ?: 0,
+                gpsLatitude = place.point?.latitude,
+                gpsLongitude = place.point?.longitude,
+                gpsAltitude = place.point?.altitude,
+                gpsInFile = place.gpsInFile,
                 lastModified = clock(),
                 xmpLastSyncedMtime = sidecarTime.takeIf { sidecarState != null },
             ).fileFields()

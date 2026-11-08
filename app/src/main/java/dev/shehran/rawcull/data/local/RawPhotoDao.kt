@@ -14,6 +14,7 @@ import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.XmpSyncStatus
 import dev.shehran.rawcull.data.xmp.XMP_PARSE_ERROR
 import dev.shehran.rawcull.data.xmp.XmpRows
+import dev.shehran.rawcull.library.FileLocation
 import dev.shehran.rawcull.library.FolderQuery
 import dev.shehran.rawcull.util.xmp.CullState
 import dev.shehran.rawcull.util.xmp.XmpField
@@ -127,7 +128,7 @@ interface RawPhotoDao : XmpRows {
             // XMP first, else the file's EXIF. Without a fresh read of the sidecar, the row's own
             // location stands and the camera's only fills a gap.
             if (result.xmp != null) {
-                val point = result.xmp.location ?: result.exifLocation
+                val point = FileLocation.pick(sidecar = result.xmp.location, exif = result.exifLocation).point
                 applyLocationFromFile(result.metadata.id, point?.latitude, point?.longitude, point?.altitude)
             } else {
                 result.exifLocation?.let { fillLocation(result.metadata.id, it.latitude, it.longitude, it.altitude) }

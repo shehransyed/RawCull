@@ -17,6 +17,7 @@ import dev.shehran.rawcull.data.xmp.SidecarAction
 import dev.shehran.rawcull.data.xmp.SidecarReconciler
 import dev.shehran.rawcull.data.xmp.SidecarStores
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
+import dev.shehran.rawcull.library.FileLocation
 import dev.shehran.rawcull.util.RawMetadataParser
 import dev.shehran.rawcull.util.SafPermissions
 import dev.shehran.rawcull.util.xmp.XmpDocument
@@ -294,6 +295,8 @@ class ScanCoordinator(
         if (!metadata.parsed) ensureSourceAvailable(rootUri)
 
         val sidecar = readSidecar(row, sidecarLastModified)
+        // The DAO applies the point with its edit guards; the same rule decides both (R8 D4).
+        val place = FileLocation.pick(sidecar = sidecar.xmp?.location, exif = metadata.location)
         return EnrichmentResult(
             metadata = EnrichedMetadata(
                 id = row.id,
@@ -309,7 +312,7 @@ class ScanCoordinator(
                 focalLength = metadata.focalLength,
                 exposureBias = metadata.exposureBias,
                 orientation = metadata.orientation,
-                gpsInFile = metadata.location != null,
+                gpsInFile = place.gpsInFile,
             ),
             xmp = sidecar.xmp,
             sidecarUnreadable = sidecar.unreadable,

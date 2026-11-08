@@ -15,6 +15,7 @@ import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.XmpSyncStatus
 import dev.shehran.rawcull.data.xmp.XMP_PARSE_ERROR
+import dev.shehran.rawcull.library.EditBadgeText
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import dev.shehran.rawcull.data.model.GeoPoint
@@ -284,6 +285,47 @@ class RawPhotoDaoTest {
         assertNotNull(dao.getPhotoById("pending"))
         assertNotNull(dao.getPhotoById("failed"))
         assertNull(dao.getPhotoById("gone"))
+    }
+
+    /** R8 D5: the v8 backfill re-enriches rows that may hold unsaved edits. */
+    @Test
+    fun `re-enrichment after the v8 backfill keeps pending edits`() = runTest {
+        dao.upsertAll(listOf(row("edited"), row("located"), row("bare")))
+        dao.updateCullStatus(listOf("edited", "located", "bare"), CullStatus.REJECT, time = 10L)
+        dao.updateRating(listOf("edited", "located", "bare"), 5, time = 10L)
+        dao.updateColorLabel(listOf("edited", "located", "bare"), ColorLabel.RED, time = 10L)
+        dao.updateTags("edited", converters.fromTagsList(listOf("mine")), time = 10L)
+        dao.updateLocation(listOf("located"), sidecar.latitude, sidecar.longitude, null, time = 10L) // Set in RawCull
+        dao.updateLocation(listOf("edited"), null, null, null, time = 10L) // Cleared in RawCull
+        val before = listOf("edited", "located", "bare").associateWith { dao.getPhotoById(it)!! }
+
+        database.openHelper.writableDatabase.execSQL("UPDATE photo_assets SET metadataLoaded = 0")
+        dao.updateMetadataBatch(
+            listOf("edited", "located", "bare").flatMap { id ->
+                listOf(
+                    // The sidecar read is skipped for pending rows; both kinds of result must be harmless.
+                    EnrichmentResult(metadata(id).copy(gpsInFile = true), xmp = null, exifLocation = camera),
+                    EnrichmentResult(metadata(id).copy(gpsInFile = true), xmp(50L).copy(location = GeoPoint(1.0, 2.0)), exifLocation = camera),
+                )
+            },
+        )
+
+        for ((id, old) in before) {
+            val now = dao.getPhotoById(id)!!
+            assertTrue(id, now.metadataLoaded)
+            assertEquals(id, old.cullStatus, now.cullStatus)
+            assertEquals(id, old.rating, now.rating)
+            assertEquals(id, old.colorLabel, now.colorLabel)
+            assertEquals(id, old.tags, now.tags)
+            assertEquals(id, old.xmpPendingFields, now.xmpPendingFields)
+            assertEquals(id, XmpSyncStatus.PENDING, now.xmpSyncStatus)
+            if (id != "bare") {
+                assertEquals(id, old.location, now.location)
+                assertNull(id, EditBadgeText.between(old, now))
+            }
+        }
+        // Without a location edit, the camera's fills the gap: what the backfill is for.
+        assertEquals(camera, dao.getPhotoById("bare")!!.location)
     }
 
     private fun orphanRow(id: String, root: String) = PhotoAsset(

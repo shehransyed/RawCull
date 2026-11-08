@@ -54,14 +54,15 @@ class Migration6To7Test {
         }
     }
 
-    /** Opens with the app's real migrations; Room throws if a migrated table doesn't match v7. */
+    /** Opens with the app's real migrations, up to the current version (8 since R8); Room throws if a table doesn't match. */
     private fun openVersion7(check: (SupportSQLiteDatabase) -> Unit) {
         val database = Room.databaseBuilder(context, AppDatabase::class.java, DB_NAME)
+            .addMigrations(*AppDatabase.MIGRATIONS)
             .allowMainThreadQueries()
             .build()
         try {
             val db = database.openHelper.writableDatabase
-            assertEquals(7, db.version)
+            assertEquals(8, db.version)
             check(db)
         } finally {
             database.close()
@@ -156,7 +157,9 @@ class Migration6To7Test {
                 assertTrue(cursor.moveToFirst())
                 for (key in photo.keySet()) {
                     val column = cursor.getColumnIndexOrThrow(key)
-                    assertEquals(key, photo.getAsString(key), cursor.getString(column))
+                    // v8 (R8 D5) marks a row without a location unread, so its GPS is read again.
+                    val expected = if (key == "metadataLoaded") "0" else photo.getAsString(key)
+                    assertEquals(key, expected, cursor.getString(column))
                 }
                 for (gps in listOf("gpsLatitude", "gpsLongitude", "gpsAltitude")) {
                     assertTrue(gps, cursor.isNull(cursor.getColumnIndexOrThrow(gps)))
