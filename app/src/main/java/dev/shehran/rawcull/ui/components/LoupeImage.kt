@@ -45,7 +45,7 @@ private const val TILE_SETTLE_MS = 120L
 private const val PLACEHOLDER_THUMBNAIL_PX = 512
 
 /** A decoded region of the 100 % source, in that source's own orientation. */
-private class Tile(val bitmap: Bitmap, val rect: SourceRect, val sampleSize: Int)
+internal class LoupeTile(val bitmap: Bitmap, val rect: SourceRect, val sampleSize: Int)
 
 /** The current photo's region decoder, opened on the first zoom past the base preview. */
 private class RegionHolder {
@@ -93,6 +93,7 @@ fun LoupeImage(
     modifier: Modifier = Modifier,
     onContent: (LoupeContent) -> Unit = {},
     placeholder: @Composable () -> Unit = {},
+    peaking: PeakingStyle? = LocalPeaking.current,
 ) {
     val previews = LocalPreviewRepository.current
     val source = remember(photo?.fileUri, photo?.fileSizeBytes, photo?.fileLastModified, photo?.companionFileUri, photo?.companionFileSizeBytes) {
@@ -102,7 +103,7 @@ fun LoupeImage(
     var image by remember(key) { mutableStateOf<PreviewImage?>(null) }
     var unavailable by remember(key) { mutableStateOf<String?>(null) }
     var fromMemory by remember(key) { mutableStateOf(false) }
-    var tile by remember(key) { mutableStateOf<Tile?>(null) }
+    var tile by remember(key) { mutableStateOf<LoupeTile?>(null) }
     val thumbnail = remember(key) { source?.let { previews?.peekThumbnail(it, PLACEHOLDER_THUMBNAIL_PX) } }
     val holder = remember(key) { RegionHolder() }
     DisposableEffect(holder) { onDispose { holder.close() } }
@@ -183,8 +184,17 @@ fun LoupeImage(
         val current = tile
         if (current != null && current.sampleSize == plan.sampleSize && current.rect.contains(plan.source)) return@LaunchedEffect
         val bitmap = region.decode(plan.source, plan.sampleSize) ?: return@LaunchedEffect
-        tile = Tile(bitmap, plan.source, plan.sampleSize)
+        tile = LoupeTile(bitmap, plan.source, plan.sampleSize)
     }
+
+    // R6 D7: peaking at display scale, over whatever is drawn (the fit preview or the 100 % tile).
+    val view = zoom.view()
+    val peakingRequest = if (peaking != null && shownImage != null && view != null) {
+        PeakingRequest(shownImage, tile, view, peaking.threshold)
+    } else {
+        null
+    }
+    val peakingMask = rememberPeakingMask(peakingRequest)
 
     Box(
         // A zoomed image is larger than its view: in compare it would cover the other pane.
@@ -215,6 +225,7 @@ fun LoupeImage(
             ) {
                 drawLoupe(shown, shownTile, zoom)
             }
+            if (peaking != null && peakingMask != null) PeakingMaskLayer(peakingMask, peaking.color)
         } else if (thumbnail != null) {
             Image(
                 bitmap = thumbnail.asImageBitmap(),
@@ -230,14 +241,32 @@ fun LoupeImage(
 
 private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
 
+/** Where the base preview and the tile land on screen, in view pixels. */
+internal class LoupeGeometry(val baseMatrix: Matrix, val tileMatrix: Matrix?)
+
+/** A snapshot of [LoupeZoomState] for drawing: the view, the upright 100 % source, scale and pan. */
+internal data class LoupeView(
+    val width: Int,
+    val height: Int,
+    val fullWidth: Int,
+    val fullHeight: Int,
+    val scale: Float,
+    val panX: Float,
+    val panY: Float,
+    val atFit: Boolean,
+)
+
+internal fun LoupeZoomState.view(): LoupeView? =
+    if (isKnown) LoupeView(viewWidth, viewHeight, fullWidth, fullHeight, scale, panX, panY, isAtFit) else null
+
 /** The base preview stretched over the whole upright image, then the tile over its part of it. */
-private fun DrawScope.drawLoupe(image: PreviewImage, tile: Tile?, zoom: LoupeZoomState) {
-    val scale = zoom.scale
-    val fullW = zoom.fullWidth.toFloat()
-    val fullH = zoom.fullHeight.toFloat()
-    if (fullW <= 0f || fullH <= 0f) return
-    val originX = size.width / 2f + zoom.panX - fullW * scale / 2f
-    val originY = size.height / 2f + zoom.panY - fullH * scale / 2f
+internal fun loupeGeometry(image: PreviewImage, tile: LoupeTile?, view: LoupeView): LoupeGeometry? {
+    val scale = view.scale
+    val fullW = view.fullWidth.toFloat()
+    val fullH = view.fullHeight.toFloat()
+    if (fullW <= 0f || fullH <= 0f) return null
+    val originX = view.width / 2f + view.panX - fullW * scale / 2f
+    val originY = view.height / 2f + view.panY - fullH * scale / 2f
 
     val base = image.bitmap
     val baseW = RegionMath.displayWidth(base.width, base.height, image.orientation).toFloat()
@@ -246,21 +275,31 @@ private fun DrawScope.drawLoupe(image: PreviewImage, tile: Tile?, zoom: LoupeZoo
         postScale(fullW / baseW * scale, fullH / baseH * scale)
         postTranslate(originX, originY)
     }
-
-    drawIntoCanvas { canvas ->
-        val native = canvas.nativeCanvas
-        native.drawBitmap(base, baseMatrix, bitmapPaint)
-        val full = image.full ?: return@drawIntoCanvas
-        if (tile == null) return@drawIntoCanvas
-        // The tile's pixels → the 100 % source → upright → screen.
-        val tileMatrix = Matrix().apply {
+    val full = image.full
+    // The tile's pixels → the 100 % source → upright → screen.
+    val tileMatrix = if (full != null && tile != null) {
+        Matrix().apply {
             setScale(tile.rect.width.toFloat() / tile.bitmap.width, tile.rect.height.toFloat() / tile.bitmap.height)
             postTranslate(tile.rect.left.toFloat(), tile.rect.top.toFloat())
             postConcat(orientationMatrix(full.info.width, full.info.height, full.orientation))
             postScale(scale, scale)
             postTranslate(originX, originY)
         }
-        native.drawBitmap(tile.bitmap, tileMatrix, bitmapPaint)
+    } else {
+        null
+    }
+    return LoupeGeometry(baseMatrix, tileMatrix)
+}
+
+private fun DrawScope.drawLoupe(image: PreviewImage, tile: LoupeTile?, zoom: LoupeZoomState) {
+    val view = LoupeView(
+        size.width.toInt(), size.height.toInt(), zoom.fullWidth, zoom.fullHeight, zoom.scale, zoom.panX, zoom.panY, zoom.isAtFit,
+    )
+    val geometry = loupeGeometry(image, tile, view) ?: return
+    drawIntoCanvas { canvas ->
+        val native = canvas.nativeCanvas
+        native.drawBitmap(image.bitmap, geometry.baseMatrix, bitmapPaint)
+        if (tile != null && geometry.tileMatrix != null) native.drawBitmap(tile.bitmap, geometry.tileMatrix, bitmapPaint)
     }
 }
 

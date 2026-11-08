@@ -30,6 +30,7 @@ import dev.shehran.rawcull.library.LibraryKey.K
 import dev.shehran.rawcull.library.LibraryKey.L
 import dev.shehran.rawcull.library.LibraryKey.Left
 import dev.shehran.rawcull.library.LibraryKey.LeftBracket
+import dev.shehran.rawcull.library.LibraryKey.O
 import dev.shehran.rawcull.library.LibraryKey.P
 import dev.shehran.rawcull.library.LibraryKey.Right
 import dev.shehran.rawcull.library.LibraryKey.RightBracket
@@ -118,6 +119,7 @@ class LibraryKeymapTest {
         assertEquals(LibraryKeyAction.TogglePanes, press(Tab))
         assertEquals(LibraryKeyAction.ToggleChrome, press(Tab, shift = true))
         assertEquals(LibraryKeyAction.ToggleFullWindow, press(F))
+        assertEquals(LibraryKeyAction.TogglePeaking, press(O))
         assertEquals(LibraryKeyAction.FocusSearch, press(F, ctrl = true))
     }
 

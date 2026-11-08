@@ -108,6 +108,11 @@ import dev.shehran.rawcull.ui.theme.Dimens
 import dev.shehran.rawcull.ui.theme.PrimaryCyan
 import dev.shehran.rawcull.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.CompositionLocalProvider
+import dev.shehran.rawcull.library.PeakingKernel
+import dev.shehran.rawcull.ui.components.LocalPeaking
+import dev.shehran.rawcull.ui.components.PeakingStyle
+import dev.shehran.rawcull.ui.theme.RawCullTheme
 import dev.shehran.rawcull.ui.components.WarmupBar
 
 /**
@@ -278,79 +283,84 @@ fun LibraryScreen(
         onSearchFocused = { focusSearch = false },
     )
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .focusRequester(keyFocus)
-            .focusable()
-            // Only this screen listens, so typing anywhere else in the app is left alone.
-            .onPreviewKeyEvent { event ->
-                viewModel.onKeyboardModifiers(event.isCtrlPressed || event.isMetaPressed, event.isShiftPressed)
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                val capsLock = event.isCapsLockOn
-                viewModel.onCapsLock(capsLock)
-                val action = event.toLibraryAction(capsLock, textFieldFocused, slideshowActive = uiState.slideshow != null) ?: return@onPreviewKeyEvent false
-                onLibraryKey(action, viewModel, keyActions)
-                true
-            }
-            .testTag("library_screen"),
-    ) {
-        when {
-            // Avoids flashing the empty state while the last Location is being checked.
-            uiState.isRestoring -> Unit
-            uiState.activeLocation == null -> LibraryEmptyState(
-                onAddLocation = { addLauncher.launch(null) },
-                onImportFromCard = onImportFromCard,
-                onTryDemo = viewModel::openDemoLibrary,
-            )
-            else -> ModalNavigationDrawer(
-                // A closed sheet waits just left of this area, which is where the rail is.
-                modifier = Modifier.clipToBounds(),
-                drawerState = drawerState,
-                gesturesEnabled = !layout.showsFolderPane && (drawerState.isOpen || !viewingPhoto),
-                drawerContent = {
-                    if (!layout.showsFolderPane) {
-                        ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
-                            FolderPane(uiState, folderActions, Modifier.windowInsetsPadding(WindowInsets.safeDrawing))
-                        }
-                    }
-                },
-            ) {
-                LibraryContent(
-                    uiState = uiState,
-                    layout = layout,
-                    viewModel = viewModel,
-                    immersive = immersive,
-                    folderPaneOpen = folderPaneOpen,
-                    inspectorOpen = inspectorOpen,
-                    chromeHidden = chromeHidden,
-                    filterBarVisible = filterBarVisible,
-                    onToggleFilterBar = keyActions.onToggleFilterBar,
-                    onShowShortcuts = keyActions.onShowHelp,
-                    filterActions = filterActions,
-                    focusSearch = focusSearch,
-                    onOpenFilterSheet = { showFilterSheet = true },
-                    folderActions = folderActions,
-                    onToggleFolders = {
-                        if (layout.showsFolderPane) {
-                            folderPaneChoice = !folderPaneOpen
-                        } else {
-                            coroutines.launch { drawerState.open() }
+    // R6 D7: one switch for every loupe on screen (loupe, compare, full window, slideshow).
+    val peakingColor = RawCullTheme.colors.peaking(uiState.viewing.peakingColor)
+    val peaking = if (uiState.peaking) PeakingStyle(peakingColor, PeakingKernel.threshold(uiState.viewing.peakingSensitivity)) else null
+    CompositionLocalProvider(LocalPeaking provides peaking) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .focusRequester(keyFocus)
+                .focusable()
+                // Only this screen listens, so typing anywhere else in the app is left alone.
+                .onPreviewKeyEvent { event ->
+                    viewModel.onKeyboardModifiers(event.isCtrlPressed || event.isMetaPressed, event.isShiftPressed)
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val capsLock = event.isCapsLockOn
+                    viewModel.onCapsLock(capsLock)
+                    val action = event.toLibraryAction(capsLock, textFieldFocused, slideshowActive = uiState.slideshow != null) ?: return@onPreviewKeyEvent false
+                    onLibraryKey(action, viewModel, keyActions)
+                    true
+                }
+                .testTag("library_screen"),
+        ) {
+            when {
+                // Avoids flashing the empty state while the last Location is being checked.
+                uiState.isRestoring -> Unit
+                uiState.activeLocation == null -> LibraryEmptyState(
+                    onAddLocation = { addLauncher.launch(null) },
+                    onImportFromCard = onImportFromCard,
+                    onTryDemo = viewModel::openDemoLibrary,
+                )
+                else -> ModalNavigationDrawer(
+                    // A closed sheet waits just left of this area, which is where the rail is.
+                    modifier = Modifier.clipToBounds(),
+                    drawerState = drawerState,
+                    gesturesEnabled = !layout.showsFolderPane && (drawerState.isOpen || !viewingPhoto),
+                    drawerContent = {
+                        if (!layout.showsFolderPane) {
+                            ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
+                                FolderPane(uiState, folderActions, Modifier.windowInsetsPadding(WindowInsets.safeDrawing))
+                            }
                         }
                     },
-                    onToggleInspector = { inspectorChoice = !inspectorOpen },
-                    onOpenInspectorSheet = { showInspectorSheet = true },
-                    onRelink = { uiState.activeLocation?.let { relink(it.id) } },
-                )
+                ) {
+                    LibraryContent(
+                        uiState = uiState,
+                        layout = layout,
+                        viewModel = viewModel,
+                        immersive = immersive,
+                        folderPaneOpen = folderPaneOpen,
+                        inspectorOpen = inspectorOpen,
+                        chromeHidden = chromeHidden,
+                        filterBarVisible = filterBarVisible,
+                        onToggleFilterBar = keyActions.onToggleFilterBar,
+                        onShowShortcuts = keyActions.onShowHelp,
+                        filterActions = filterActions,
+                        focusSearch = focusSearch,
+                        onOpenFilterSheet = { showFilterSheet = true },
+                        folderActions = folderActions,
+                        onToggleFolders = {
+                            if (layout.showsFolderPane) {
+                                folderPaneChoice = !folderPaneOpen
+                            } else {
+                                coroutines.launch { drawerState.open() }
+                            }
+                        },
+                        onToggleInspector = { inspectorChoice = !inspectorOpen },
+                        onOpenInspectorSheet = { showInspectorSheet = true },
+                        onRelink = { uiState.activeLocation?.let { relink(it.id) } },
+                    )
+                }
             }
-        }
 
-        if (fullWindow) {
-            FullWindow(uiState = uiState, viewModel = viewModel)
-        }
+            if (fullWindow) {
+                FullWindow(uiState = uiState, viewModel = viewModel)
+            }
 
-        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+            SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+        }
     }
 
     if (showInspectorSheet) {
@@ -611,6 +621,7 @@ private fun LibraryMainView(
                         }
                     }
                     Row(modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp)) {
+                        PeakingToggle(on = uiState.peaking, onClick = viewModel::togglePeaking)
                         IconButton(onClick = viewModel::startSlideshow, modifier = Modifier.testTag("loupe_slideshow_button")) {
                             Icon(Icons.Default.PlayArrow, contentDescription = "Slideshow", tint = Color.White)
                         }
@@ -758,6 +769,7 @@ private fun onLibraryKey(action: LibraryKeyAction, viewModel: LibraryViewModel, 
         LibraryKeyAction.ToggleChrome -> screen.onToggleChrome()
         LibraryKeyAction.ToggleFullWindow -> viewModel.toggleFullWindow()
         LibraryKeyAction.ToggleSlideshow -> viewModel.toggleSlideshow()
+        LibraryKeyAction.TogglePeaking -> viewModel.togglePeaking()
         LibraryKeyAction.SlideshowPause -> viewModel.toggleSlideshowPause()
         LibraryKeyAction.Undo -> viewModel.undo()
         LibraryKeyAction.Redo -> viewModel.redo()

@@ -30,6 +30,7 @@ private val KEYS: Map<Key, LibraryKey> = mapOf(
     Key.G to LibraryKey.G,
     Key.K to LibraryKey.K,
     Key.L to LibraryKey.L,
+    Key.O to LibraryKey.O,
     Key.P to LibraryKey.P,
     Key.U to LibraryKey.U,
     Key.X to LibraryKey.X,

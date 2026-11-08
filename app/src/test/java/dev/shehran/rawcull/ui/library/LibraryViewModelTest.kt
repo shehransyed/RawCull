@@ -496,6 +496,16 @@ class LibraryViewModelTest {
     }
 
     @Test
+    fun `focus peaking starts off and toggles`() {
+        open(photo("a"))
+        assertFalse(state.peaking)
+        viewModel.togglePeaking()
+        assertTrue(state.peaking)
+        viewModel.togglePeaking()
+        assertFalse(state.peaking)
+    }
+
+    @Test
     fun `full window opens on the selected photo and leaves the view underneath alone`() {
         open(photo("a"), photo("b"))
         viewModel.setViewMode(DamViewMode.GRID)

@@ -84,6 +84,7 @@ data class LibraryUiState(
     val capsLock: Boolean = false,
     val slideshow: SlideshowUi? = null,
     val viewing: ViewingPrefs = ViewingPrefs(),
+    val peaking: Boolean = false, // R6 D7: per session, starts off
     val fullWindow: Boolean = false, // R6 D2: the photo owns the whole window, system bars hidden
     val zoomRequest: Int = 0, // Bumped by Z and Space; the loupe on screen toggles its zoom
 ) {

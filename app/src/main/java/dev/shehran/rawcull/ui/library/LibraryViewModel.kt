@@ -158,6 +158,9 @@ class LibraryViewModel(
         if (store.value.fullWindow) store.update { it.copy(fullWindow = false) }
     }
 
+    /** R6 D7: focus peaking on or off, for this session only. */
+    fun togglePeaking() = store.update { it.copy(peaking = !it.peaking) }
+
     fun toggleFullWindow() = if (store.value.fullWindow) exitFullWindow() else enterFullWindow()
 
     // --- SLIDESHOW (R6 D4-D6) ---
