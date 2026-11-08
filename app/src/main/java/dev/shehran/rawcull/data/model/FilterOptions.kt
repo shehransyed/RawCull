@@ -6,6 +6,13 @@ enum class RatingOperator(val symbol: String) {
     AT_MOST("≤"),
 }
 
+/** Whether a photo needs a location (R7 D15). */
+enum class LocationFilter(val label: String) {
+    ANY("Any"),
+    HAS("Has location"),
+    NONE("No location"),
+}
+
 /** An empty set means that dimension isn't filtered. */
 data class FilterOptions(
     val flags: Set<CullStatus> = emptySet(),
@@ -18,13 +25,15 @@ data class FilterOptions(
     val searchQuery: String = "",
     val sortOrder: SortOrder = SortOrder.DATE_ASC,
     val syncErrorsOnly: Boolean = false,
+    val locationFilter: LocationFilter = LocationFilter.ANY,
 ) {
     val filtersRating: Boolean get() = ratingOperator != RatingOperator.AT_LEAST || rating > 0
 
     /** Whether anything can hide a photo. Sorting can't. */
     val isActive: Boolean
         get() = flags.isNotEmpty() || filtersRating || colors.isNotEmpty() || tags.isNotEmpty() ||
-            formatFilter != null || pairFilter != null || searchQuery.isNotBlank() || syncErrorsOnly
+            formatFilter != null || pairFilter != null || searchQuery.isNotBlank() || syncErrorsOnly ||
+            locationFilter != LocationFilter.ANY
 
     /** The same sort with nothing filtered. */
     fun cleared(): FilterOptions = FilterOptions(sortOrder = sortOrder)

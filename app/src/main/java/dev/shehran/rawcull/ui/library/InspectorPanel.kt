@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
+import dev.shehran.rawcull.library.CullEdit
 import dev.shehran.rawcull.ui.components.CullingActionBar
 import dev.shehran.rawcull.ui.components.CullingHistory
 import dev.shehran.rawcull.ui.components.ExifInspectorPanel
@@ -51,6 +52,7 @@ fun InspectorPanel(
     culling: CullingActions?,
     onEditTags: () -> Unit,
     collectionActions: CollectionInspectorActions,
+    onLocationEdit: (CullEdit) -> Unit,
     onCycleHistogramMode: () -> Unit,
     onToggleHistogramLog: () -> Unit,
     modifier: Modifier = Modifier,
@@ -84,6 +86,7 @@ fun InspectorPanel(
         )
         ExifInspectorPanel(photo = photo)
         TagsCard(tags = photo?.tags.orEmpty(), onEditTags = onEditTags)
+        if (photo != null) LocationCard(photo, uiState.selectedPhotoIds.size, onLocationEdit)
         if (photo != null) CollectionsCard(uiState.photoCollections, uiState.activeCollection != null, collectionActions)
     }
 }

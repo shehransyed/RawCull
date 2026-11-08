@@ -13,6 +13,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import dev.shehran.rawcull.data.importer.ImportNotifications
 import dev.shehran.rawcull.ui.components.LocalPreviewRepository
+import dev.shehran.rawcull.ui.library.LocalCameraLocations
 import dev.shehran.rawcull.ui.library.LibraryViewModel
 import dev.shehran.rawcull.ui.shell.RawCullApp as RawCullScreen
 import dev.shehran.rawcull.ui.shell.ShellViewModel
@@ -38,6 +39,7 @@ class MainActivity : ComponentActivity() {
                     CompositionLocalProvider(
                         LocalPreviewRepository provides container.previewRepository,
                         LocalPreviewWarmup provides container.previewWarmup,
+                        LocalCameraLocations provides container.cameraLocations,
                         LocalShowPreviewTiming provides (BuildConfig.DEBUG && showTiming),
                     ) {
                         RawCullScreen(libraryViewModel = viewModel, shellViewModel = shellViewModel)

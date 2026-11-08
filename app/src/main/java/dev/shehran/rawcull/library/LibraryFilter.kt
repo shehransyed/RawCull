@@ -3,11 +3,13 @@ package dev.shehran.rawcull.library
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.FilterOptions
+import dev.shehran.rawcull.data.model.LocationFilter
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.RatingOperator
 import dev.shehran.rawcull.data.model.SortOrder
 import dev.shehran.rawcull.data.model.XmpSyncStatus
+import dev.shehran.rawcull.data.model.hasLocation
 
 /** A run of [count] visible photos from one folder, starting at [firstIndex]. */
 data class FolderSection(val folder: String, val firstIndex: Int, val count: Int)
@@ -22,6 +24,7 @@ data class FilterCounts(
     val paired: Int = 0,
     val saving: Int = 0,
     val syncErrors: Int = 0,
+    val withLocation: Int = 0,
     val formats: Set<PhotoFormat> = emptySet(),
     val companionFormats: Set<PhotoFormat> = emptySet(),
 )
@@ -69,6 +72,11 @@ object LibraryFilter {
         if (filter.formatFilter != null && photo.format != filter.formatFilter) return false
         if (filter.pairFilter != null && photo.pairMode != filter.pairFilter) return false
         if (filter.syncErrorsOnly && photo.xmpSyncStatus != XmpSyncStatus.ERROR) return false
+        when (filter.locationFilter) {
+            LocationFilter.ANY -> Unit
+            LocationFilter.HAS -> if (!photo.hasLocation) return false
+            LocationFilter.NONE -> if (photo.hasLocation) return false
+        }
         return query.isEmpty() || matchesSearch(photo, query)
     }
 
@@ -110,6 +118,7 @@ object LibraryFilter {
         var paired = 0
         var saving = 0
         var syncErrors = 0
+        var withLocation = 0
         val formats = HashSet<PhotoFormat>()
         val companionFormats = HashSet<PhotoFormat>()
         rows.forEach { photo ->
@@ -118,6 +127,7 @@ object LibraryFilter {
             colors.merge(photo.colorLabel, 1, Int::plus)
             photo.tags.forEach { tags.merge(it, 1, Int::plus) }
             if (photo.hasCompanion) paired++
+            if (photo.hasLocation) withLocation++
             formats += photo.format
             photo.companionFormat?.let { companionFormats += it }
             when (photo.xmpSyncStatus) {
@@ -126,7 +136,9 @@ object LibraryFilter {
                 else -> Unit
             }
         }
-        return FilterCounts(rows.size, flags, ratings, colors, tags, paired, saving, syncErrors, formats, companionFormats)
+        return FilterCounts(
+            rows.size, flags, ratings, colors, tags, paired, saving, syncErrors, withLocation, formats, companionFormats,
+        )
     }
 
     private val SortOrder.groupsByFolder: Boolean

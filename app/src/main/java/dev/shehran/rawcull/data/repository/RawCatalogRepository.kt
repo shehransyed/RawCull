@@ -8,7 +8,9 @@ import dev.shehran.rawcull.data.local.RawPhotoDao
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.DEMO_ROOT_URI
+import dev.shehran.rawcull.data.model.GeoPoint
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.scan.CameraLocations
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
 import dev.shehran.rawcull.library.CullChange
 import dev.shehran.rawcull.library.LibraryScope
@@ -44,6 +46,7 @@ class RawCatalogRepository(
     private val database: AppDatabase,
     private val dao: RawPhotoDao,
     private val writeQueue: XmpWriteQueue,
+    private val cameraLocations: CameraLocations = CameraLocations.None,
 ) : PhotoCatalog {
     private val converters = Converters()
 
@@ -80,6 +83,7 @@ class RawCatalogRepository(
      * what another app put in the sidecar.
      */
     override suspend fun applyChange(change: CullChange) = withContext(Dispatchers.IO) {
+        val restored = cameraLocationsFor(change)
         database.withTransaction {
             changedBy(change) { it.cullStatus }.forEach { (status: CullStatus, ids) ->
                 ids.chunked(MAX_IDS_PER_QUERY).forEach { dao.updateCullStatus(it, status) }
@@ -94,8 +98,30 @@ class RawCatalogRepository(
                 val json = converters.fromTagsList(tags)
                 ids.forEach { dao.updateTags(it, json) }
             }
+            changedBy(change) { it.location }.forEach { (location, ids) ->
+                if (location != null) {
+                    ids.chunked(MAX_IDS_PER_QUERY).forEach {
+                        dao.updateLocation(it, location.latitude, location.longitude, location.altitude)
+                    }
+                } else {
+                    // Clearing the sidecar's location shows the camera's again, if the file has one.
+                    ids.forEach { id ->
+                        val camera = restored[id]
+                        dao.updateLocation(listOf(id), camera?.latitude, camera?.longitude, camera?.altitude)
+                    }
+                }
+            }
         }
         writeQueue.enqueue(change.ids)
+    }
+
+    /** For photos whose location this change clears and whose file has one: the file's, read before the write. */
+    private suspend fun cameraLocationsFor(change: CullChange): Map<String, GeoPoint> {
+        val clearing = change.ids.filter { change.before.getValue(it).location != null && change.after.getValue(it).location == null }
+        if (clearing.isEmpty()) return emptyMap()
+        return photosById(clearing).filter { it.gpsInFile }
+            .mapNotNull { photo -> cameraLocations.of(photo)?.let { photo.id to it } }
+            .toMap()
     }
 
     override suspend fun photosById(ids: List<String>): List<PhotoAsset> = withContext(Dispatchers.IO) {

@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.FilterOptions
+import dev.shehran.rawcull.data.model.LocationFilter
 import dev.shehran.rawcull.data.model.PairMode
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.RatingOperator
@@ -123,6 +124,7 @@ fun FilterBar(
         ChipDivider()
         TagsMenu(uiState, actions)
         FormatChips(uiState, actions)
+        LocationChips(uiState, actions)
         ChipDivider()
         SearchField(uiState.filterOptions.searchQuery, actions, focusSearch, Modifier.width(SEARCH_WIDTH))
         SortMenu(uiState.sortOrder, uiState.activeCollection != null, actions)
@@ -177,6 +179,9 @@ fun ActiveFilterRow(
         if (filter.pairFilter != null) {
             DamFilterChip("Pairs", true, PairedMint) { actions.onUpdate { it.copy(pairFilter = null) } }
         }
+        if (filter.locationFilter != LocationFilter.ANY) {
+            DamFilterChip(filter.locationFilter.label, true) { actions.onUpdate { it.copy(locationFilter = LocationFilter.ANY) } }
+        }
         if (filter.searchQuery.isNotBlank()) {
             DamFilterChip("“${filter.searchQuery}”", true) { actions.onUpdate { it.copy(searchQuery = "") } }
         }
@@ -211,6 +216,9 @@ fun FilterSheetContent(
                 TagsMenu(uiState, actions)
                 FormatChips(uiState, actions)
             }
+        }
+        SheetSection("Location") {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { LocationChips(uiState, actions) }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             SortMenu(uiState.sortOrder, uiState.activeCollection != null, actions)
@@ -374,6 +382,18 @@ private fun FormatChips(uiState: LibraryUiState, actions: FilterActions) {
     uiState.counts.formats.sortedBy { it.ordinal }.forEach { format ->
         DamFilterChip(format.extension, filter.formatFilter == format, formatChipColor(format)) {
             actions.onUpdate { it.copy(formatFilter = if (it.formatFilter == format) null else format) }
+        }
+    }
+}
+
+/** R7 D15: Has location / No location, with counts that ignore the filters like the others. */
+@Composable
+private fun LocationChips(uiState: LibraryUiState, actions: FilterActions) {
+    val chosen = uiState.filterOptions.locationFilter
+    val with = uiState.counts.withLocation
+    listOf(LocationFilter.HAS to with, LocationFilter.NONE to uiState.counts.total - with).forEach { (option, count) ->
+        DamFilterChip("${option.label} ($count)", chosen == option, tag = "filter_location_${option.name.lowercase()}") {
+            actions.onUpdate { it.copy(locationFilter = if (it.locationFilter == option) LocationFilter.ANY else option) }
         }
     }
 }

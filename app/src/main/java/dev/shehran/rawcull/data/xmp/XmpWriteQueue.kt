@@ -1,6 +1,8 @@
 package dev.shehran.rawcull.data.xmp
 
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.scan.CameraLocations
+import dev.shehran.rawcull.data.scan.samePlaceAs
 import dev.shehran.rawcull.data.model.location
 import dev.shehran.rawcull.data.model.XmpSyncStatus
 import dev.shehran.rawcull.util.xmp.CullState
@@ -75,6 +77,7 @@ class XmpWriteQueue(
     private val clock: () -> Long = { System.nanoTime() / NANOS_PER_MILLI },
     private val now: () -> Date = { Date() },
     private val log: (String) -> Unit = {},
+    private val cameraLocations: CameraLocations = CameraLocations.None,
 ) {
     private val dueAt = LinkedHashMap<String, Long>()
     private val wake = Channel<Unit>(Channel.CONFLATED)
@@ -184,7 +187,7 @@ class XmpWriteQueue(
         val store = stores.forRoot(row.rootUri)
         val settings = prefs()
         val pending = XmpField.fromBits(row.xmpPendingFields)
-        val state = row.cullState()
+        val state = row.cullState().withoutCameraLocation(row, pending)
 
         // Parse every sidecar before writing any, so that a bad one can't leave them disagreeing.
         val main = row.xmpFileUri?.let { uri -> store.read(uri)?.let { Target(uri, it) } }
@@ -214,6 +217,17 @@ class XmpWriteQueue(
             store.write(extra.uri, merged.toBytes())
         }
         rows.finishSynced(row.id, uri, mtime, mainDoc?.let { XmpMapper.read(it).merge(state, pending) })
+    }
+
+    /**
+     * The camera's own location is never copied into a sidecar: a row that shows it, or a location
+     * edited back to it, is written as "no location", and the camera's shows again (R7 D13).
+     */
+    private suspend fun CullState.withoutCameraLocation(row: PhotoAsset, pending: Set<XmpField>): CullState {
+        val shown = location ?: return this
+        if (XmpField.GPS !in pending || !row.gpsInFile) return this
+        val camera = cameraLocations.of(row) ?: return this
+        return if (shown.samePlaceAs(camera)) copy(location = null) else this
     }
 
     private fun isExternallyChanged(row: PhotoAsset, content: SidecarContent): Boolean {

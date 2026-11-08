@@ -14,5 +14,8 @@ data class GeoPoint(
 }
 
 /** The row's location, if it has one. */
+val PhotoAsset.hasLocation: Boolean
+    get() = gpsLatitude != null && gpsLongitude != null
+
 val PhotoAsset.location: GeoPoint?
     get() = GeoPoint.ofOrNull(gpsLatitude, gpsLongitude, gpsAltitude)

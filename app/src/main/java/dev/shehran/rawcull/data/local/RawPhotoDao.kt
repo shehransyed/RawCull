@@ -250,6 +250,23 @@ interface RawPhotoDao : XmpRows {
         pendingBit: Int = XmpField.TAGS.bit,
     )
 
+    /** A location edit; null values clear it (or, for a camera location, restore it, by the caller's choice). */
+    @Query(
+        """
+        UPDATE photo_assets SET gpsLatitude = :latitude, gpsLongitude = :longitude, gpsAltitude = :altitude,
+            lastModified = :time, xmpSyncStatus = 'PENDING', xmpPendingFields = xmpPendingFields | :pendingBit
+        WHERE id IN (:ids)
+        """
+    )
+    suspend fun updateLocation(
+        ids: List<String>,
+        latitude: Double?,
+        longitude: Double?,
+        altitude: Double?,
+        time: Long = System.currentTimeMillis(),
+        pendingBit: Int = XmpField.GPS.bit,
+    )
+
     @Query("UPDATE photo_assets SET xmpSyncStatus = 'WRITING' WHERE id = :id")
     override suspend fun markWriting(id: String)
 

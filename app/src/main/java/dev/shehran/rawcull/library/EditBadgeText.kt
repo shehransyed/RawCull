@@ -3,6 +3,7 @@ package dev.shehran.rawcull.library
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.location
 
 /** What the full window's edit badge says after a photo changed (R6 D3). Pure, so it can be tested. */
 object EditBadgeText {
@@ -20,6 +21,7 @@ object EditBadgeText {
                 ColorLabel.NONE -> "No label"
                 else -> after.colorLabel.name.lowercase().replaceFirstChar { it.uppercase() } + " label"
             }
+            before.location != after.location -> if (after.location == null) "Location cleared" else "Location set"
             else -> null
         }
     }

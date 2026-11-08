@@ -54,7 +54,8 @@ internal class CullingController(
             write(change)
             if (isBatch) store.update { it.copy(snackbarMessage = change.summary, snackbarAction = SnackbarAction.UNDO) }
         }
-        val tagging = edit is CullEdit.AddTag || edit is CullEdit.RemoveTag
+        val tagging = edit is CullEdit.AddTag || edit is CullEdit.RemoveTag ||
+            edit is CullEdit.SetLocation || edit is CullEdit.ClearLocation
         // In a slideshow the clock moves on, not the edit.
         if (!isBatch && !tagging && state.slideshow == null && (advance || state.autoAdvance)) advanceFrom(targets.single(), change)
     }

@@ -28,6 +28,7 @@ import dev.shehran.rawcull.data.repository.RawCatalogRepository
 import dev.shehran.rawcull.data.repository.SafLocationAccess
 import dev.shehran.rawcull.data.repository.SettingsRepository
 import dev.shehran.rawcull.data.repository.StartupCleanup
+import dev.shehran.rawcull.data.scan.CameraLocations
 import dev.shehran.rawcull.data.scan.ScanCoordinator
 import dev.shehran.rawcull.data.xmp.LocalSidecarStore
 import dev.shehran.rawcull.data.xmp.SafSidecarStore
@@ -72,6 +73,7 @@ class AppContainer(context: Context) {
     val photoDao: RawPhotoDao = database.rawPhotoDao()
     val settingsRepository: SettingsRepository = SettingsRepository(appContext)
     val sidecarStores: SidecarStores = SidecarStores(SafSidecarStore(appContext.contentResolver), LocalSidecarStore())
+    val cameraLocations: CameraLocations = CameraLocations.from(appContext)
     val xmpWriteQueue: XmpWriteQueue = XmpWriteQueue(
         scope = applicationScope,
         rows = photoDao,
@@ -79,9 +81,10 @@ class AppContainer(context: Context) {
         prefs = { settingsRepository.xmpPrefs.first() },
         toolkit = XMP_TOOLKIT,
         log = { Log.i("RawCull.Xmp", it) },
+        cameraLocations = cameraLocations,
     )
     val catalogRepository: RawCatalogRepository =
-        RawCatalogRepository(appContext, database, photoDao, xmpWriteQueue)
+        RawCatalogRepository(appContext, database, photoDao, xmpWriteQueue, cameraLocations)
     val collectionRepository: CollectionRepository = CollectionRepository(database)
     val locationRepository: LocationRepository = LocationRepository(
         locations = database.locationDao(),

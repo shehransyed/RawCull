@@ -407,6 +407,7 @@ fun LibraryScreen(
                 culling = null,
                 onEditTags = viewModel::openTagDialog,
                 collectionActions = collectionInspector,
+                onLocationEdit = { viewModel.apply(it) },
                 onCycleHistogramMode = viewModel::cycleHistogramMode,
                 onToggleHistogramLog = viewModel::toggleHistogramLog,
                 modifier = Modifier.dismissOnEscape { showInspectorSheet = false },
@@ -579,6 +580,7 @@ private fun LibraryContent(
                         culling = culling.takeIf { !layout.cullingBarAtSide },
                         onEditTags = viewModel::openTagDialog,
                         collectionActions = collectionInspector,
+                        onLocationEdit = { viewModel.apply(it) },
                         onCycleHistogramMode = viewModel::cycleHistogramMode,
                         onToggleHistogramLog = viewModel::toggleHistogramLog,
                     )

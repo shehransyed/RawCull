@@ -2,6 +2,7 @@ package dev.shehran.rawcull.library
 
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
+import dev.shehran.rawcull.data.model.GeoPoint
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.location
 import dev.shehran.rawcull.util.xmp.CullState
@@ -22,6 +23,12 @@ sealed interface CullEdit {
     data class LabelToggle(val label: ColorLabel) : CullEdit
     data class AddTag(val tag: String) : CullEdit
     data class RemoveTag(val tag: String) : CullEdit
+
+    /** Puts [point] on every target. It is written to the sidecar, never to the photo file (R7 D12). */
+    data class SetLocation(val point: GeoPoint) : CullEdit
+
+    /** Takes the sidecar's location away. A location in the camera's own EXIF shows again. */
+    data object ClearLocation : CullEdit
 }
 
 /** What an edit did: each photo's exact state before and after, so undo restores mixed batches. */
@@ -90,6 +97,8 @@ object CullEdits {
             { state -> if (tag.isEmpty() || tag in state.tags) state else state.copy(tags = state.tags + tag) }
         }
         is CullEdit.RemoveTag -> { state -> state.copy(tags = state.tags - edit.tag) }
+        is CullEdit.SetLocation -> { state -> state.copy(location = edit.point) }
+        is CullEdit.ClearLocation -> { state -> state.copy(location = null) }
     }
 
     private fun summary(edit: CullEdit, results: Collection<CullState>, count: Int): String {
@@ -113,6 +122,8 @@ object CullEdits {
                 if (first.colorLabel == ColorLabel.NONE) "Cleared the label on $photos" else "Labelled $photos ${edit.label.shortName}"
             is CullEdit.AddTag -> "Tagged $photos ${edit.tag.trim()}"
             is CullEdit.RemoveTag -> "Removed ${edit.tag} from $photos"
+            is CullEdit.SetLocation -> "Set the location of $photos"
+            is CullEdit.ClearLocation -> "Cleared the location of $photos"
         }
     }
 
