@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Quiet build-and-test check.
 #   bash scripts/check.sh [extra gradle args]   e.g. --tests "*LibraryViewModelTest*"
-# Default tasks: testDebugUnitTest assembleDebug. Full output goes to build/check.log.
+# Default tasks: testDebugUnitTest assembleDebug compileQaAndroidTestKotlin (device tests compile, never run). Full output goes to build/check.log.
 # Passing: prints one summary line. Failing: prints failed tests (or compile errors),
 # at most 60 lines, then the log path. The Gradle exit code is passed through.
 set -u
@@ -25,7 +25,7 @@ case "$(uname -s)" in
 esac
 
 # Extra args go right after testDebugUnitTest so a task option like --tests binds to it.
-TASKS=(testDebugUnitTest "$@" assembleDebug)
+TASKS=(testDebugUnitTest "$@" assembleDebug compileQaAndroidTestKotlin)
 RESULTS=app/build/test-results
 MARKER=build/.check-start
 touch "$MARKER"

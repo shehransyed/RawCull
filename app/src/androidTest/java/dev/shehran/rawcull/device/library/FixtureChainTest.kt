@@ -5,7 +5,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.shehran.rawcull.MainActivity
-import dev.shehran.rawcull.device.QaResetRule
+import dev.shehran.rawcull.device.deviceRules
 import dev.shehran.rawcull.device.Samples
 import dev.shehran.rawcull.device.Smoke
 import dev.shehran.rawcull.device.robots.LibraryRobot
@@ -23,7 +23,7 @@ class FixtureChainTest {
     private val compose = createAndroidComposeRule<MainActivity>()
 
     @get:Rule
-    val rules: RuleChain = RuleChain.outerRule(QaResetRule()).around(compose)
+    val rules: RuleChain = deviceRules(compose)
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 

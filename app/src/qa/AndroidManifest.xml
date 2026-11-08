@@ -15,6 +15,12 @@
         </provider>
 
         <activity
+            android:name=".qa.QaStateActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay" />
+
+        <activity
             android:name=".qa.QaGrantActivity"
             android:exported="true"
             android:label="@string/qa_grant_label"
