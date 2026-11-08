@@ -11,3 +11,4 @@
 local.properties
 .env
 debug.keystore
+.claude/worktrees/

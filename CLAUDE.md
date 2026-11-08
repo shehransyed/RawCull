@@ -14,7 +14,7 @@ Usage limits matter on this project. These rules keep sessions small:
 - Read narrowly. For a file over ~300 lines, find the spot with Grep and read a line range. Use the architecture map below instead of exploring. Don't re-read a file after editing it.
 - Read only the current round's plan, and in it the header, *Decisions* and your session's tasks. Don't open other rounds' plans, `plans-backup/`, `.claude/worktrees/` or anything under `build/` other than `build/check.log`.
 - Search with Grep and Glob yourself; don't hand searches to subagents.
-- Work in this checkout on the round's branch, not in a new worktree.
+- Work on the round's branch. If the Claude Code app started this session in a worktree under `.claude/worktrees/`, `git switch` to the round branch there if no other checkout has it. Otherwise commit on the worktree's own branch and, as the last step, fast-forward the round branch in the main checkout (the folder that holds `.claude/`): `git -C <main checkout> merge --ff-only <your branch>`. If that refuses, say so in your final message. Never remove worktrees or branches; `scripts/tidy-git.sh` does that between rounds.
 - New UI goes in new files. `LibraryScreen.kt` and `LibraryViewModel.kt` grow only by wiring. Keep new files under ~400 lines.
 - Emulator runs and screenshots only in a round's final task, at the sizes and count its plan gives.
 - A session does the tasks its prompt names, then stops.
