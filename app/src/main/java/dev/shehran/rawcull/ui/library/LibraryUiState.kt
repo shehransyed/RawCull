@@ -1,0 +1,116 @@
+package dev.shehran.rawcull.ui.library
+
+import android.content.IntentSender
+import dev.shehran.rawcull.data.model.CullStatus
+import dev.shehran.rawcull.data.model.FilterOptions
+import dev.shehran.rawcull.data.model.ImportJob
+import dev.shehran.rawcull.data.model.LibraryLocation
+import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.library.DeletionPlan
+import dev.shehran.rawcull.library.FilterCounts
+import dev.shehran.rawcull.library.FolderNode
+import dev.shehran.rawcull.library.FolderSection
+import dev.shehran.rawcull.library.LibraryScope
+import dev.shehran.rawcull.util.HistogramData
+
+enum class DamViewMode {
+    LOUPE,
+    GRID,
+    COMPARE
+}
+
+enum class SnackbarAction(val label: String) {
+    UNDO("Undo"),
+    RESTORE("Restore"),
+}
+
+/** The system's trash dialog, and whether it's bringing files back. */
+class TrashRequest(val sender: IntentSender, val restoring: Boolean)
+
+/** A Location plus whether its volume is connected right now. */
+data class LocationUi(val location: LibraryLocation, val isAvailable: Boolean)
+
+data class LibraryUiState(
+    val photos: List<PhotoAsset> = emptyList(),
+    val filteredPhotos: List<PhotoAsset> = emptyList(),
+    val selectedPhotoId: String? = null,
+    val comparePhotoId: String? = null,
+    val isCompareMode: Boolean = false,
+    val viewMode: DamViewMode = DamViewMode.GRID,
+    val filterOptions: FilterOptions = FilterOptions(),
+    val locations: List<LocationUi> = emptyList(),
+    val activeLocation: LibraryLocation? = null,
+    val isLocationAvailable: Boolean = true,
+    val isRestoring: Boolean = true, // True until the launch-time check has finished
+    val scope: LibraryScope = LibraryScope.All,
+    val folderTree: List<FolderNode> = emptyList(),
+    val locationPhotoCount: Int = 0,
+    val expandedFolders: Set<String> = emptySet(),
+    val latestImport: ImportJob? = null,
+    val latestImportPhotoCount: Int = 0,
+    val snackbarMessage: String? = null,
+    val snackbarAction: SnackbarAction? = null,
+    val deletionPrompt: DeletionPlan? = null,
+    val trashRequest: TrashRequest? = null, // A system dialog waiting to be shown
+    val isScanning: Boolean = false,
+    val isRefreshing: Boolean = false,
+    val scanProgress: Float? = null, // Null while the total isn't known yet
+    val scanStatusText: String = "",
+    val selectedPhotoIds: Set<String> = emptySet(),
+    val showTagDialog: Boolean = false,
+    val syncDetailsPhotoId: String? = null,
+    val currentHistogram: HistogramData? = null,
+    val sections: List<FolderSection> = emptyList(),
+    val counts: FilterCounts = FilterCounts(),
+    val filtersEnabled: Boolean = true,
+    val canUndo: Boolean = false,
+    val canRedo: Boolean = false,
+    val autoAdvance: Boolean = false,
+    val swipeToFlag: Boolean = true,
+    val capsLock: Boolean = false,
+    val zoomRequest: Int = 0, // Bumped by Z and Space; the loupe on screen toggles its zoom
+) {
+    /** Derived, not stored: enrichment re-sorts the list, and the selection must follow the photo. */
+    val selectedIndex: Int by lazy(LazyThreadSafetyMode.NONE) {
+        filteredPhotos.indexOfFirst { it.id == selectedPhotoId }
+    }
+
+    val compareIndex: Int by lazy(LazyThreadSafetyMode.NONE) {
+        filteredPhotos.indexOfFirst { it.id == comparePhotoId }
+    }
+
+    val currentPhoto: PhotoAsset?
+        get() = filteredPhotos.getOrNull(selectedIndex)
+
+    val comparePhoto: PhotoAsset?
+        get() = filteredPhotos.getOrNull(compareIndex)
+
+    val totalCount: Int get() = photos.size
+    val picksCount: Int get() = counts.flags[CullStatus.PICK] ?: 0
+    val rejectsCount: Int get() = counts.flags[CullStatus.REJECT] ?: 0
+    val unflaggedCount: Int get() = counts.flags[CullStatus.UNFLAGGED] ?: 0
+    val pairedCount: Int get() = counts.paired
+    val savingCount: Int get() = counts.saving
+    val syncErrorCount: Int get() = counts.syncErrors
+    /** What the tag dialog lists: the current photo's tags, or every tag across the selection. */
+    val tagDialogTags: List<String>
+        get() = if (isSelecting) {
+            photos.filter { it.id in selectedPhotoIds }.flatMap { it.tags }.distinct()
+        } else {
+            currentPhoto?.tags.orEmpty()
+        }
+    val syncDetailsPhoto: PhotoAsset? get() = photos.firstOrNull { it.id == syncDetailsPhotoId }
+    val isDemo: Boolean get() = activeLocation?.isDemo == true
+    val isSelecting: Boolean get() = selectedPhotoIds.isNotEmpty()
+
+    /** Caps Lock counts as well as the toggle, as in Lightroom. */
+    val advancesAfterEdits: Boolean get() = autoAdvance || capsLock
+    val rootUri: String? get() = activeLocation?.treeUri
+
+    val scopeTitle: String
+        get() = when (val active = scope) {
+            LibraryScope.All -> "All photos"
+            is LibraryScope.Folder -> active.relativeDir.substringAfterLast('/')
+            is LibraryScope.LatestImport -> "Latest Import"
+        }
+}

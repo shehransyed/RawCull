@@ -1,7 +1,6 @@
 package dev.shehran.rawcull.ui.library
 
 import android.content.Context
-import android.content.IntentSender
 import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -17,345 +16,82 @@ import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.ImportJob
-import dev.shehran.rawcull.data.model.LibraryLocation
-import dev.shehran.rawcull.data.model.PhotoAsset
-import dev.shehran.rawcull.data.model.SortOrder
-import dev.shehran.rawcull.data.model.XmpSyncStatus
-import dev.shehran.rawcull.data.repository.LocationChange
+import dev.shehran.rawcull.data.preview.PreviewRepository
 import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.PhotoCatalog
 import dev.shehran.rawcull.data.repository.SettingsRepository
 import dev.shehran.rawcull.data.scan.ScanCoordinator
-import dev.shehran.rawcull.data.scan.ScanState
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
-import dev.shehran.rawcull.library.AutoAdvance
-import dev.shehran.rawcull.library.CullChange
 import dev.shehran.rawcull.library.CullEdit
-import dev.shehran.rawcull.library.CullEdits
-import dev.shehran.rawcull.library.DeletionPlan
-import dev.shehran.rawcull.library.FilterCounts
-import dev.shehran.rawcull.library.FolderNode
-import dev.shehran.rawcull.library.FolderSection
-import dev.shehran.rawcull.library.FolderTree
 import dev.shehran.rawcull.library.GridNavigation
-import dev.shehran.rawcull.library.LibraryFilter
-import dev.shehran.rawcull.library.LibraryRestore
 import dev.shehran.rawcull.library.LibraryScope
-import dev.shehran.rawcull.library.LibraryView
 import dev.shehran.rawcull.library.LoupeSwipe
-import dev.shehran.rawcull.library.RejectDeletion
-import dev.shehran.rawcull.library.UndoStack
-import dev.shehran.rawcull.ui.SelectionLogic
-import dev.shehran.rawcull.util.HistogramCalculator
-import dev.shehran.rawcull.util.HistogramData
-import dev.shehran.rawcull.data.preview.PreviewKeys
-import dev.shehran.rawcull.data.preview.PreviewLane
-import dev.shehran.rawcull.data.preview.PreviewRepository
-import dev.shehran.rawcull.data.preview.PreviewResult
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapLatest
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import java.io.IOException
 
-enum class DamViewMode {
-    LOUPE,
-    GRID,
-    COMPARE
-}
-
-enum class SnackbarAction(val label: String) {
-    UNDO("Undo"),
-    RESTORE("Restore"),
-}
-
-/** The system's trash dialog, and whether it's bringing files back. */
-class TrashRequest(val sender: IntentSender, val restoring: Boolean)
-
-/** A Location plus whether its volume is connected right now. */
-data class LocationUi(val location: LibraryLocation, val isAvailable: Boolean)
-
-data class LibraryUiState(
-    val photos: List<PhotoAsset> = emptyList(),
-    val filteredPhotos: List<PhotoAsset> = emptyList(),
-    val selectedPhotoId: String? = null,
-    val comparePhotoId: String? = null,
-    val isCompareMode: Boolean = false,
-    val viewMode: DamViewMode = DamViewMode.GRID,
-    val filterOptions: FilterOptions = FilterOptions(),
-    val locations: List<LocationUi> = emptyList(),
-    val activeLocation: LibraryLocation? = null,
-    val isLocationAvailable: Boolean = true,
-    val isRestoring: Boolean = true, // True until the launch-time check has finished
-    val scope: LibraryScope = LibraryScope.All,
-    val folderTree: List<FolderNode> = emptyList(),
-    val locationPhotoCount: Int = 0,
-    val expandedFolders: Set<String> = emptySet(),
-    val latestImport: ImportJob? = null,
-    val latestImportPhotoCount: Int = 0,
-    val snackbarMessage: String? = null,
-    val snackbarAction: SnackbarAction? = null,
-    val deletionPrompt: DeletionPlan? = null,
-    val trashRequest: TrashRequest? = null, // A system dialog waiting to be shown
-    val isScanning: Boolean = false,
-    val isRefreshing: Boolean = false,
-    val scanProgress: Float? = null, // Null while the total isn't known yet
-    val scanStatusText: String = "",
-    val selectedPhotoIds: Set<String> = emptySet(),
-    val showTagDialog: Boolean = false,
-    val syncDetailsPhotoId: String? = null,
-    val currentHistogram: HistogramData? = null,
-    val sections: List<FolderSection> = emptyList(),
-    val counts: FilterCounts = FilterCounts(),
-    val filtersEnabled: Boolean = true,
-    val canUndo: Boolean = false,
-    val canRedo: Boolean = false,
-    val autoAdvance: Boolean = false,
-    val swipeToFlag: Boolean = true,
-    val capsLock: Boolean = false,
-    val zoomRequest: Int = 0, // Bumped by Z and Space; the loupe on screen toggles its zoom
-) {
-    /** Derived, not stored: enrichment re-sorts the list, and the selection must follow the photo. */
-    val selectedIndex: Int by lazy(LazyThreadSafetyMode.NONE) {
-        filteredPhotos.indexOfFirst { it.id == selectedPhotoId }
-    }
-
-    val compareIndex: Int by lazy(LazyThreadSafetyMode.NONE) {
-        filteredPhotos.indexOfFirst { it.id == comparePhotoId }
-    }
-
-    val currentPhoto: PhotoAsset?
-        get() = filteredPhotos.getOrNull(selectedIndex)
-
-    val comparePhoto: PhotoAsset?
-        get() = filteredPhotos.getOrNull(compareIndex)
-
-    val totalCount: Int get() = photos.size
-    val picksCount: Int get() = counts.flags[CullStatus.PICK] ?: 0
-    val rejectsCount: Int get() = counts.flags[CullStatus.REJECT] ?: 0
-    val unflaggedCount: Int get() = counts.flags[CullStatus.UNFLAGGED] ?: 0
-    val pairedCount: Int get() = counts.paired
-    val savingCount: Int get() = counts.saving
-    val syncErrorCount: Int get() = counts.syncErrors
-    /** What the tag dialog lists: the current photo's tags, or every tag across the selection. */
-    val tagDialogTags: List<String>
-        get() = if (isSelecting) {
-            photos.filter { it.id in selectedPhotoIds }.flatMap { it.tags }.distinct()
-        } else {
-            currentPhoto?.tags.orEmpty()
-        }
-    val syncDetailsPhoto: PhotoAsset? get() = photos.firstOrNull { it.id == syncDetailsPhotoId }
-    val isDemo: Boolean get() = activeLocation?.isDemo == true
-    val isSelecting: Boolean get() = selectedPhotoIds.isNotEmpty()
-
-    /** Caps Lock counts as well as the toggle, as in Lightroom. */
-    val advancesAfterEdits: Boolean get() = autoAdvance || capsLock
-    val rootUri: String? get() = activeLocation?.treeUri
-
-    val scopeTitle: String
-        get() = when (val active = scope) {
-            LibraryScope.All -> "All photos"
-            is LibraryScope.Folder -> active.relativeDir.substringAfterLast('/')
-            is LibraryScope.LatestImport -> "Latest Import"
-        }
-}
-
-/** Owns what the Library shows: the active Location and scope, filters, selection and culling. */
-@OptIn(ExperimentalCoroutinesApi::class)
+/**
+ * Owns what the Library shows: the active Location and scope, filters, selection and culling.
+ * A façade: the work happens in the controllers next to it, which share one [LibraryStore].
+ */
 class LibraryViewModel(
-    private val appContext: Context,
-    private val repository: PhotoCatalog,
+    @Suppress("unused") private val appContext: Context,
+    repository: PhotoCatalog,
     private val settings: SettingsRepository,
-    private val locations: LocationRepository,
-    private val jobs: ImportJobDao,
-    private val scanCoordinator: ScanCoordinator,
+    locations: LocationRepository,
+    jobs: ImportJobDao,
+    scanCoordinator: ScanCoordinator,
     private val writeQueue: XmpWriteQueue,
-    private val deletions: DeletionGateway,
-    private val previews: PreviewRepository,
-    private val startupFinished: suspend () -> Unit,
-    private val log: (String) -> Unit = { Log.i("RawCull.Library", it) },
+    deletions: DeletionGateway,
+    previews: PreviewRepository,
+    startupFinished: suspend () -> Unit,
+    log: (String) -> Unit = { Log.i("RawCull.Library", it) },
 ) : ViewModel() {
-    private val currentLocation = MutableStateFlow<LibraryLocation?>(null)
-    private val scope = MutableStateFlow<LibraryScope>(LibraryScope.All)
-
-    private val _uiState = MutableStateFlow(LibraryUiState())
-    val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
-
-    private var histogramJob: Job? = null
-    private var histogramKey: String? = null
-    private var saveSelectionJob: Job? = null
-    private var pendingSelectionId: String? = null
-    private var knownLocations: List<LibraryLocation> = emptyList()
-
-    private val rows = MutableStateFlow<List<PhotoAsset>>(emptyList())
-    private val filter = MutableStateFlow(FilterOptions())
-    private val filtersEnabled = MutableStateFlow(true)
-    @Volatile
-    private var visibleIds: List<String> = emptyList()
-    private var visibleIdSet: Set<String> = emptySet()
-    private var saveFilterJob: Job? = null
-
-    private val undoStack = UndoStack()
-    private var gridColumns = 1
-    private var ctrlHeld = false
-    private var shiftHeld = false
-    private var selectionAnchor: String? = null
-    private var dragBaseline: Set<String> = emptySet()
-    private var pendingDeletion: DeletionPlan? = null
-    private var trashedFiles: List<String> = emptyList()
-    private var trashedFolders: Set<String> = emptySet()
-
-    /** Fair, so edits reach Room in the order they were made and an undo can't overtake its edit. */
-    private val writeOrder = Mutex()
-
-    init {
-        viewModelScope.launch { restoreSession() }
-        viewModelScope.launch { scanCoordinator.state.collect(::onScanState) }
-        viewModelScope.launch {
-            locations.observeAll().collect {
-                knownLocations = it
-                refreshAvailability()
-                onLocationsChanged(it)
-            }
-        }
-
-        viewModelScope.launch {
-            combine(currentLocation, scope) { location, activeScope -> location?.treeUri to activeScope }
-                .flatMapLatest { (root, activeScope) ->
-                    root?.let { repository.observeScope(it, activeScope) } ?: flowOf(emptyList())
-                }
-                .collect { rows.value = it }
-        }
-        viewModelScope.launch {
-            // mapLatest drops a run the next change has made pointless.
-            combine(rows, filter, filtersEnabled, ::FilterRun)
-                .mapLatest { run -> withContext(Dispatchers.Default) { computeView(run) } }
-                .collect(::publish)
-        }
-        viewModelScope.launch {
-            settings.cullingPrefs.collect { prefs ->
-                _uiState.update { it.copy(autoAdvance = prefs.autoAdvance, swipeToFlag = prefs.swipeToFlag) }
-            }
-        }
-        viewModelScope.launch {
-            currentLocation
-                .flatMapLatest { location ->
-                    location?.let { repository.observeFolderCounts(it.treeUri) } ?: flowOf(emptyMap())
-                }
-                .map { counts -> FolderTree.build(counts) to counts.values.sum() }
-                .flowOn(Dispatchers.Default)
-                .collect { (tree, total) ->
-                    _uiState.update { it.copy(folderTree = tree, locationPhotoCount = total) }
-                }
-        }
-        viewModelScope.launch {
-            currentLocation
-                .flatMapLatest { location -> location?.let { jobs.observeLatestJob(it.id) } ?: flowOf(null) }
-                .collect { job -> _uiState.update { it.copy(latestImport = job) } }
-        }
-        viewModelScope.launch {
-            currentLocation
-                .flatMapLatest { location -> location?.let { jobs.observeLatestJob(it.id) } ?: flowOf(null) }
-                .flatMapLatest { job -> job?.let { repository.observeImportPhotoCount(it.id) } ?: flowOf(0) }
-                .collect { count -> _uiState.update { it.copy(latestImportPhotoCount = count) } }
-        }
-    }
-
-    private class FilterRun(val rows: List<PhotoAsset>, val filter: FilterOptions, val enabled: Boolean)
-
-    private class ComputedView(
-        val source: List<PhotoAsset>,
-        val view: LibraryView,
-        val ids: List<String>,
-        val idSet: Set<String>,
+    private val store = LibraryStore(viewModelScope, log)
+    private val histogram = HistogramLoader(store, previews)
+    private val view = ViewController(store, settings, scanCoordinator, histogram)
+    private val culling = CullingController(store, repository, view)
+    private val selection = SelectionController(store, view)
+    private val deletion = DeletionController(store, repository, writeQueue, deletions, scanCoordinator, culling, selection)
+    private val location = LocationController(
+        store, repository, settings, locations, jobs, scanCoordinator, startupFinished, view, culling, deletion, histogram,
     )
 
-    private fun computeView(run: FilterRun): ComputedView {
-        val started = System.nanoTime()
-        val active = if (run.enabled) run.filter else run.filter.cleared()
-        val spansFolders = run.rows.asSequence().map { it.relativeDir }.distinct().take(2).count() > 1
-        val view = LibraryFilter.apply(run.rows, active, run.filter.sortOrder, spansFolders)
-        val ids = view.rows.map { it.id }
-        val idSet = ids.toHashSet()
-        if (ids != visibleIds) scanCoordinator.setVisibleOrder(ids) // O9
-        log("filter rows=${run.rows.size} visible=${ids.size} ms=${(System.nanoTime() - started) / NANOS_PER_MILLI}")
-        return ComputedView(run.rows, view, ids, idSet)
-    }
+    val uiState: StateFlow<LibraryUiState> = store.state.asStateFlow()
 
-    /** Publishes a new visible list, carrying the selection over by id. */
-    private fun publish(computed: ComputedView) {
-        val current = _uiState.value
-        val nextIds = computed.ids
-        val restored = pendingSelectionId?.takeIf { it in computed.idSet }
-        if (nextIds.isNotEmpty()) pendingSelectionId = null
-        val selectedId = restored ?: current.selectedPhotoId?.takeIf { it in computed.idSet }
-            ?: SelectionLogic.reconcile(visibleIds, nextIds, current.selectedPhotoId)
-        visibleIds = nextIds
-        visibleIdSet = computed.idSet
+    private var gridColumns = 1
 
-        _uiState.value = current.copy(
-            photos = computed.source,
-            filteredPhotos = computed.view.rows,
-            sections = computed.view.sections,
-            counts = computed.view.counts,
-            selectedPhotoId = selectedId,
-            comparePhotoId = SelectionLogic.reconcileCompare(nextIds, current.comparePhotoId, selectedId),
-            // What the filter hides can't stay selected: an edit shouldn't land on photos out of sight.
-            selectedPhotoIds = current.selectedPhotoIds.takeIf { computed.idSet.containsAll(it) }
-                ?: current.selectedPhotoIds.filterTo(HashSet()) { it in computed.idSet },
-        )
-        if (selectedId != current.selectedPhotoId) onSelectionChanged()
-        refreshHistogram()
-    }
-
-    private fun onSelectionChanged() {
-        val id = _uiState.value.selectedPhotoId
-        id?.let(scanCoordinator::prioritize)
-        // Culling moves through photos quickly, and only where it stops matters on the next launch.
-        saveSelectionJob?.cancel()
-        saveSelectionJob = viewModelScope.launch {
-            delay(SAVE_SELECTION_DELAY_MS)
-            settings.setSelectedAsset(id)
+    init {
+        location.startSession()
+        location.observeRows()
+        view.start()
+        viewModelScope.launch {
+            settings.cullingPrefs.collect { prefs ->
+                store.update { it.copy(autoAdvance = prefs.autoAdvance, swipeToFlag = prefs.swipeToFlag) }
+            }
         }
+        location.observeFolders()
     }
 
+    // --- NAVIGATION ---
     fun selectPhotoIndex(index: Int) {
-        _uiState.value.filteredPhotos.getOrNull(index)?.let { selectPhoto(it.id) }
-    }
-
-    private fun selectPhoto(id: String) {
-        _uiState.update { it.copy(selectedPhotoId = id) }
-        onSelectionChanged()
-        refreshHistogram()
+        store.value.filteredPhotos.getOrNull(index)?.let { view.selectPhoto(it.id) }
     }
 
     fun nextPhoto() {
-        val current = _uiState.value
+        val current = store.value
         if (current.selectedIndex < current.filteredPhotos.size - 1) selectPhotoIndex(current.selectedIndex + 1)
     }
 
     fun previousPhoto() {
-        val current = _uiState.value
+        val current = store.value
         if (current.selectedIndex > 0) selectPhotoIndex(current.selectedIndex - 1)
     }
 
     fun firstPhoto() = selectPhotoIndex(0)
 
-    fun lastPhoto() = selectPhotoIndex(_uiState.value.filteredPhotos.lastIndex)
+    fun lastPhoto() = selectPhotoIndex(store.value.filteredPhotos.lastIndex)
 
     fun setGridColumns(columns: Int) {
         gridColumns = columns
@@ -363,7 +99,7 @@ class LibraryViewModel(
 
     /** Up and down mean a row in the grid and a photo everywhere else. */
     fun moveRow(delta: Int) {
-        val state = _uiState.value
+        val state = store.value
         if (state.viewMode == DamViewMode.GRID) {
             selectPhotoIndex(
                 GridNavigation.rowStep(state.selectedIndex, delta, gridColumns, state.sections, state.filteredPhotos.size),
@@ -376,16 +112,16 @@ class LibraryViewModel(
     }
 
     fun onCapsLock(on: Boolean) {
-        if (on != _uiState.value.capsLock) _uiState.update { it.copy(capsLock = on) }
+        if (on != store.value.capsLock) store.update { it.copy(capsLock = on) }
     }
 
     fun toggleZoom() {
-        _uiState.update { it.copy(zoomRequest = it.zoomRequest + 1) }
+        store.update { it.copy(zoomRequest = it.zoomRequest + 1) }
     }
 
     /** Esc: one step back per press, innermost first. */
     fun stepBack() {
-        val state = _uiState.value
+        val state = store.value
         when {
             state.showTagDialog -> dismissTagDialog()
             state.syncDetailsPhotoId != null -> dismissSyncDetails()
@@ -396,80 +132,26 @@ class LibraryViewModel(
     }
 
     fun setCompareIndex(index: Int) {
-        val filtered = _uiState.value.filteredPhotos
-        if (index in filtered.indices) _uiState.update { it.copy(comparePhotoId = filtered[index].id) }
+        val filtered = store.value.filteredPhotos
+        if (index in filtered.indices) store.update { it.copy(comparePhotoId = filtered[index].id) }
     }
 
     fun toggleCompareMode() {
-        _uiState.update {
+        store.update {
             val compare = !it.isCompareMode
             it.copy(isCompareMode = compare, viewMode = if (compare) DamViewMode.COMPARE else DamViewMode.LOUPE)
         }
     }
 
-    fun setViewMode(mode: DamViewMode) {
-        _uiState.update { it.copy(viewMode = mode, isCompareMode = mode == DamViewMode.COMPARE) }
-    }
+    fun setViewMode(mode: DamViewMode) = store.setViewMode(mode)
 
     // --- CULLING ---
     /** The one way culling edits happen: on the selection if there is one, else on the current photo. */
-    fun apply(edit: CullEdit, advance: Boolean = false) {
-        if (!canEdit()) return
-        val state = _uiState.value
-        val isBatch = state.selectedPhotoIds.isNotEmpty()
-        val targets = if (isBatch) {
-            state.photos.filter { it.id in state.selectedPhotoIds }
-        } else {
-            listOfNotNull(state.currentPhoto)
-        }
-        if (targets.isEmpty()) return
+    fun apply(edit: CullEdit, advance: Boolean = false) = culling.apply(edit, advance)
 
-        val change = CullEdits.resolve(edit, targets)
-        if (change != null) {
-            undoStack.push(change)
-            publishUndoState()
-            write(change)
-            if (isBatch) _uiState.update { it.copy(snackbarMessage = change.summary, snackbarAction = SnackbarAction.UNDO) }
-        }
-        val tagging = edit is CullEdit.AddTag || edit is CullEdit.RemoveTag
-        if (!isBatch && !tagging && (advance || state.autoAdvance)) advanceFrom(targets.single(), change)
-    }
+    fun undo() = culling.undo()
 
-    private fun advanceFrom(photo: PhotoAsset, change: CullChange?) {
-        val edited = change?.after?.get(photo.id)?.let {
-            photo.copy(rating = it.rating, cullStatus = it.cullStatus, colorLabel = it.colorLabel, tags = it.tags)
-        } ?: photo
-        val active = if (filtersEnabled.value) filter.value else filter.value.cleared()
-        val visibleAfter = if (LibraryFilter.matches(edited, active)) visibleIds else visibleIds - photo.id
-        AutoAdvance.next(visibleIds, visibleAfter, photo.id)?.let(::selectPhoto)
-    }
-
-    private fun write(change: CullChange) {
-        viewModelScope.launch { writeOrder.withLock { repository.applyChange(change) } }
-    }
-
-    private fun publishUndoState() {
-        _uiState.update { it.copy(canUndo = undoStack.canUndo, canRedo = undoStack.canRedo) }
-    }
-
-    fun undo() {
-        if (!canEdit()) return
-        val change = undoStack.undo() ?: return
-        replay(change, "Undid")
-    }
-
-    fun redo() {
-        if (!canEdit()) return
-        val change = undoStack.redo() ?: return
-        replay(change, "Redid")
-    }
-
-    private fun replay(change: CullChange, verb: String) {
-        publishUndoState()
-        write(change)
-        change.ids.firstOrNull { it in visibleIdSet }?.let(::selectPhoto)
-        showMessage("$verb: ${change.summary}")
-    }
+    fun redo() = culling.redo()
 
     fun onSwipe(swipe: LoupeSwipe) {
         when (swipe) {
@@ -489,7 +171,7 @@ class LibraryViewModel(
     fun setRating(rating: Int) = apply(CullEdit.Rating(rating))
 
     fun setColorLabel(label: ColorLabel) {
-        val current = _uiState.value.currentPhoto?.colorLabel
+        val current = store.value.currentPhoto?.colorLabel
         // The clear button sends NONE, which means "take the label off", not a label of its own.
         apply(CullEdit.LabelToggle(if (label == ColorLabel.NONE) current ?: label else label))
     }
@@ -498,35 +180,11 @@ class LibraryViewModel(
 
     fun removeTagFromCurrent(tag: String) = apply(CullEdit.RemoveTag(tag))
 
-    /** With the volume gone there's nowhere to write sidecars, so the catalog is read-only. */
-    private fun canEdit(): Boolean {
-        val available = _uiState.value.isLocationAvailable
-        if (!available) showMessage("Location disconnected. Reconnect it to flag or rate photos.")
-        return available
-    }
-
     // --- FILTERS ---
-    fun updateFilter(filterModifier: (FilterOptions) -> FilterOptions) {
-        val next = filterModifier(filter.value)
-        filter.value = next
-        _uiState.update { it.copy(filterOptions = next) }
-        val location = _uiState.value.activeLocation ?: return
-        // Typing in the search field shouldn't mean a disk write per letter.
-        saveFilterJob?.cancel()
-        saveFilterJob = viewModelScope.launch {
-            delay(SAVE_FILTER_DELAY_MS)
-            settings.setFilters(location.id, next)
-        }
-    }
+    fun updateFilter(filterModifier: (FilterOptions) -> FilterOptions) = view.updateFilter(filterModifier)
 
     /** Ctrl+L: everything off and back on, without forgetting what was set. */
-    fun toggleFilters() {
-        val enabled = !filtersEnabled.value
-        filtersEnabled.value = enabled
-        _uiState.update { it.copy(filtersEnabled = enabled) }
-        val location = _uiState.value.activeLocation ?: return
-        viewModelScope.launch { settings.setFiltersEnabled(location.id, enabled) }
-    }
+    fun toggleFilters() = view.toggleFilters()
 
     fun clearFilters() = updateFilter { it.cleared() }
 
@@ -539,283 +197,58 @@ class LibraryViewModel(
     }
 
     // --- LOCATIONS AND SCOPE ---
-    private suspend fun restoreSession() {
-        try {
-            startupFinished()
-            val session = settings.librarySession()
-            val restored = LibraryRestore.resolve(
-                locations.getAll(),
-                session.activeLocationId,
-                session.activeFolder,
-                session.selectedAssetId,
-            )
-            restored.location?.let { location ->
-                pendingSelectionId = restored.selectedAssetId
-                activate(location, restored.scope)
-            }
-        } finally {
-            _uiState.update { it.copy(isRestoring = false) }
-        }
-    }
+    fun selectLocation(id: Long) = location.selectLocation(id)
 
-    /** Shows the cached rows at once and starts the background scan (D12). */
-    private suspend fun activate(location: LibraryLocation, activeScope: LibraryScope = LibraryScope.All) {
-        val available = locations.isAvailable(location)
-        val switching = _uiState.value.activeLocation?.id != location.id
-        histogramKey = null
-        if (switching) {
-            undoStack.clear()
-            trashedFiles = emptyList()
-            trashedFolders = emptySet()
-            saveFilterJob?.cancel()
-            filter.value = settings.filters(location.id)
-            filtersEnabled.value = settings.filtersEnabled(location.id)
-            rows.value = emptyList()
-            visibleIds = emptyList()
-            visibleIdSet = emptySet()
-        }
-        _uiState.update {
-            it.copy(
-                activeLocation = location,
-                isLocationAvailable = available,
-                scope = activeScope,
-                expandedFolders = emptySet(),
-                photos = if (switching) emptyList() else it.photos,
-                filteredPhotos = if (switching) emptyList() else it.filteredPhotos,
-                currentHistogram = null,
-                selectedPhotoId = if (switching) null else it.selectedPhotoId,
-                comparePhotoId = if (switching) null else it.comparePhotoId,
-                filterOptions = filter.value,
-                filtersEnabled = filtersEnabled.value,
-                canUndo = undoStack.canUndo,
-                canRedo = undoStack.canRedo,
-                selectedPhotoIds = emptySet(),
-            )
-        }
-        currentLocation.value = location
-        scope.value = activeScope
-        locations.touch(location.id)
-        if (settings.librarySession().activeLocationId != location.id) settings.setActiveLocation(location.id)
-        settings.setActiveFolder(activeScope.savedFolder)
-        val expanded = settings.expandedFolders(location.id)
-        _uiState.update { it.copy(expandedFolders = expanded) }
+    fun addLocation(uri: Uri) = location.addLocation(uri.toString())
 
-        if (location.isDemo) {
-            scanCoordinator.cancel()
-            repository.loadSampleShoot()
-        } else if (available) {
-            scanCoordinator.start(location.treeUri)
-        }
-    }
+    fun relinkLocation(id: Long, uri: Uri) = location.relinkLocation(id, uri.toString())
 
-    /** Settings can remove or relink what's on screen; the Library has to follow. */
-    private suspend fun onLocationsChanged(all: List<LibraryLocation>) {
-        val active = _uiState.value.activeLocation ?: return
-        val current = all.firstOrNull { it.id == active.id }
-        when {
-            current == null -> leaveRemovedLocation(all)
-            current.treeUri != active.treeUri -> activate(current)
-            current.displayName != active.displayName ->
-                _uiState.update { it.copy(activeLocation = current) }.also { currentLocation.value = current }
-        }
-    }
+    fun openDemoLibrary() = location.openDemoLibrary()
 
-    private suspend fun leaveRemovedLocation(remaining: List<LibraryLocation>) {
-        val next = remaining.maxByOrNull { it.lastOpenedAt }
-        if (next != null) {
-            activate(next)
-            return
-        }
-        scanCoordinator.cancel()
-        currentLocation.value = null
-        scope.value = LibraryScope.All
-        settings.setActiveLocation(null)
-        _uiState.update {
-            it.copy(
-                activeLocation = null,
-                scope = LibraryScope.All,
-                photos = emptyList(),
-                filteredPhotos = emptyList(),
-                selectedPhotoId = null,
-                comparePhotoId = null,
-                currentHistogram = null,
-                viewMode = DamViewMode.GRID,
-            )
-        }
-    }
-
-    fun selectLocation(id: Long) {
-        viewModelScope.launch {
-            val location = locations.get(id) ?: return@launch
-            if (location.id == _uiState.value.activeLocation?.id) return@launch
-            activate(location)
-        }
-    }
-
-    fun addLocation(uri: Uri) {
-        viewModelScope.launch {
-            val location = locations.add(uri.toString())
-            if (location == null) showMessage("Android didn't grant access to that folder.") else activate(location)
-        }
-    }
-
-    fun relinkLocation(id: Long, uri: Uri) {
-        viewModelScope.launch {
-            when (val result = locations.relink(id, uri.toString())) {
-                is LocationChange.Refused -> showMessage(result.message)
-                LocationChange.Done -> {
-                    refreshAvailability()
-                    if (_uiState.value.activeLocation?.id == id) locations.get(id)?.let { activate(it) }
-                }
-            }
-        }
-    }
-
-    fun openDemoLibrary() {
-        viewModelScope.launch { activate(locations.demo()) }
-    }
-
-    fun setScope(next: LibraryScope) {
-        if (next == scope.value) return
-        scope.value = next
-        _uiState.update { it.copy(scope = next, selectedPhotoIds = emptySet()) }
-        viewModelScope.launch { settings.setActiveFolder(next.savedFolder) }
-    }
+    fun setScope(next: LibraryScope) = location.setScope(next)
 
     fun showLatestImport() {
-        _uiState.value.latestImport?.let { setScope(LibraryScope.LatestImport(it.id)) }
+        store.value.latestImport?.let { setScope(LibraryScope.LatestImport(it.id)) }
     }
 
     /** "Cull in Library" after an import: opens that Location on what was just imported. */
-    fun openImport(job: ImportJob) {
-        viewModelScope.launch {
-            val location = locations.get(job.locationId) ?: return@launch
-            activate(location, LibraryScope.LatestImport(job.id))
-            setViewMode(DamViewMode.GRID)
-        }
-    }
+    fun openImport(job: ImportJob) = location.openImport(job)
 
-    fun toggleFolder(path: String) {
-        val location = _uiState.value.activeLocation ?: return
-        val expanded = _uiState.value.expandedFolders.let { if (path in it) it - path else it + path }
-        _uiState.update { it.copy(expandedFolders = expanded) }
-        viewModelScope.launch { settings.setExpandedFolders(location.id, expanded) }
-    }
-
-    private suspend fun refreshAvailability() {
-        val rows = knownLocations.map { LocationUi(it, locations.isAvailable(it)) }
-        _uiState.update { it.copy(locations = rows) }
-    }
+    fun toggleFolder(path: String) = location.toggleFolder(path)
 
     /** Re-checks volumes after a resume or a media broadcast; a scan isn't reading while idle. */
-    fun refreshSources() {
-        viewModelScope.launch {
-            refreshAvailability()
-            val location = _uiState.value.activeLocation ?: return@launch
-            val available = locations.isAvailable(location)
-            if (location.id != _uiState.value.activeLocation?.id) return@launch
-            val wasAvailable = _uiState.value.isLocationAvailable
-            if (!available && wasAvailable) scanCoordinator.cancel()
-            _uiState.update { it.copy(isLocationAvailable = available) }
-            if (available && !wasAvailable && !location.isDemo) scanCoordinator.start(location.treeUri)
-        }
-    }
+    fun refreshSources() = location.refreshSources()
 
     /** Back in the foreground: the active folder is what's worth checking for changes (D12). */
     fun onAppStart() {
-        rescanActiveFolder()
+        location.rescanActiveFolder()
     }
 
-    fun onPullToRefresh() {
-        if (!rescanActiveFolder()) return
-        _uiState.update { it.copy(isRefreshing = true) }
-    }
+    fun onPullToRefresh() = location.onPullToRefresh()
 
-    private fun rescanActiveFolder(): Boolean {
-        val state = _uiState.value
-        val root = state.rootUri ?: return false
-        if (state.isDemo || !state.isLocationAvailable) return false
-        scanCoordinator.rescanSubtree(root, state.scope.savedFolder)
-        return true
-    }
+    fun rescan() = location.rescan()
 
-    fun rescan() {
-        val state = _uiState.value
-        val root = state.rootUri ?: return
-        if (state.isDemo) return
-        if (state.isLocationAvailable) scanCoordinator.start(root) else retryLocation()
-    }
-
-    fun retryLocation() {
-        val location = _uiState.value.activeLocation ?: return
-        viewModelScope.launch {
-            if (locations.isAvailable(location)) {
-                _uiState.update { it.copy(isLocationAvailable = true) }
-                refreshAvailability()
-                scanCoordinator.start(location.treeUri)
-            } else {
-                showMessage("Still not connected")
-            }
-        }
-    }
-
-    private fun onScanState(state: ScanState) {
-        val root = currentLocation.value?.treeUri
-        _uiState.update { current ->
-            when (state) {
-                ScanState.Idle -> current.copy(isScanning = false, isRefreshing = false, scanProgress = null, scanStatusText = "")
-                is ScanState.Listing -> if (state.rootUri != root) current else current.copy(
-                    isScanning = true,
-                    scanProgress = null,
-                    scanStatusText = "Scanning: ${state.filesSeen} files in ${state.dirsVisited} folders",
-                )
-                is ScanState.Enriching -> if (state.rootUri != root) current else current.copy(
-                    isScanning = true,
-                    isRefreshing = false,
-                    scanProgress = state.done.toFloat() / state.total,
-                    scanStatusText = "Reading metadata ${state.done} / ${state.total}",
-                )
-                is ScanState.Complete -> if (state.rootUri != root) current else current.copy(
-                    isScanning = false,
-                    isRefreshing = false,
-                    scanProgress = null,
-                    scanStatusText = "",
-                )
-                is ScanState.SourceUnavailable -> if (state.rootUri != root) current else current.copy(
-                    isScanning = false,
-                    isRefreshing = false,
-                    scanProgress = null,
-                    scanStatusText = "",
-                    isLocationAvailable = false,
-                )
-            }
-        }
-    }
-
-    /** A plain message: it must not inherit the action of whatever it replaces. */
-    private fun showMessage(message: String) {
-        _uiState.update { it.copy(snackbarMessage = message, snackbarAction = null) }
-    }
+    fun retryLocation() = location.retryLocation()
 
     fun onSnackbarShown() {
-        _uiState.update { it.copy(snackbarMessage = null, snackbarAction = null) }
+        store.update { it.copy(snackbarMessage = null, snackbarAction = null) }
     }
 
     // --- DIALOGS ---
     fun openTagDialog() {
-        _uiState.update { it.copy(showTagDialog = true) }
+        store.update { it.copy(showTagDialog = true) }
     }
 
     fun dismissTagDialog() {
-        _uiState.update { it.copy(showTagDialog = false) }
+        store.update { it.copy(showTagDialog = false) }
     }
 
     fun showSyncDetails() {
-        _uiState.update { it.copy(syncDetailsPhotoId = it.currentPhoto?.id) }
+        store.update { it.copy(syncDetailsPhotoId = it.currentPhoto?.id) }
     }
 
     fun dismissSyncDetails() {
-        _uiState.update { it.copy(syncDetailsPhotoId = null) }
+        store.update { it.copy(syncDetailsPhotoId = null) }
     }
 
     fun retrySidecar(id: String) {
@@ -829,223 +262,48 @@ class LibraryViewModel(
             try {
                 writeQueue.replaceSidecar(id)
             } catch (e: IOException) {
-                showMessage("Couldn't back up the old sidecar, so it wasn't replaced.")
+                store.showMessage("Couldn't back up the old sidecar, so it wasn't replaced.")
             } catch (e: IllegalStateException) {
-                showMessage("Couldn't back up the old sidecar, so it wasn't replaced.")
+                store.showMessage("Couldn't back up the old sidecar, so it wasn't replaced.")
             }
         }
     }
 
     // --- DELETE REJECTS ---
     /** @param selectionOnly the rejects in the selection; otherwise every reject in the scope, filtered or not. */
-    fun requestDeleteRejects(selectionOnly: Boolean = false) {
-        val state = _uiState.value
-        if (!state.isLocationAvailable) {
-            showMessage("Location disconnected. Reconnect it to delete photos.")
-            return
-        }
-        val ids = state.photos
-            .filter { it.cullStatus == CullStatus.REJECT && (!selectionOnly || it.id in state.selectedPhotoIds) }
-            .map { it.id }
-        if (ids.isEmpty()) {
-            showMessage("No rejected photos here")
-            return
-        }
-        viewModelScope.launch {
-            // Writing can create a sidecar, so the rows have to be read after this, not before.
-            writeQueue.flushNow()
-            val rows = repository.photosById(ids)
-            val plan = if (state.isDemo) {
-                RejectDeletion.rowsOnly(rows)
-            } else {
-                withContext(Dispatchers.IO) { RejectDeletion.plan(rows, deletions.apiLevel, deletions::mediaUri) }
-            }
-            _uiState.update { it.copy(deletionPrompt = plan) }
-        }
-    }
+    fun requestDeleteRejects(selectionOnly: Boolean = false) = deletion.requestDeleteRejects(selectionOnly)
 
-    fun cancelDeletion() {
-        _uiState.update { it.copy(deletionPrompt = null) }
-    }
+    fun cancelDeletion() = deletion.cancelDeletion()
 
-    fun confirmDeletion() {
-        val plan = _uiState.value.deletionPrompt ?: return
-        _uiState.update { it.copy(deletionPrompt = null) }
-        val trash = plan.toTrash.mapNotNull { it.mediaUri }
-        if (trash.isEmpty()) {
-            viewModelScope.launch { finishDeletion(plan) }
-            return
-        }
-        pendingDeletion = plan
-        showTrashDialog(trash, restoring = false)
-    }
-
-    private fun showTrashDialog(mediaUris: List<String>, restoring: Boolean) {
-        try {
-            val sender = deletions.trashRequest(mediaUris, trashed = !restoring)
-            _uiState.update { it.copy(trashRequest = TrashRequest(sender, restoring)) }
-        } catch (e: RuntimeException) {
-            // Nothing has happened yet, and nothing must: the permanent part only follows the trash.
-            log("trashRequest failed: $e")
-            pendingDeletion = null
-            showMessage("Android refused the trash request, so nothing was deleted.")
-        }
-    }
+    fun confirmDeletion() = deletion.confirmDeletion()
 
     /** The dialog is on its way; a rotation mustn't show it again. */
-    fun onTrashRequestLaunched() {
-        _uiState.update { it.copy(trashRequest = null) }
-    }
+    fun onTrashRequestLaunched() = deletion.onTrashRequestLaunched()
 
-    fun onTrashResult(approved: Boolean, restoring: Boolean) {
-        if (restoring) {
-            if (approved) onFilesRestored()
-            return
-        }
-        val plan = pendingDeletion ?: return
-        pendingDeletion = null
-        if (approved) {
-            viewModelScope.launch { finishDeletion(plan) }
-        } else {
-            showMessage("Nothing was deleted")
-        }
-    }
-
-    /** Runs after the trash, if there was one: cancelling that dialog never gets this far. */
-    private suspend fun finishDeletion(requested: DeletionPlan) {
-        // Sidecars can't go to the trash, so they're deleted for good here. If a photo somehow didn't
-        // go when the system said it did, its sidecar must stay with it.
-        val notTrashed = withContext(Dispatchers.IO) {
-            requested.toTrash.filter { deletions.documentExists(it.documentUri) }
-        }
-        val plan = requested.withoutPhotos(notTrashed.map { it.photoId }.toSet())
-        val failed = withContext(Dispatchers.IO) {
-            plan.toDelete.filterNot { deletions.deleteDocument(it.documentUri) }.map { it.documentUri }.toSet()
-        }
-        val outcome = RejectDeletion.outcome(plan, failed).let { it.copy(failedFiles = it.failedFiles + notTrashed.size) }
-        val folders = _uiState.value.photos.filter { it.id in outcome.removedIds.toHashSet() }.map { it.relativeDir }.toSet()
-        repository.removeRows(outcome.removedIds)
-        undoStack.dropIds(outcome.removedIds.toHashSet())
-        publishUndoState()
-        clearSelection()
-
-        val trashed = plan.toTrash.mapNotNull { it.mediaUri }
-        trashedFiles = trashed
-        trashedFolders = folders
-        val count = outcome.removedIds.size
-        val photos = if (count == 1) "1 photo" else "$count photos"
-        val done = if (trashed.isEmpty()) "$photos deleted" else "$photos moved to trash"
-        val problem = when (outcome.failedFiles) {
-            0 -> ""
-            1 -> " · 1 file couldn't be deleted"
-            else -> " · ${outcome.failedFiles} files couldn't be deleted"
-        }
-        log("deleted photos=$count trashed=${trashed.size} permanent=${plan.toDelete.size} failed=${outcome.failedFiles}")
-        _uiState.update {
-            it.copy(
-                snackbarMessage = done + problem,
-                snackbarAction = SnackbarAction.RESTORE.takeIf { trashed.isNotEmpty() },
-            )
-        }
-    }
+    fun onTrashResult(approved: Boolean, restoring: Boolean) = deletion.onTrashResult(approved, restoring)
 
     /** Files deleted permanently are gone; this brings back what went to the trash. */
-    fun restoreTrashed() {
-        if (trashedFiles.isNotEmpty()) showTrashDialog(trashedFiles, restoring = true)
-    }
-
-    private fun onFilesRestored() {
-        val root = _uiState.value.rootUri
-        val folder = RejectDeletion.commonFolder(trashedFolders)
-        trashedFiles = emptyList()
-        trashedFolders = emptySet()
-        root?.let { scanCoordinator.rescanSubtree(it, folder) }
-    }
+    fun restoreTrashed() = deletion.restoreTrashed()
 
     // --- MULTI-SELECT ---
-
     /** Tracked from key events: a touch or mouse click can't say what's held on the keyboard. */
-    fun onKeyboardModifiers(ctrl: Boolean, shift: Boolean) {
-        ctrlHeld = ctrl
-        shiftHeld = shift
-    }
+    fun onKeyboardModifiers(ctrl: Boolean, shift: Boolean) = selection.onKeyboardModifiers(ctrl, shift)
 
     /** Taps open the photo, unless a selection is under way or a modifier says otherwise. */
-    fun clickPhoto(index: Int) {
-        val state = _uiState.value
-        val id = state.filteredPhotos.getOrNull(index)?.id ?: return
-        when {
-            shiftHeld -> {
-                val anchor = selectionAnchor ?: state.selectedPhotoId ?: id
-                _uiState.update { it.copy(selectedPhotoIds = it.selectedPhotoIds + GridNavigation.range(visibleIds, anchor, id)) }
-            }
-            ctrlHeld || state.isSelecting -> togglePhotoSelection(id)
-            else -> {
-                selectPhoto(id)
-                setViewMode(DamViewMode.LOUPE)
-            }
-        }
-    }
+    fun clickPhoto(index: Int) = selection.clickPhoto(index)
 
     /** A long press: the start of a selection, which dragging then extends. */
-    fun beginDragSelection(id: String) {
-        selectionAnchor = id
-        dragBaseline = _uiState.value.selectedPhotoIds
-        _uiState.update { it.copy(selectedPhotoIds = it.selectedPhotoIds + id) }
-    }
+    fun beginDragSelection(id: String) = selection.beginDragSelection(id)
 
-    /** Dragging back gives photos up again, so this is always the baseline plus the current range. */
-    fun extendDragSelection(id: String) {
-        val anchor = selectionAnchor ?: return
-        val selected = dragBaseline + GridNavigation.range(visibleIds, anchor, id)
-        if (selected != _uiState.value.selectedPhotoIds) _uiState.update { it.copy(selectedPhotoIds = selected) }
-    }
+    fun extendDragSelection(id: String) = selection.extendDragSelection(id)
 
-    fun selectAll() {
-        _uiState.update { it.copy(selectedPhotoIds = visibleIdSet) }
-    }
+    fun selectAll() = selection.selectAll()
 
-    fun clearSelection() {
-        selectionAnchor = null
-        dragBaseline = emptySet()
-        _uiState.update { it.copy(selectedPhotoIds = emptySet()) }
-    }
+    fun clearSelection() = selection.clearSelection()
 
-    fun togglePhotoSelection(id: String) {
-        selectionAnchor = id
-        _uiState.update {
-            it.copy(selectedPhotoIds = if (id in it.selectedPhotoIds) it.selectedPhotoIds - id else it.selectedPhotoIds + id)
-        }
-    }
-
-    /** Keyed on the photo's version, so enrichment batches don't restart it on every emission. */
-    private fun refreshHistogram() {
-        val photo = _uiState.value.currentPhoto ?: return
-        if (photo.previewCacheKey == histogramKey) return
-        histogramKey = photo.previewCacheKey
-        histogramJob?.cancel()
-        histogramJob = viewModelScope.launch {
-            // Thumbnails are software bitmaps, so their pixels can be read.
-            val result = previews.thumbnail(PreviewKeys.source(photo), HISTOGRAM_SIZE_PX, PreviewLane.VISIBLE)
-            if (result is PreviewResult.Ready) {
-                // Only decoration: pixels that can't be read mean no histogram, not a crash.
-                val histogram = try {
-                    HistogramCalculator.compute(result.image.bitmap)
-                } catch (e: RuntimeException) {
-                    log("No histogram for ${photo.fileName}: $e")
-                    null
-                }
-                if (histogram != null) _uiState.update { it.copy(currentHistogram = histogram) }
-            }
-        }
-    }
+    fun togglePhotoSelection(id: String) = selection.togglePhotoSelection(id)
 
     companion object {
-        private const val SAVE_SELECTION_DELAY_MS = 500L
-        private const val SAVE_FILTER_DELAY_MS = 400L
-        private const val NANOS_PER_MILLI = 1_000_000L
-        private const val HISTOGRAM_SIZE_PX = 320
-
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as RawCullApp
