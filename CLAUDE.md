@@ -3,10 +3,22 @@
 Android photo culling + import-first DAM (tablets and phones, any orientation or window size). Kotlin, Jetpack Compose, Material 3, Room, DataStore, Storage Access Framework. Package `dev.shehran.rawcull`. minSdk 24, targetSdk 36.
 
 ## Build & test
-- `./gradlew testDebugUnitTest assembleDebug` (Windows: `gradlew.bat ...`). Every commit must build and pass unit tests.
+- `bash scripts/check.sh` runs `testDebugUnitTest assembleDebug` quietly (added in R6.0; before that, `gradlew.bat testDebugUnitTest assembleDebug`). Every commit must build and pass unit tests.
 - Pure logic (grouping, merging, XMP, path building, selection) lives in Android-free classes with plain JUnit tests. Use Robolectric only where Android types are unavoidable.
 - Real RAW samples live outside the repo (`C:\Users\shehr\RawCullSamples\`); never commit one. `gradlew.bat testDebugUnitTest -PrawSamples=<dir> --tests "*RawSampleReportTest*"` reports what the parsers find in each file. The fixtures in the repo are synthetic.
 - `XmpDocumentDeviceTest` runs the XMP fixtures on Android's own XML stack. With a phone or tablet attached, set `ANDROID_SERIAL` first, because connected tests install on every device.
+
+## Working efficiently
+Usage limits matter on this project. These rules keep sessions small:
+- Build and test with `bash scripts/check.sh`. It prints one line when everything passes and only the failures when something breaks; the full log is `build/check.log`. Open that log only when the summary isn't enough, and then only the lines you need. While working on a task you may pass `--tests "<pattern>"`; run the full check before each commit.
+- Read narrowly. For a file over ~300 lines, find the spot with Grep and read a line range. Use the architecture map below instead of exploring. Don't re-read a file after editing it.
+- Read only the current round's plan, and in it the header, *Decisions* and your session's tasks. Don't open other rounds' plans, `plans-backup/`, `.claude/worktrees/` or anything under `build/` other than `build/check.log`.
+- Search with Grep and Glob yourself; don't hand searches to subagents.
+- Work in this checkout on the round's branch, not in a new worktree.
+- New UI goes in new files. `LibraryScreen.kt` and `LibraryViewModel.kt` grow only by wiring. Keep new files under ~400 lines.
+- Emulator runs and screenshots only in a round's final task, at the sizes and count its plan gives.
+- A session does the tasks its prompt names, then stops.
+- Implementation notes stay short: deviations, open questions, measurements. Git log already says what each commit did.
 
 ## Architecture (single Activity, manual DI)
 - `RawCullApp` → `AppContainer` (database, DAOs, repositories, ScanCoordinator, import session/engine/controller, app scope).
