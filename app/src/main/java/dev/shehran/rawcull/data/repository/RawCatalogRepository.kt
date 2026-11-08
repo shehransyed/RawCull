@@ -60,6 +60,7 @@ class RawCatalogRepository(
         LibraryScope.All -> dao.observeScope(rootUri, "")
         is LibraryScope.Folder -> dao.observeScope(rootUri, scope.relativeDir)
         is LibraryScope.LatestImport -> dao.observeByImportJob(scope.jobId)
+        is LibraryScope.Collection -> database.collectionDao().observeMembers(scope.id)
     }
 
     override fun observeFolderCounts(rootUri: String): Flow<Map<String, Int>> = dao.observeFolderCounts(rootUri)

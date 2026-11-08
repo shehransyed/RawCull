@@ -199,4 +199,12 @@ class LibraryKeymapTest {
         val listed = LibraryKeymap.helpGroups.flatMap { it.rows }.flatMap { it.keys.split(", ") }.toSet()
         LibraryKeymap.boundKeys.forEach { assertTrue("$it is missing from the sheet", it in listed) }
     }
+
+    @Test
+    fun `B toggles the target collection and is in the help sheet`() {
+        assertEquals(LibraryKeyAction.ToggleInTargetCollection, press(LibraryKey.B))
+        assertNull(press(LibraryKey.B, ctrl = true))
+        assertNull(LibraryKeymap.actionFor(LibraryKey.B, textFieldFocused = true))
+        assertTrue(LibraryKeymap.helpGroups.flatMap { it.rows }.any { it.keys == "B" })
+    }
 }

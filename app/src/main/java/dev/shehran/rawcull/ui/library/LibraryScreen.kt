@@ -199,6 +199,7 @@ fun LibraryScreen(
                 when (action) {
                     SnackbarAction.UNDO -> viewModel.undo()
                     SnackbarAction.RESTORE -> viewModel.restoreTrashed()
+                    SnackbarAction.UNDO_COLLECTION -> viewModel.undoCollectionChange()
                     null -> Unit
                 }
             }
@@ -239,12 +240,27 @@ fun LibraryScreen(
             coroutines.launch { drawerState.close() }
         },
         onToggleFolder = viewModel::toggleFolder,
+        collections = CollectionPaneActions(
+            onOpen = {
+                viewModel.setScope(LibraryScope.Collection(it))
+                coroutines.launch { drawerState.close() }
+            },
+            onToggleSet = viewModel::toggleCollectionSet,
+            onCreate = { name, parent, isSet ->
+                if (isSet) viewModel.createCollectionSet(name, parent) else viewModel.createCollection(name, parent)
+            },
+            onRename = viewModel::renameCollection,
+            onMove = viewModel::moveCollection,
+            onDelete = viewModel::deleteCollection,
+            onSetTarget = viewModel::setTargetCollection,
+        ),
     )
+    val collectionInspector = viewModel.collectionInspectorActions()
 
     // Dialogs and sheets are windows of their own, so focus has to be taken back when they close.
     val filterSheetOpen = showFilterSheet && !layout.showsFilterBar
     val overlayOpen = showHelp || showInspectorSheet || filterSheetOpen || uiState.deletionPrompt != null ||
-        uiState.showTagDialog || uiState.syncDetailsPhoto != null
+        uiState.showTagDialog || uiState.syncDetailsPhoto != null || uiState.showAddToCollection
     LaunchedEffect(overlayOpen) {
         if (!overlayOpen) {
             textFieldFocused = false
@@ -386,6 +402,7 @@ fun LibraryScreen(
                 uiState,
                 culling = null,
                 onEditTags = viewModel::openTagDialog,
+                collectionActions = collectionInspector,
                 onCycleHistogramMode = viewModel::cycleHistogramMode,
                 onToggleHistogramLog = viewModel::toggleHistogramLog,
                 modifier = Modifier.dismissOnEscape { showInspectorSheet = false },
@@ -393,6 +410,14 @@ fun LibraryScreen(
         }
     }
     if (showHelp) ShortcutHelpSheet(onDismiss = { showHelp = false })
+    if (uiState.showAddToCollection) {
+        AddToCollectionSheet(
+            uiState = uiState,
+            onPick = viewModel::addToCollection,
+            onCreate = { viewModel.createCollection(it, parentId = null, thenAddPhotos = true) },
+            onDismiss = viewModel::dismissAddToCollection,
+        )
+    }
     uiState.deletionPrompt?.let { plan ->
         DeleteRejectsDialog(plan, onConfirm = viewModel::confirmDeletion, onDismiss = viewModel::cancelDeletion)
     }
@@ -448,6 +473,7 @@ private fun LibraryContent(
     onOpenInspectorSheet: () -> Unit,
     onRelink: () -> Unit,
 ) {
+    val collectionInspector = viewModel.collectionInspectorActions()
     val culling = CullingActions(
         onTogglePick = viewModel::togglePick,
         onToggleReject = viewModel::toggleReject,
@@ -483,6 +509,8 @@ private fun LibraryContent(
                             onEdit = { viewModel.apply(it) },
                             onEditTags = viewModel::openTagDialog,
                             onDeleteRejects = { viewModel.requestDeleteRejects(selectionOnly = true) },
+                            onAddToCollection = viewModel::openAddToCollection,
+                            onRemoveFromCollection = viewModel::removeFromCollection.takeIf { uiState.activeCollection != null },
                         )
                     }
                 } else {
@@ -503,6 +531,8 @@ private fun LibraryContent(
                     onFullWindow = viewModel::enterFullWindow,
                     onSlideshow = viewModel::startSlideshow,
                     onDeleteRejects = { viewModel.requestDeleteRejects() },
+                    onAddToCollection = viewModel::openAddToCollection,
+                    onRemoveFromCollection = viewModel::removeFromCollection,
                     onRescan = viewModel::rescan,
                     onRetryLocation = viewModel::retryLocation,
                     onRelinkLocation = onRelink,
@@ -540,6 +570,7 @@ private fun LibraryContent(
                         uiState = uiState,
                         culling = culling.takeIf { !layout.cullingBarAtSide },
                         onEditTags = viewModel::openTagDialog,
+                        collectionActions = collectionInspector,
                         onCycleHistogramMode = viewModel::cycleHistogramMode,
                         onToggleHistogramLog = viewModel::toggleHistogramLog,
                     )
@@ -798,6 +829,7 @@ private fun onLibraryKey(action: LibraryKeyAction, viewModel: LibraryViewModel, 
         LibraryKeyAction.ToggleFilterBar -> screen.onToggleFilterBar()
         LibraryKeyAction.ToggleFilters -> viewModel.toggleFilters()
         LibraryKeyAction.EditTags -> viewModel.openTagDialog()
+        LibraryKeyAction.ToggleInTargetCollection -> viewModel.toggleInTargetCollection()
         LibraryKeyAction.DeleteRejects -> viewModel.requestDeleteRejects()
         LibraryKeyAction.ShowHelp -> screen.onShowHelp()
         LibraryKeyAction.Escape -> screen.onEscape()

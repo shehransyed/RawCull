@@ -14,8 +14,10 @@ import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.LibraryLocation
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.PhotoCollection
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.preview.FakePreviewRepository
+import dev.shehran.rawcull.data.repository.CollectionChange
 import dev.shehran.rawcull.data.repository.CollectionRepository
 import dev.shehran.rawcull.data.repository.HistogramMode
 import dev.shehran.rawcull.data.repository.LocationAccess
@@ -43,6 +45,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
@@ -77,7 +80,15 @@ class LibraryViewModelTest {
         val rows = MutableStateFlow<List<PhotoAsset>>(emptyList())
         val writes = CopyOnWriteArrayList<CullChange>() // Written on Main, read by the test
 
-        override fun observeScope(rootUri: String, scope: LibraryScope): Flow<List<PhotoAsset>> = rows
+        /** The member ids of a collection, in order: the real join's job, which the repository tests cover. */
+        var members: (Long) -> Flow<List<String>> = { flowOf(emptyList()) }
+
+        override fun observeScope(rootUri: String, scope: LibraryScope): Flow<List<PhotoAsset>> =
+            if (scope is LibraryScope.Collection) {
+                combine(rows, members(scope.id)) { all, ids -> ids.mapNotNull { id -> all.firstOrNull { it.id == id } } }
+            } else {
+                rows
+            }
         override fun observeFolderCounts(rootUri: String): Flow<Map<String, Int>> = flowOf(emptyMap())
         override fun observeImportPhotoCount(jobId: Long): Flow<Int> = flowOf(0)
         override suspend fun loadSampleShoot() = Unit
@@ -135,6 +146,7 @@ class LibraryViewModelTest {
     private lateinit var settings: SettingsRepository
     private lateinit var settingsScope: CoroutineScope
     private lateinit var locations: LocationRepository
+    private lateinit var collectionRepo: CollectionRepository
     private lateinit var main: ExecutorCoroutineDispatcher
     private lateinit var viewModel: LibraryViewModel
 
@@ -168,10 +180,12 @@ class LibraryViewModelTest {
         settings = SettingsRepository(
             PreferenceDataStoreFactory.create(scope = settingsScope) { tempFolder.newFile("settings.preferences_pb").also { it.delete() } },
         )
+        collectionRepo = CollectionRepository(database)
+        catalog.members = collectionRepo::observeMemberIds
         locations = LocationRepository(
             locations = database.locationDao(),
             photos = dao,
-            collections = CollectionRepository(database),
+            collections = collectionRepo,
             access = AlwaysThere(),
             flushXmp = {},
             isGrantInUse = { false },
@@ -187,6 +201,7 @@ class LibraryViewModelTest {
             repository = catalog,
             settings = settings,
             locations = locations,
+            collections = collectionRepo,
             jobs = database.importJobDao(),
             scanCoordinator = ScanCoordinator(context, database, dao, noScans, stores, queue),
             writeQueue = queue,
@@ -783,6 +798,176 @@ class LibraryViewModelTest {
             onMain { setSlideshowLoop(true) }
             waitUntil { state.viewing.slideshowLoop }
         }
+    }
+
+    // --- Collections (R7.3) ---
+
+    /** A collection in [location], holding [ids] in that order. */
+    private fun collectionOf(location: LibraryLocation, name: String, vararg ids: String): Long = runBlocking {
+        val id = (collectionRepo.createCollection(PhotoCollection.locationKey(location), name) as CollectionChange.Done).id
+        collectionRepo.add(id, ids.toList())
+        id
+    }
+
+    private fun members(collectionId: Long) = runBlocking { collectionRepo.memberIds(collectionId) }
+
+    @Test
+    fun `a collection shows its photos and skips ones with no row`() {
+        val location = open(photo("a"), photo("b"), photo("c"))
+        val id = collectionOf(location, "Keepers", "c", "ghost", "a")
+
+        onMain { setScope(LibraryScope.Collection(id)) }
+        // Order is the usual sort until R7.5 adds Custom order.
+        waitUntil { state.filteredPhotos.map { it.id }.toSet() == setOf("a", "c") }
+
+        assertEquals("Keepers", state.scopeTitle)
+        assertEquals(2, state.totalCount)
+        onMain { setScope(LibraryScope.All) }
+        waitUntil { state.filteredPhotos.size == 3 }
+    }
+
+    @Test
+    fun `counts inside a collection cover only its photos`() {
+        val location = open(photo("a", status = CullStatus.PICK), photo("b", status = CullStatus.PICK), photo("c"))
+        val id = collectionOf(location, "Two", "a", "c")
+
+        onMain { setScope(LibraryScope.Collection(id)) }
+        waitUntil { state.totalCount == 2 }
+
+        assertEquals(1, state.picksCount)
+        assertEquals(1, state.unflaggedCount)
+    }
+
+    @Test
+    fun `the scope and the open collection are remembered`() {
+        val location = open(photo("a"))
+        val id = collectionOf(location, "Trip", "a")
+
+        onMain { setScope(LibraryScope.Collection(id)) }
+        waitUntil { runBlocking { settings.librarySession().activeCollectionId } == id }
+        onMain { setScope(LibraryScope.All) }
+        waitUntil { runBlocking { settings.librarySession().activeCollectionId } == null }
+    }
+
+    @Test
+    fun `deleting the open collection leaves it`() {
+        val location = open(photo("a"), photo("b"))
+        val id = collectionOf(location, "Gone soon", "a")
+        waitUntil { state.collections.any { it.id == id } }
+        onMain { setScope(LibraryScope.Collection(id)) }
+        waitUntil { state.filteredPhotos.size == 1 }
+
+        onMain { deleteCollection(id) }
+
+        waitUntil { state.scope == LibraryScope.All && state.filteredPhotos.size == 2 }
+    }
+
+    @Test
+    fun `B with no target opens the sheet`() {
+        open(photo("a"))
+
+        onMain { toggleInTargetCollection() }
+
+        waitUntil { state.showAddToCollection }
+        onMain { dismissAddToCollection() }
+        waitUntil { !state.showAddToCollection }
+    }
+
+    @Test
+    fun `B adds the selection to the target and a second B takes it out`() {
+        val location = open(photo("a"), photo("b"), photo("c"))
+        val id = collectionOf(location, "Target")
+        waitUntil { state.collections.any { it.id == id } }
+        onMain { setTargetCollection(id) }
+        waitUntil { state.targetCollectionId == id }
+        select("a", "c")
+
+        onMain { toggleInTargetCollection() }
+        waitUntil { members(id).size == 2 }
+
+        assertEquals(setOf("a", "c"), members(id).toSet())
+        waitUntil { state.snackbarAction == SnackbarAction.UNDO_COLLECTION }
+        onMain { toggleInTargetCollection() }
+        waitUntil { members(id).isEmpty() }
+    }
+
+    @Test
+    fun `B on the current photo when nothing is selected`() {
+        val location = open(photo("a"), photo("b"))
+        val id = collectionOf(location, "Target")
+        waitUntil { state.collections.any { it.id == id } }
+        onMain { setTargetCollection(id) }
+        waitUntil { state.targetCollectionId == id }
+        val current = checkNotNull(state.selectedPhotoId)
+
+        onMain { toggleInTargetCollection() }
+
+        waitUntil { members(id) == listOf(current) }
+    }
+
+    @Test
+    fun `adding from the sheet can be undone, and so can removing`() {
+        val location = open(photo("a"), photo("b"))
+        val id = collectionOf(location, "Album")
+        waitUntil { state.collections.any { it.id == id } }
+        select("a", "b")
+
+        onMain { openAddToCollection() }
+        waitUntil { state.showAddToCollection }
+        onMain { addToCollection(id) }
+        waitUntil { members(id).size == 2 }
+        assertFalse(state.showAddToCollection)
+        waitUntil { state.snackbarAction == SnackbarAction.UNDO_COLLECTION }
+
+        onMain { undoCollectionChange() }
+        waitUntil { members(id).isEmpty() }
+
+        onMain { addToCollection(id) } // The selection is still a and b
+        waitUntil { members(id).size == 2 }
+        onMain { setScope(LibraryScope.Collection(id)) }
+        waitUntil { state.activeCollection?.id == id && state.filteredPhotos.size == 2 }
+        select("a") // The scope change cleared the selection
+        onMain { removeFromCollection() }
+        waitUntil { members(id) == listOf("b") }
+
+        onMain { undoCollectionChange() }
+        waitUntil { members(id) == listOf("a", "b") }
+    }
+
+    @Test
+    fun `adding photos that are already in says so`() {
+        val location = open(photo("a"))
+        val id = collectionOf(location, "Album", "a")
+        waitUntil { state.collections.any { it.id == id } }
+
+        onMain { openAddToCollection() }
+        onMain { addToCollection(id) }
+
+        waitUntil { state.snackbarMessage?.startsWith("Already in") == true }
+        assertEquals(null, state.snackbarAction)
+    }
+
+    @Test
+    fun `a new collection from the sheet takes the photos with it`() {
+        open(photo("a"), photo("b"))
+        select("b")
+
+        onMain { createCollection("Fresh", parentId = null, thenAddPhotos = true) }
+
+        waitUntil { state.collections.any { it.name == "Fresh" } }
+        val id = state.collections.single { it.name == "Fresh" }.id
+        waitUntil { members(id) == listOf("b") }
+    }
+
+    @Test
+    fun `a name that is taken is refused`() {
+        val location = open(photo("a"))
+        collectionOf(location, "Dup")
+
+        onMain { createCollection("dup", parentId = null) }
+
+        waitUntil { state.snackbarMessage?.contains("already") == true }
+        assertEquals(1, state.collections.count { it.name.equals("dup", ignoreCase = true) })
     }
 
     private companion object {

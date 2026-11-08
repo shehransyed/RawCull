@@ -50,6 +50,7 @@ fun InspectorPanel(
     uiState: LibraryUiState,
     culling: CullingActions?,
     onEditTags: () -> Unit,
+    collectionActions: CollectionInspectorActions,
     onCycleHistogramMode: () -> Unit,
     onToggleHistogramLog: () -> Unit,
     modifier: Modifier = Modifier,
@@ -83,6 +84,7 @@ fun InspectorPanel(
         )
         ExifInspectorPanel(photo = photo)
         TagsCard(tags = photo?.tags.orEmpty(), onEditTags = onEditTags)
+        if (photo != null) CollectionsCard(uiState.photoCollections, uiState.activeCollection != null, collectionActions)
     }
 }
 

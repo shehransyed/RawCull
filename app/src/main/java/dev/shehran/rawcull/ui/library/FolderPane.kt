@@ -31,7 +31,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,6 +59,7 @@ class FolderPaneActions(
     val onSelectScope: (LibraryScope) -> Unit,
     val onShowLatestImport: () -> Unit,
     val onToggleFolder: (String) -> Unit,
+    val collections: CollectionPaneActions,
 )
 
 /** The Location switcher and folder tree: a side pane on wide windows, a drawer on narrow ones. */
@@ -64,6 +68,9 @@ fun FolderPane(uiState: LibraryUiState, actions: FolderPaneActions, modifier: Mo
     val visible = remember(uiState.folderTree, uiState.expandedFolders) {
         FolderTree.visibleRows(uiState.folderTree, uiState.expandedFolders)
     }
+
+    var collectionDialog by remember { mutableStateOf<CollectionDialog?>(null) }
+    CollectionDialogs(collectionDialog, uiState, actions.collections) { collectionDialog = null }
 
     LazyColumn(
         modifier = modifier.fillMaxHeight().testTag("folder_pane"),
@@ -119,6 +126,8 @@ fun FolderPane(uiState: LibraryUiState, actions: FolderPaneActions, modifier: Mo
                     onToggle = { actions.onToggleFolder(row.node.path) },
                 )
             }
+            item { HorizontalDivider(color = HairlineWhite, modifier = Modifier.padding(vertical = 6.dp)) }
+            collectionsSection(uiState, actions.collections) { collectionDialog = it }
         }
     }
 }

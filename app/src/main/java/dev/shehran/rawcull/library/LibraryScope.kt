@@ -7,13 +7,22 @@ sealed interface LibraryScope {
     data object All : LibraryScope
     data class Folder(val relativeDir: String) : LibraryScope
     data class LatestImport(val jobId: Long) : LibraryScope
+    data class Collection(val id: Long) : LibraryScope
 
     /** The value saved between launches. *Latest Import* isn't one: it is a view, not a place. */
     val savedFolder: String
         get() = (this as? Folder)?.relativeDir.orEmpty()
 
+    /** The collection to reopen on, or null (a collection is a place of its own, not a folder). */
+    val savedCollectionId: Long?
+        get() = (this as? Collection)?.id
+
     companion object {
         fun fromSavedFolder(folder: String): LibraryScope = if (folder.isEmpty()) All else Folder(folder)
+
+        /** A saved collection wins over a saved folder: they are never saved together. */
+        fun fromSaved(folder: String, collectionId: Long?): LibraryScope =
+            collectionId?.let(::Collection) ?: fromSavedFolder(folder)
     }
 }
 
@@ -48,9 +57,10 @@ object LibraryRestore {
         savedLocationId: Long?,
         savedFolder: String,
         savedAssetId: String?,
+        savedCollectionId: Long? = null,
     ): RestoredSession {
         val saved = locations.firstOrNull { it.id == savedLocationId }
-        if (saved != null) return RestoredSession(saved, LibraryScope.fromSavedFolder(savedFolder), savedAssetId)
+        if (saved != null) return RestoredSession(saved, LibraryScope.fromSaved(savedFolder, savedCollectionId), savedAssetId)
         return RestoredSession(locations.maxByOrNull { it.lastOpenedAt }, LibraryScope.All, null)
     }
 }

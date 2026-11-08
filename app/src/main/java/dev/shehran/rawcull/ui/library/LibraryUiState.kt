@@ -5,6 +5,7 @@ import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.ImportJob
 import dev.shehran.rawcull.data.model.LibraryLocation
+import dev.shehran.rawcull.data.model.PhotoCollection
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.repository.ViewingPrefs
 import dev.shehran.rawcull.library.DeletionPlan
@@ -35,6 +36,7 @@ data class SlideshowUi(
 
 enum class SnackbarAction(val label: String) {
     UNDO("Undo"),
+    UNDO_COLLECTION("Undo"), // A collection membership change, which isn't on the culling stack (D6)
     RESTORE("Restore"),
 }
 
@@ -86,6 +88,11 @@ data class LibraryUiState(
     val viewing: ViewingPrefs = ViewingPrefs(),
     val peaking: Boolean = false, // R6 D7: per session, starts off
     val fullWindow: Boolean = false, // R6 D2: the photo owns the whole window, system bars hidden
+    val collections: List<PhotoCollection> = emptyList(), // The active Location's collections and sets
+    val expandedCollectionSets: Set<Long> = emptySet(),
+    val targetCollectionId: Long? = null, // What B adds to (D6)
+    val photoCollections: List<PhotoCollection> = emptyList(), // The current photo's collections: inspector chips
+    val showAddToCollection: Boolean = false,
     val zoomRequest: Int = 0, // Bumped by Z and Space; the loupe on screen toggles its zoom
 ) {
     /** Derived, not stored: enrichment re-sorts the list, and the selection must follow the photo. */
@@ -134,5 +141,14 @@ data class LibraryUiState(
             LibraryScope.All -> "All photos"
             is LibraryScope.Folder -> active.relativeDir.substringAfterLast('/')
             is LibraryScope.LatestImport -> "Latest Import"
+            is LibraryScope.Collection -> collections.firstOrNull { it.id == active.id }?.name ?: "Collection"
         }
+
+    /** The collection on screen, if the scope is one. */
+    val activeCollection: PhotoCollection?
+        get() = (scope as? LibraryScope.Collection)?.let { s -> collections.firstOrNull { it.id == s.id } }
+
+    /** B's target, if it still exists in this Location and can hold photos. */
+    val targetCollection: PhotoCollection?
+        get() = collections.firstOrNull { it.id == targetCollectionId && !it.isSet }
 }

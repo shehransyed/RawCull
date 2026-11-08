@@ -3,6 +3,8 @@ package dev.shehran.rawcull.ui.library
 import dev.shehran.rawcull.data.local.ImportJobDao
 import dev.shehran.rawcull.data.model.ImportJob
 import dev.shehran.rawcull.data.model.LibraryLocation
+import dev.shehran.rawcull.data.model.PhotoCollection
+import dev.shehran.rawcull.data.repository.CollectionRepository
 import dev.shehran.rawcull.data.repository.LocationChange
 import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.PhotoCatalog
@@ -29,6 +31,7 @@ internal class LocationController(
     private val repository: PhotoCatalog,
     private val settings: SettingsRepository,
     private val locations: LocationRepository,
+    private val collections: CollectionRepository,
     private val jobs: ImportJobDao,
     private val scanCoordinator: ScanCoordinator,
     private val startupFinished: suspend () -> Unit,
@@ -100,14 +103,22 @@ internal class LocationController(
                 session.activeLocationId,
                 session.activeFolder,
                 session.selectedAssetId,
+                session.activeCollectionId,
             )
             restored.location?.let { location ->
                 view.pendingSelectionId = restored.selectedAssetId
-                activate(location, restored.scope)
+                activate(location, keepExisting(location, restored.scope))
             }
         } finally {
             store.update { it.copy(isRestoring = false) }
         }
+    }
+
+    /** A saved collection may have been deleted since; then the Library opens on everything. */
+    private suspend fun keepExisting(location: LibraryLocation, scope: LibraryScope): LibraryScope {
+        if (scope !is LibraryScope.Collection) return scope
+        val row = collections.get(scope.id)
+        return if (row != null && row.locationId == PhotoCollection.locationKey(location)) scope else LibraryScope.All
     }
 
     /** Shows the cached rows at once and starts the background scan (D12). */
@@ -142,7 +153,7 @@ internal class LocationController(
         scope.value = activeScope
         locations.touch(location.id)
         if (settings.librarySession().activeLocationId != location.id) settings.setActiveLocation(location.id)
-        settings.setActiveFolder(activeScope.savedFolder)
+        saveScope(activeScope)
         val expanded = settings.expandedFolders(location.id)
         store.update { it.copy(expandedFolders = expanded) }
 
@@ -225,7 +236,12 @@ internal class LocationController(
         if (next == scope.value) return
         scope.value = next
         store.update { it.copy(scope = next, selectedPhotoIds = emptySet()) }
-        store.scope.launch { settings.setActiveFolder(next.savedFolder) }
+        store.scope.launch { saveScope(next) }
+    }
+
+    private suspend fun saveScope(scope: LibraryScope) {
+        settings.setActiveFolder(scope.savedFolder)
+        settings.setActiveCollection(scope.savedCollectionId)
     }
 
     /** "Cull in Library" after an import: opens that Location on what was just imported. */

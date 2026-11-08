@@ -26,6 +26,7 @@ data class LibrarySession(
     val activeLocationId: Long? = null,
     val activeFolder: String = "",
     val selectedAssetId: String? = null,
+    val activeCollectionId: Long? = null,
 )
 
 /** How culling behaves on this device. */
@@ -93,6 +94,7 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
             activeLocationId = prefs[KEY_ACTIVE_LOCATION_ID],
             activeFolder = prefs[KEY_ACTIVE_FOLDER].orEmpty(),
             selectedAssetId = prefs[KEY_SELECTED_ASSET_ID],
+            activeCollectionId = prefs[KEY_ACTIVE_COLLECTION_ID],
         )
     }
 
@@ -100,12 +102,29 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { prefs ->
             if (id == null) prefs.remove(KEY_ACTIVE_LOCATION_ID) else prefs[KEY_ACTIVE_LOCATION_ID] = id
             prefs.remove(KEY_ACTIVE_FOLDER)
+            prefs.remove(KEY_ACTIVE_COLLECTION_ID)
             prefs.remove(KEY_SELECTED_ASSET_ID)
         }
     }
 
     suspend fun setActiveFolder(folder: String) {
         dataStore.edit { it[KEY_ACTIVE_FOLDER] = folder }
+    }
+
+    /** D5: the collection the Library was showing; null when it was showing a folder or everything. */
+    suspend fun setActiveCollection(id: Long?) {
+        dataStore.edit { prefs ->
+            if (id == null) prefs.remove(KEY_ACTIVE_COLLECTION_ID) else prefs[KEY_ACTIVE_COLLECTION_ID] = id
+        }
+    }
+
+    /** D6: where B adds to. Collections belong to one Location, so a stale id simply matches nothing. */
+    val targetCollectionId: Flow<Long?> = dataStore.data.map { it[KEY_TARGET_COLLECTION_ID] }
+
+    suspend fun setTargetCollection(id: Long?) {
+        dataStore.edit { prefs ->
+            if (id == null) prefs.remove(KEY_TARGET_COLLECTION_ID) else prefs[KEY_TARGET_COLLECTION_ID] = id
+        }
     }
 
     suspend fun setSelectedAsset(id: String?) {
@@ -214,6 +233,8 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         )
         val KEY_ACTIVE_LOCATION_ID = longPreferencesKey("active_location_id")
         val KEY_ACTIVE_FOLDER = stringPreferencesKey("active_folder")
+        val KEY_ACTIVE_COLLECTION_ID = longPreferencesKey("active_collection_id")
+        val KEY_TARGET_COLLECTION_ID = longPreferencesKey("target_collection_id")
         val KEY_SELECTED_ASSET_ID = stringPreferencesKey("selected_asset_id")
         val KEY_VERIFY_MODE = stringPreferencesKey("verify_mode")
         val KEY_DELETE_FROM_CARD = booleanPreferencesKey("delete_from_card_after_import")

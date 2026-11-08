@@ -16,7 +16,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
@@ -76,6 +78,8 @@ class LibraryTopBarActions(
     val onFullWindow: () -> Unit,
     val onSlideshow: () -> Unit,
     val onDeleteRejects: () -> Unit,
+    val onAddToCollection: () -> Unit,
+    val onRemoveFromCollection: () -> Unit,
     val onRescan: () -> Unit,
     val onRetryLocation: () -> Unit,
     val onRelinkLocation: () -> Unit,
@@ -274,6 +278,22 @@ private fun OverflowMenu(uiState: LibraryUiState, actions: LibraryTopBarActions)
                 onClick = { choose(actions.onDeleteRejects) },
                 modifier = Modifier.testTag("delete_rejects_button"),
             )
+            DropdownMenuItem(
+                text = { Text("Add to collection…") },
+                enabled = uiState.currentPhoto != null,
+                leadingIcon = { Icon(Icons.Default.Collections, contentDescription = null) },
+                onClick = { choose(actions.onAddToCollection) },
+                modifier = Modifier.testTag("add_to_collection_menu_item"),
+            )
+            if (uiState.activeCollection != null) {
+                DropdownMenuItem(
+                    text = { Text("Remove from collection") },
+                    enabled = uiState.currentPhoto != null,
+                    leadingIcon = { Icon(Icons.Default.RemoveCircleOutline, contentDescription = null) },
+                    onClick = { choose(actions.onRemoveFromCollection) },
+                    modifier = Modifier.testTag("remove_from_collection_menu_item"),
+                )
+            }
             DropdownMenuItem(
                 text = { Text("Full window") },
                 enabled = uiState.filteredPhotos.isNotEmpty(),

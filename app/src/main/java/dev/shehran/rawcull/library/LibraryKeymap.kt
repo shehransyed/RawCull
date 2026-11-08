@@ -5,7 +5,7 @@ import dev.shehran.rawcull.data.model.CullStatus
 
 /** The keys the Library knows, so this file stays free of Android and Compose types. */
 enum class LibraryKey(val label: String) {
-    A("A"), C("C"), D("D"), E("E"), F("F"), G("G"), H("H"), K("K"), L("L"), O("O"), P("P"), U("U"), X("X"), Y("Y"), Z("Z"),
+    A("A"), B("B"), C("C"), D("D"), E("E"), F("F"), G("G"), H("H"), K("K"), L("L"), O("O"), P("P"), U("U"), X("X"), Y("Y"), Z("Z"),
     Digit0("0"), Digit1("1"), Digit2("2"), Digit3("3"), Digit4("4"), Digit5("5"),
     Digit6("6"), Digit7("7"), Digit8("8"), Digit9("9"),
     Grave("`"), LeftBracket("["), RightBracket("]"), Backslash("\\"), Slash("/"),
@@ -42,6 +42,7 @@ sealed interface LibraryKeyAction {
     data object ToggleFilterBar : LibraryKeyAction
     data object ToggleFilters : LibraryKeyAction
     data object EditTags : LibraryKeyAction
+    data object ToggleInTargetCollection : LibraryKeyAction
     data object DeleteRejects : LibraryKeyAction
     data object ShowHelp : LibraryKeyAction
     data object Escape : LibraryKeyAction
@@ -132,6 +133,7 @@ object LibraryKeymap {
         add(Binding(LibraryKey.A, LibraryKeyAction.SelectAll, Group.EDITING, "Select all", ctrl = true))
         add(Binding(LibraryKey.D, LibraryKeyAction.SelectNone, Group.EDITING, "Select none", ctrl = true))
         add(Binding(LibraryKey.D, LibraryKeyAction.SelectNone, Group.EDITING, "Select none", ctrl = true, shift = true))
+        add(Binding(LibraryKey.B, LibraryKeyAction.ToggleInTargetCollection, Group.EDITING, "Add to or remove from the target collection (opens the sheet without one)"))
         add(Binding(LibraryKey.K, LibraryKeyAction.EditTags, Group.EDITING, "Add tags", ctrl = true))
         add(Binding(LibraryKey.Backspace, LibraryKeyAction.DeleteRejects, Group.EDITING, "Delete rejects…", ctrl = true))
 

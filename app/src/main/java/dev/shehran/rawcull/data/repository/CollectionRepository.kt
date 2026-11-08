@@ -171,6 +171,9 @@ class CollectionRepository(
         dao.members(collectionId)
     }
 
+    /** [members] as a live query: rows appear and vanish with the catalog, ids without a row are skipped. */
+    fun observeMembers(collectionId: Long): Flow<List<PhotoAsset>> = dao.observeMembers(collectionId)
+
     fun observeContaining(assetId: String): Flow<List<PhotoCollection>> = dao.observeContaining(assetId)
 
     suspend fun containing(assetId: String): List<PhotoCollection> = withContext(Dispatchers.IO) {

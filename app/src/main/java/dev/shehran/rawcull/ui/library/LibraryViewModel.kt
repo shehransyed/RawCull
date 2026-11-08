@@ -18,6 +18,7 @@ import dev.shehran.rawcull.data.model.CullStatus
 import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.ImportJob
 import dev.shehran.rawcull.data.preview.PreviewRepository
+import dev.shehran.rawcull.data.repository.CollectionRepository
 import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.PhotoCatalog
 import dev.shehran.rawcull.data.repository.SettingsRepository
@@ -43,6 +44,7 @@ class LibraryViewModel(
     repository: PhotoCatalog,
     private val settings: SettingsRepository,
     locations: LocationRepository,
+    collections: CollectionRepository,
     jobs: ImportJobDao,
     scanCoordinator: ScanCoordinator,
     private val writeQueue: XmpWriteQueue,
@@ -60,8 +62,9 @@ class LibraryViewModel(
     private val slideshow = SlideshowController(store, view, selection, settings, slideshowClock)
     private val deletion = DeletionController(store, repository, writeQueue, deletions, scanCoordinator, culling, selection)
     private val location = LocationController(
-        store, repository, settings, locations, jobs, scanCoordinator, startupFinished, view, culling, deletion, histogram,
+        store, repository, settings, locations, collections, jobs, scanCoordinator, startupFinished, view, culling, deletion, histogram,
     )
+    private val collectionControl = CollectionController(store, collections, settings, view, location::setScope)
 
     val uiState: StateFlow<LibraryUiState> = store.state.asStateFlow()
 
@@ -80,6 +83,7 @@ class LibraryViewModel(
             settings.viewingPrefs.collect { prefs -> store.update { it.copy(viewing = prefs) } }
         }
         location.observeFolders()
+        collectionControl.start()
     }
 
     // --- NAVIGATION ---
@@ -281,6 +285,35 @@ class LibraryViewModel(
 
     fun toggleFolder(path: String) = location.toggleFolder(path)
 
+    // --- COLLECTIONS (R7 D5, D6) ---
+    fun createCollection(name: String, parentId: Long?, thenAddPhotos: Boolean = false) =
+        collectionControl.create(name, parentId, isSet = false, thenAddTargets = thenAddPhotos)
+
+    fun createCollectionSet(name: String, parentId: Long?) = collectionControl.create(name, parentId, isSet = true)
+
+    fun renameCollection(id: Long, name: String) = collectionControl.rename(id, name)
+
+    fun moveCollection(id: Long, newParentId: Long?) = collectionControl.move(id, newParentId)
+
+    fun deleteCollection(id: Long) = collectionControl.delete(id)
+
+    fun toggleCollectionSet(id: Long) = collectionControl.toggleExpanded(id)
+
+    fun setTargetCollection(id: Long?) = collectionControl.setTarget(id)
+
+    fun openAddToCollection() = collectionControl.openAddSheet()
+
+    fun dismissAddToCollection() = collectionControl.dismissAddSheet()
+
+    fun addToCollection(id: Long) = collectionControl.add(id)
+
+    /** B. */
+    fun toggleInTargetCollection() = collectionControl.toggleTarget()
+
+    fun removeFromCollection() = collectionControl.removeFromActive()
+
+    fun undoCollectionChange() = collectionControl.undo()
+
     /** Re-checks volumes after a resume or a media broadcast; a scan isn't reading while idle. */
     fun refreshSources() = location.refreshSources()
 
@@ -380,6 +413,7 @@ class LibraryViewModel(
                     repository = app.container.catalogRepository,
                     settings = app.container.settingsRepository,
                     locations = app.container.locationRepository,
+                    collections = app.container.collectionRepository,
                     jobs = app.container.database.importJobDao(),
                     scanCoordinator = app.container.scanCoordinator,
                     writeQueue = app.container.xmpWriteQueue,

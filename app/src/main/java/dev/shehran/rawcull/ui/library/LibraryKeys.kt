@@ -23,6 +23,7 @@ import dev.shehran.rawcull.library.LibraryKeymap
 
 private val KEYS: Map<Key, LibraryKey> = mapOf(
     Key.A to LibraryKey.A,
+    Key.B to LibraryKey.B,
     Key.C to LibraryKey.C,
     Key.D to LibraryKey.D,
     Key.E to LibraryKey.E,

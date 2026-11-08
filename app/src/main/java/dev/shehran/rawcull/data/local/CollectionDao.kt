@@ -77,6 +77,12 @@ interface CollectionDao {
     suspend fun members(collectionId: Long): List<PhotoAsset>
 
     @Query(
+        "SELECT p.* FROM photo_assets p JOIN collection_items i ON i.assetId = p.id " +
+            "WHERE i.collectionId = :collectionId ORDER BY i.position, i.addedAt, i.assetId",
+    )
+    fun observeMembers(collectionId: Long): Flow<List<PhotoAsset>>
+
+    @Query(
         "SELECT c.* FROM collections c JOIN collection_items i ON i.collectionId = c.id " +
             "WHERE i.assetId = :assetId ORDER BY c.name COLLATE NOCASE",
     )

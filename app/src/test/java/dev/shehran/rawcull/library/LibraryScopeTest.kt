@@ -55,4 +55,22 @@ class LibraryScopeTest {
     fun `no locations restores nothing`() {
         assertNull(LibraryRestore.resolve(emptyList(), 1, "x", "y").location)
     }
+
+    @Test
+    fun `a collection is saved on its own and wins over a folder on restore`() {
+        assertEquals(7L, LibraryScope.Collection(7).savedCollectionId)
+        assertEquals("", LibraryScope.Collection(7).savedFolder)
+        assertNull(LibraryScope.Folder("a").savedCollectionId)
+        assertEquals(LibraryScope.Collection(7), LibraryScope.fromSaved("2026", 7))
+        assertEquals(LibraryScope.Folder("2026"), LibraryScope.fromSaved("2026", null))
+
+        val restored = LibraryRestore.resolve(listOf(location(1)), 1, "", "asset", savedCollectionId = 7)
+        assertEquals(LibraryScope.Collection(7), restored.scope)
+    }
+
+    @Test
+    fun `a collection of a removed location is not restored`() {
+        val restored = LibraryRestore.resolve(listOf(location(1)), 9, "", "asset", savedCollectionId = 7)
+        assertEquals(LibraryScope.All, restored.scope)
+    }
 }
