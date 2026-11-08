@@ -102,7 +102,13 @@ class RawCatalogRepository(
     }
 
     override suspend fun removeRows(ids: List<String>) = withContext(Dispatchers.IO) {
-        database.withTransaction { ids.chunked(MAX_IDS_PER_QUERY).forEach { dao.deleteByIds(it) } }
+        val collections = database.collectionDao()
+        database.withTransaction {
+            ids.chunked(MAX_IDS_PER_QUERY).forEach {
+                dao.deleteByIds(it)
+                collections.deleteItemsForAssets(it) // Deleted photos leave every collection (D3)
+            }
+        }
     }
 
     /** The ids whose [value] differs between before and after, grouped by the new value. */

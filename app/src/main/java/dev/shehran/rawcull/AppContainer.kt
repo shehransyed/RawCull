@@ -23,6 +23,7 @@ import dev.shehran.rawcull.data.preview.SafPreviewFiles
 import dev.shehran.rawcull.data.preview.ThumbnailStore
 import dev.shehran.rawcull.data.repository.LegacyPreviewCache
 import dev.shehran.rawcull.data.repository.LocationRepository
+import dev.shehran.rawcull.data.repository.CollectionRepository
 import dev.shehran.rawcull.data.repository.RawCatalogRepository
 import dev.shehran.rawcull.data.repository.SafLocationAccess
 import dev.shehran.rawcull.data.repository.SettingsRepository
@@ -76,9 +77,11 @@ class AppContainer(context: Context) {
     )
     val catalogRepository: RawCatalogRepository =
         RawCatalogRepository(appContext, database, photoDao, xmpWriteQueue)
+    val collectionRepository: CollectionRepository = CollectionRepository(database)
     val locationRepository: LocationRepository = LocationRepository(
         locations = database.locationDao(),
         photos = photoDao,
+        collections = collectionRepository,
         access = SafLocationAccess(appContext),
         flushXmp = { xmpWriteQueue.flushNow() },
         isGrantInUse = { treeUri -> treeUri in settingsRepository.volumeGrants.first().values },

@@ -121,3 +121,5 @@ Smart collections, RapidRAW album sync, a map view, reverse geocoding, GPX track
 (Claude Code: S1–S3 add one-line deviations under *Running notes*; S4 writes the rest.)
 
 ### Running notes
+- R7.1: the v6 → v7 migration test is `Migration6To7Test` (Robolectric, so `check.sh` runs it): Robolectric can't read test assets, so it builds v6 from `schemas/.../6.json` and opens it with the real AutoMigration and Room's schema check. No device case added to `MigrationTest`.
+- R7.1: open question: relink drops a Location's rows and asset ids include `rootUri`, so after a relink a collection's items no longer match the rescanned photos (they stay, skipped). Needs an id remap on relink; not in this round's tasks.

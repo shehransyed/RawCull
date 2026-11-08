@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import dev.shehran.rawcull.data.local.AppDatabase
 import dev.shehran.rawcull.data.model.DEMO_ROOT_URI
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.PhotoCollection
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.XmpSyncStatus
 import kotlinx.coroutines.test.runTest
@@ -59,6 +60,7 @@ class LocationRepositoryTest {
         repository = LocationRepository(
             locations = database.locationDao(),
             photos = database.rawPhotoDao(),
+            collections = CollectionRepository(database),
             access = access,
             flushXmp = {
                 flushes++
@@ -173,6 +175,37 @@ class LocationRepositoryTest {
         assertNull(repository.get(id))
         assertTrue(database.rawPhotoDao().getIdsByRoot("content://tree/A").isEmpty())
         assertEquals(listOf("content://tree/A"), access.released)
+    }
+
+    @Test
+    fun `remove deletes the location's collections and leaves other locations' alone`() = runTest {
+        val collections = CollectionRepository(database)
+        val a = repository.add("content://tree/A")!!.id
+        val b = repository.add("content://tree/B")!!.id
+        val set = (collections.createSet(a, "Weddings") as CollectionChange.Done).id
+        val inSet = (collections.createCollection(a, "Smith", parentId = set) as CollectionChange.Done).id
+        val other = (collections.createCollection(b, "Keep") as CollectionChange.Done).id
+        collections.add(inSet, listOf("a1", "a2"))
+        collections.add(other, listOf("b1"))
+
+        assertEquals(LocationChange.Done, repository.remove(a))
+
+        assertTrue(collections.tree(a).byId.isEmpty())
+        assertTrue(collections.memberIds(inSet).isEmpty())
+        assertEquals(listOf("Keep"), collections.tree(b).rows().map { it.collection.name })
+        assertEquals(listOf("b1"), collections.memberIds(other))
+    }
+
+    @Test
+    fun `removing the demo library removes the demo's collections`() = runTest {
+        val collections = CollectionRepository(database)
+        val demo = repository.demo()
+        val key = PhotoCollection.locationKey(demo)
+        collections.createCollection(key, "Picks")
+
+        repository.remove(demo.id)
+
+        assertTrue(collections.tree(key).byId.isEmpty())
     }
 
     @Test

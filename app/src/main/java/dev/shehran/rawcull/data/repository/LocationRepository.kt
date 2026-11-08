@@ -6,6 +6,7 @@ import dev.shehran.rawcull.data.local.LocationDao
 import dev.shehran.rawcull.data.local.RawPhotoDao
 import dev.shehran.rawcull.data.model.DEMO_ROOT_URI
 import dev.shehran.rawcull.data.model.LibraryLocation
+import dev.shehran.rawcull.data.model.PhotoCollection
 import dev.shehran.rawcull.util.SafPermissions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -37,6 +38,7 @@ sealed interface LocationChange {
 class LocationRepository(
     private val locations: LocationDao,
     private val photos: RawPhotoDao,
+    private val collections: CollectionRepository,
     private val access: LocationAccess,
     private val flushXmp: suspend () -> Unit,
     /** Whether anything other than this Location still needs the grant (a card's volume entry). */
@@ -98,12 +100,13 @@ class LocationRepository(
         LocationChange.Done
     }
 
-    /** Forgets the Location and its catalog rows. The files themselves are left alone. */
+    /** Forgets the Location, its catalog rows and its collections. The files themselves are left alone. */
     suspend fun remove(id: Long): LocationChange = withContext(Dispatchers.IO) {
         val location = locations.getById(id) ?: return@withContext LocationChange.Done
         unsavedRefusal(location, "removing")?.let { return@withContext it }
 
         photos.deleteByRoot(location.treeUri)
+        collections.deleteForLocation(PhotoCollection.locationKey(location))
         locations.delete(location)
         if (!location.isDemo) releaseUnlessUsed(location.treeUri)
         LocationChange.Done

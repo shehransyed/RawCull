@@ -46,6 +46,7 @@ data class ImportJob(
     val failedFiles: Int = 0,
     @ColumnInfo(defaultValue = "0")
     val activeMillis: Long = 0, // Time spent running, so pauses count towards neither elapsed time nor speed
+    val collectionId: Long? = null, // Each verified group is added to this collection (D8)
 )
 
 enum class ImportItemState {

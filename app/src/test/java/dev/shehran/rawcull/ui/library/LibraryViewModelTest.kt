@@ -17,6 +17,7 @@ import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.repository.HistogramMode
 import dev.shehran.rawcull.data.repository.LocationAccess
+import dev.shehran.rawcull.data.repository.CollectionRepository
 import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.PhotoCatalog
 import dev.shehran.rawcull.data.repository.SettingsRepository
@@ -157,6 +158,7 @@ class LibraryViewModelTest {
         locations = LocationRepository(
             locations = database.locationDao(),
             photos = dao,
+            collections = CollectionRepository(database),
             access = AlwaysThere(),
             flushXmp = {},
             isGrantInUse = { false },

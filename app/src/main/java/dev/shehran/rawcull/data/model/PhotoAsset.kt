@@ -1,5 +1,6 @@
 package dev.shehran.rawcull.data.model
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -123,6 +124,13 @@ data class PhotoAsset(
     val darktableXmpUri: String? = null, // <name>.<ext>.xmp, kept up to date alongside xmpFileUri
     val xmpPendingFields: Int = 0, // XmpField bits changed in RawCull and not on disk yet
     val lastImportJobId: Long? = null, // The import that last brought this asset into the library
+
+    // Location (D12): from the sidecar's exif:GPS* if it has one, else the file's own EXIF
+    val gpsLatitude: Double? = null,
+    val gpsLongitude: Double? = null,
+    val gpsAltitude: Double? = null, // Metres above sea level
+    @ColumnInfo(defaultValue = "0")
+    val gpsInFile: Boolean = false, // The file's own EXIF has a location, which other apps will see
 ) {
     val hasCompanion: Boolean
         get() = !companionFileUri.isNullOrBlank()

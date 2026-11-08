@@ -10,12 +10,14 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.AutoMigrationSpec
 import androidx.sqlite.db.SupportSQLiteDatabase
+import dev.shehran.rawcull.data.model.CollectionItem
 import dev.shehran.rawcull.data.model.ImportJob
 import dev.shehran.rawcull.data.model.ImportJobItem
 import dev.shehran.rawcull.data.model.ImportPreset
 import dev.shehran.rawcull.data.model.ImportedFile
 import dev.shehran.rawcull.data.model.LibraryLocation
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.model.PhotoCollection
 import dev.shehran.rawcull.data.model.StructureMode
 
 @Database(
@@ -26,12 +28,15 @@ import dev.shehran.rawcull.data.model.StructureMode
         ImportedFile::class,
         ImportJob::class,
         ImportJobItem::class,
+        PhotoCollection::class,
+        CollectionItem::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 4, to = 5, spec = AppDatabase.SeedStandardPreset::class),
         AutoMigration(from = 5, to = 6),
+        AutoMigration(from = 6, to = 7),
     ],
 )
 @TypeConverters(Converters::class)
@@ -41,6 +46,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun importPresetDao(): ImportPresetDao
     abstract fun importedFileDao(): ImportedFileDao
     abstract fun importJobDao(): ImportJobDao
+    abstract fun collectionDao(): CollectionDao
 
     /** Upgrades get the preset here; fresh installs get it from [SeedOnCreate]. */
     class SeedStandardPreset : AutoMigrationSpec {
