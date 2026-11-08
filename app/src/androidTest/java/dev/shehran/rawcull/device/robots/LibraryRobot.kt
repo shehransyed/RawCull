@@ -58,6 +58,45 @@ class LibraryRobot(private val rule: MainRule) {
         return checkNotNull(found).name
     }
 
+    /** [press] with modifiers held. */
+    fun pressWith(key: Key, ctrl: Boolean = false, shift: Boolean = false) = apply {
+        val screen = rule.onNode(hasTestTag(SCREEN), useUnmergedTree = true)
+        screen.performSemanticsAction(SemanticsActions.RequestFocus)
+        screen.performKeyInput {
+            if (ctrl) keyDown(Key.CtrlLeft)
+            if (shift) keyDown(Key.ShiftLeft)
+            pressKey(key)
+            if (shift) keyUp(Key.ShiftLeft)
+            if (ctrl) keyUp(Key.CtrlLeft)
+        }
+        rule.waitForIdle()
+    }
+
+    fun state() = viewModel.uiState.value
+
+    /** The photo on screen right now, as the ViewModel has it. */
+    fun current() = state().currentPhoto
+
+    fun await(timeoutMs: Long = DEFAULT_TIMEOUT_MS, condition: () -> Boolean) = apply { rule.waitUntil(timeoutMs, condition) }
+
+    /** A photo's row by file name, straight from the ViewModel's list. */
+    fun photo(name: String) = checkNotNull(state().photos.firstOrNull { it.fileName == name }) { "No $name in ${state().photos.map { it.fileName }}" }
+
+    fun select(name: String) = apply {
+        rule.runOnUiThread { viewModel.selectPhotoIndex(state().filteredPhotos.indexOfFirst { it.fileName == name }) }
+        rule.waitForIdle()
+    }
+
+    /** Fixture tree [tree] filled with [count] synthetic JPEGs, added as a Location, grid showing them. */
+    fun seed(tree: String, count: Int, before: (java.io.File) -> Unit = {}): java.io.File {
+        val context = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        val dir = dev.shehran.rawcull.qa.FixtureDocumentsProvider.dir(context, tree)
+        dev.shehran.rawcull.device.ImportFixtures.jpegs(dir, count)
+        before(dir)
+        openTab().addLocation(dev.shehran.rawcull.qa.FixtureDocumentsProvider.treeUri(context, tree)).awaitGroups(count, timeoutMs = 60_000)
+        return dir
+    }
+
     companion object {
         const val NAV_TAB = "nav_library"
         const val SCREEN = "library_screen"

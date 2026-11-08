@@ -43,4 +43,18 @@ object ImportFixtures {
  xmp:Rating="$rating" qa:Keep="yes"/></rdf:RDF></x:xmpmeta>""",
         )
     }
+
+    /**
+     * [count] small JPEGs `<prefix>_0001.JPG`…, no EXIF, with file times a minute apart from
+     * 2024-06-01 so date order equals name order. Returns the file names.
+     */
+    fun jpegs(dir: File, count: Int, prefix: String = "LIB"): List<String> = (1..count).map { i ->
+        val name = "${prefix}_%04d.JPG".format(i)
+        val file = File(dir, name)
+        undatedJpeg(file, shade = Color.rgb(20 + i * 10, 90, 160))
+        file.setLastModified(BASE_TIME + i * 60_000L)
+        name
+    }
+
+    private const val BASE_TIME = 1_717_200_000_000L // 2024-06-01T00:00:00Z
 }
