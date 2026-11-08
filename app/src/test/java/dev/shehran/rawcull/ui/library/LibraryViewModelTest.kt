@@ -4,10 +4,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.lifecycle.viewModelScope
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import dev.shehran.rawcull.data.preview.FakePreviewRepository
 import dev.shehran.rawcull.data.deletion.DeletionGateway
 import dev.shehran.rawcull.data.local.AppDatabase
 import dev.shehran.rawcull.data.model.CullStatus
@@ -15,9 +15,10 @@ import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.LibraryLocation
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.data.preview.FakePreviewRepository
+import dev.shehran.rawcull.data.repository.CollectionRepository
 import dev.shehran.rawcull.data.repository.HistogramMode
 import dev.shehran.rawcull.data.repository.LocationAccess
-import dev.shehran.rawcull.data.repository.CollectionRepository
 import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.PhotoCatalog
 import dev.shehran.rawcull.data.repository.SettingsRepository
@@ -28,8 +29,8 @@ import dev.shehran.rawcull.data.xmp.XMP_TOOLKIT
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
 import dev.shehran.rawcull.library.CullChange
 import dev.shehran.rawcull.library.CullEdit
-import dev.shehran.rawcull.library.SlideshowClock
 import dev.shehran.rawcull.library.LibraryScope
+import dev.shehran.rawcull.library.SlideshowClock
 import dev.shehran.rawcull.util.xmp.XmpPrefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -38,6 +39,7 @@ import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -55,19 +57,25 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.util.concurrent.CopyOnWriteArrayList
 
 /** The real ViewModel on a fake catalog and a fake trash. */
 @OptIn(ExperimentalCoroutinesApi::class, DelicateCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class LibraryViewModelTest {
+    @get:Rule
+    val tempFolder = TemporaryFolder()
+
     private class FakeCatalog : PhotoCatalog {
         val rows = MutableStateFlow<List<PhotoAsset>>(emptyList())
-        val writes = ArrayList<CullChange>()
+        val writes = CopyOnWriteArrayList<CullChange>() // Written on Main, read by the test
 
         override fun observeScope(rootUri: String, scope: LibraryScope): Flow<List<PhotoAsset>> = rows
         override fun observeFolderCounts(rootUri: String): Flow<Map<String, Int>> = flowOf(emptyMap())
@@ -125,6 +133,7 @@ class LibraryViewModelTest {
     private val gateway = FakeGateway()
     private lateinit var database: AppDatabase
     private lateinit var settings: SettingsRepository
+    private lateinit var settingsScope: CoroutineScope
     private lateinit var locations: LocationRepository
     private lateinit var main: ExecutorCoroutineDispatcher
     private lateinit var viewModel: LibraryViewModel
@@ -154,7 +163,11 @@ class LibraryViewModelTest {
         Dispatchers.setMain(main)
         database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
         val dao = database.rawPhotoDao()
-        settings = SettingsRepository(context)
+        // A DataStore of its own: the app's is one per process, so it would carry one test's settings into the next.
+        settingsScope = CoroutineScope(Dispatchers.IO + Job())
+        settings = SettingsRepository(
+            PreferenceDataStoreFactory.create(scope = settingsScope) { tempFolder.newFile("settings.preferences_pb").also { it.delete() } },
+        )
         locations = LocationRepository(
             locations = database.locationDao(),
             photos = dao,
@@ -163,14 +176,6 @@ class LibraryViewModelTest {
             flushXmp = {},
             isGrantInUse = { false },
         )
-        // Settings outlive a test and every database starts its ids at 1, so a new Location 1 would
-        // inherit what an earlier test saved for its own. The seed row moves each test's ids on.
-        idBase += ID_STEP
-        runBlocking {
-            database.locationDao().insert(
-                LibraryLocation(id = idBase, treeUri = "seed", displayName = "seed", addedAt = 0, lastOpenedAt = 0),
-            )
-        }
         val store = LocalSidecarStore()
         val stores = SidecarStores(store, store)
         val appScope = CoroutineScope(Job())
@@ -198,9 +203,13 @@ class LibraryViewModelTest {
         // Nothing of this test may still be using Main when the next one swaps it.
         runBlocking { viewModel.viewModelScope.coroutineContext.job.cancelAndJoin() }
         database.close()
+        settingsScope.cancel()
         Dispatchers.resetMain()
         main.close()
     }
+
+    /** ViewModel calls run on Main, as the UI's do: from the test thread they would race its own updates. */
+    private fun <T> onMain(block: LibraryViewModel.() -> T): T = runBlocking(main) { viewModel.block() }
 
     private fun waitUntil(condition: () -> Boolean) = runBlocking {
         withTimeout(TIMEOUT_MS) { while (!condition()) delay(5) }
@@ -210,7 +219,7 @@ class LibraryViewModelTest {
     private fun open(vararg photos: PhotoAsset): LibraryLocation {
         val location = runBlocking { checkNotNull(locations.add("content://tree/${System.nanoTime()}")) }
         catalog.rows.value = photos.toList()
-        viewModel.selectLocation(location.id)
+        onMain { selectLocation(location.id) }
         waitUntil { state.activeLocation?.id == location.id && state.filteredPhotos.size == photos.size }
         return location
     }
@@ -220,7 +229,7 @@ class LibraryViewModelTest {
     private fun status(id: String) = catalog.rows.value.first { it.id == id }.cullStatus
 
     private fun select(vararg ids: String) {
-        ids.forEach { viewModel.togglePhotoSelection(it) }
+        ids.forEach { onMain { togglePhotoSelection(it) } }
         waitUntil { state.selectedPhotoIds == ids.toSet() }
     }
 
@@ -229,7 +238,7 @@ class LibraryViewModelTest {
         open(photo("a"), photo("b"), photo("c"))
         select("a", "b")
 
-        viewModel.apply(CullEdit.Rating(4, toggle = false))
+        onMain { apply(CullEdit.Rating(4, toggle = false)) }
         waitUntil { catalog.writes.isNotEmpty() }
 
         assertEquals(1, catalog.writes.size)
@@ -237,7 +246,7 @@ class LibraryViewModelTest {
         assertEquals(0, rating("c"))
         waitUntil { state.canUndo }
 
-        viewModel.undo()
+        onMain { undo() }
         waitUntil { rating("a") == 0 && rating("b") == 0 }
         assertFalse(state.canUndo)
     }
@@ -247,7 +256,7 @@ class LibraryViewModelTest {
         open(photo("a"), photo("b"))
         val current = checkNotNull(state.selectedPhotoId)
 
-        viewModel.apply(CullEdit.Flag(CullStatus.PICK))
+        onMain { apply(CullEdit.Flag(CullStatus.PICK)) }
         waitUntil { catalog.writes.isNotEmpty() }
 
         assertEquals(listOf(current), catalog.writes.single().ids)
@@ -257,25 +266,25 @@ class LibraryViewModelTest {
     fun `undo restores each photo's own state`() {
         open(photo("a", rating = 1), photo("b", rating = 2, status = CullStatus.PICK), photo("c", rating = 5))
         select("a", "b", "c")
-        viewModel.apply(CullEdit.Rating(4, toggle = false))
+        onMain { apply(CullEdit.Rating(4, toggle = false)) }
         waitUntil { rating("a") == 4 && rating("b") == 4 && rating("c") == 4 }
 
-        viewModel.undo()
+        onMain { undo() }
         waitUntil { rating("a") == 1 }
 
         assertEquals(2, rating("b"))
         assertEquals(5, rating("c"))
         assertEquals(CullStatus.PICK, status("b"))
 
-        viewModel.redo()
+        onMain { redo() }
         waitUntil { rating("a") == 4 && rating("c") == 4 }
     }
 
     @Test
     fun `an edit that changes nothing leaves no undo step`() {
         open(photo("a", rating = 5))
-        viewModel.apply(CullEdit.RatingStep(1))
-        runBlocking { delay(50) }
+        onMain { apply(CullEdit.RatingStep(1)) }
+        onMain { } // Anything apply launched on Main has started by now
         assertTrue(catalog.writes.isEmpty())
         assertFalse(state.canUndo)
     }
@@ -283,14 +292,14 @@ class LibraryViewModelTest {
     @Test
     fun `auto-advance moves on without skipping when photos leave the filter`() {
         open(photo("a"), photo("b"), photo("c"))
-        viewModel.updateFilter { it.copy(flags = setOf(CullStatus.UNFLAGGED)) }
+        onMain { updateFilter { it.copy(flags = setOf(CullStatus.UNFLAGGED)) } }
         val order = state.filteredPhotos.map { it.id }
         val visited = ArrayList<String>()
 
         repeat(3) { round ->
             val current = checkNotNull(state.selectedPhotoId)
             visited += current
-            viewModel.apply(CullEdit.Flag(CullStatus.PICK), advance = true)
+            onMain { apply(CullEdit.Flag(CullStatus.PICK), advance = true) }
             waitUntil { state.filteredPhotos.size == 2 - round }
         }
 
@@ -300,11 +309,11 @@ class LibraryViewModelTest {
     @Test
     fun `advance stays on the last photo`() {
         open(photo("a"), photo("b"))
-        viewModel.lastPhoto()
+        onMain { lastPhoto() }
         val last = state.filteredPhotos.last().id
         waitUntil { state.selectedPhotoId == last }
 
-        viewModel.apply(CullEdit.Rating(3), advance = true)
+        onMain { apply(CullEdit.Rating(3), advance = true) }
         waitUntil { catalog.writes.isNotEmpty() }
 
         assertEquals(last, state.selectedPhotoId)
@@ -316,7 +325,7 @@ class LibraryViewModelTest {
         val current = state.selectedPhotoId
         select("a", "b")
 
-        viewModel.apply(CullEdit.Rating(3, toggle = false), advance = true)
+        onMain { apply(CullEdit.Rating(3, toggle = false), advance = true) }
         waitUntil { catalog.writes.isNotEmpty() }
 
         assertEquals(current, state.selectedPhotoId)
@@ -325,14 +334,14 @@ class LibraryViewModelTest {
     @Test
     fun `filters are remembered per Location`() {
         val first = open(photo("a", status = CullStatus.PICK), photo("b"))
-        viewModel.updateFilter { it.copy(flags = setOf(CullStatus.PICK)) }
+        onMain { updateFilter { it.copy(flags = setOf(CullStatus.PICK)) } }
         waitUntil { state.filteredPhotos.size == 1 }
         waitUntil { runBlocking { settings.filters(first.id) }.flags == setOf(CullStatus.PICK) }
 
         open(photo("c"), photo("d"))
         assertEquals(FilterOptions(), state.filterOptions)
 
-        viewModel.selectLocation(first.id)
+        onMain { selectLocation(first.id) }
         waitUntil { state.activeLocation?.id == first.id }
         assertEquals(setOf(CullStatus.PICK), state.filterOptions.flags)
     }
@@ -340,14 +349,14 @@ class LibraryViewModelTest {
     @Test
     fun `filters switch off and on without being forgotten`() {
         open(photo("a", status = CullStatus.PICK), photo("b"))
-        viewModel.updateFilter { it.copy(flags = setOf(CullStatus.PICK)) }
+        onMain { updateFilter { it.copy(flags = setOf(CullStatus.PICK)) } }
         waitUntil { state.filteredPhotos.size == 1 }
 
-        viewModel.toggleFilters()
+        onMain { toggleFilters() }
         waitUntil { state.filteredPhotos.size == 2 }
         assertEquals(setOf(CullStatus.PICK), state.filterOptions.flags)
 
-        viewModel.toggleFilters()
+        onMain { toggleFilters() }
         waitUntil { state.filteredPhotos.size == 1 }
     }
 
@@ -356,7 +365,7 @@ class LibraryViewModelTest {
         open(photo("a", status = CullStatus.PICK), photo("b"))
         select("a", "b")
 
-        viewModel.updateFilter { it.copy(flags = setOf(CullStatus.PICK)) }
+        onMain { updateFilter { it.copy(flags = setOf(CullStatus.PICK)) } }
 
         waitUntil { state.selectedPhotoIds == setOf("a") }
     }
@@ -365,7 +374,7 @@ class LibraryViewModelTest {
     fun `switching Location forgets the undo history and the selection`() {
         open(photo("a"), photo("b"))
         select("a")
-        viewModel.apply(CullEdit.Rating(3, toggle = false))
+        onMain { apply(CullEdit.Rating(3, toggle = false)) }
         waitUntil { state.canUndo }
 
         open(photo("c"), photo("d"))
@@ -377,24 +386,24 @@ class LibraryViewModelTest {
     @Test
     fun `esc steps back one level at a time`() {
         open(photo("a", dir = "x"), photo("b", dir = "y"))
-        viewModel.setScope(LibraryScope.Folder("x"))
-        viewModel.setViewMode(DamViewMode.LOUPE)
+        onMain { setScope(LibraryScope.Folder("x")) }
+        onMain { setViewMode(DamViewMode.LOUPE) }
         select("a")
 
-        viewModel.stepBack()
+        onMain { stepBack() }
         waitUntil { !state.isSelecting }
         assertEquals(DamViewMode.LOUPE, state.viewMode)
 
-        viewModel.stepBack()
+        onMain { stepBack() }
         waitUntil { state.viewMode == DamViewMode.GRID }
         assertEquals(LibraryScope.Folder("x"), state.scope)
 
-        viewModel.stepBack()
+        onMain { stepBack() }
         waitUntil { state.scope == LibraryScope.All }
     }
 
     private fun requestDeletion(selectionOnly: Boolean = false) {
-        viewModel.requestDeleteRejects(selectionOnly)
+        onMain { requestDeleteRejects(selectionOnly) }
         waitUntil { state.deletionPrompt != null }
     }
 
@@ -402,17 +411,17 @@ class LibraryViewModelTest {
     fun `deleting rejects removes rows and their undo entries`() {
         open(photo("a", status = CullStatus.UNFLAGGED), photo("b"))
         select("a")
-        viewModel.apply(CullEdit.Flag(CullStatus.REJECT, toggle = false))
+        onMain { apply(CullEdit.Flag(CullStatus.REJECT, toggle = false)) }
         waitUntil { status("a") == CullStatus.REJECT }
         // The catalog changed first; the request reads the ViewModel's own copy.
         waitUntil { state.rejectsCount == 1 }
-        viewModel.clearSelection()
+        onMain { clearSelection() }
 
         requestDeletion()
-        viewModel.confirmDeletion()
+        onMain { confirmDeletion() }
         waitUntil { state.trashRequest != null }
-        viewModel.onTrashRequestLaunched()
-        viewModel.onTrashResult(approved = true, restoring = false)
+        onMain { onTrashRequestLaunched() }
+        onMain { onTrashResult(approved = true, restoring = false) }
 
         waitUntil { catalog.rows.value.map { it.id } == listOf("b") }
         waitUntil { !state.canUndo }
@@ -424,10 +433,10 @@ class LibraryViewModelTest {
     fun `cancelling the system dialog deletes nothing, sidecars included`() {
         open(photo("a", status = CullStatus.REJECT))
         requestDeletion()
-        viewModel.confirmDeletion()
+        onMain { confirmDeletion() }
         waitUntil { state.trashRequest != null }
 
-        viewModel.onTrashResult(approved = false, restoring = false)
+        onMain { onTrashResult(approved = false, restoring = false) }
 
         waitUntil { state.snackbarMessage == "Nothing was deleted" }
         assertTrue(gateway.deleted.isEmpty())
@@ -439,10 +448,10 @@ class LibraryViewModelTest {
         open(photo("a", status = CullStatus.REJECT), photo("b", status = CullStatus.REJECT))
         gateway.stillThere = setOf("doc/a.ARW")
         requestDeletion()
-        viewModel.confirmDeletion()
+        onMain { confirmDeletion() }
         waitUntil { state.trashRequest != null }
 
-        viewModel.onTrashResult(approved = true, restoring = false)
+        onMain { onTrashResult(approved = true, restoring = false) }
 
         waitUntil { catalog.rows.value.map { it.id } == listOf("a") }
         assertEquals(listOf("doc/b.xmp"), gateway.deleted)
@@ -455,7 +464,7 @@ class LibraryViewModelTest {
         requestDeletion()
         assertTrue(checkNotNull(state.deletionPrompt).isAllPermanent)
 
-        viewModel.confirmDeletion()
+        onMain { confirmDeletion() }
 
         waitUntil { catalog.rows.value.isEmpty() }
         assertTrue(gateway.trashed.isEmpty())
@@ -477,14 +486,15 @@ class LibraryViewModelTest {
     fun `a later message doesn't inherit Restore`() {
         open(photo("a", status = CullStatus.REJECT), photo("b"))
         requestDeletion()
-        viewModel.confirmDeletion()
+        onMain { confirmDeletion() }
         waitUntil { state.trashRequest != null }
-        viewModel.onTrashResult(approved = true, restoring = false)
+        onMain { onTrashResult(approved = true, restoring = false) }
         waitUntil { state.snackbarAction == SnackbarAction.RESTORE }
+        waitUntil { state.filteredPhotos.map { it.id } == listOf("b") && state.selectedPhotoId == "b" }
 
-        viewModel.apply(CullEdit.Rating(3))
+        onMain { apply(CullEdit.Rating(3)) }
         waitUntil { state.canUndo }
-        viewModel.undo()
+        onMain { undo() }
 
         waitUntil { state.snackbarMessage?.startsWith("Undid") == true }
         assertEquals(null, state.snackbarAction)
@@ -493,7 +503,7 @@ class LibraryViewModelTest {
     @Test
     fun `with no rejects nothing is asked`() {
         open(photo("a"))
-        viewModel.requestDeleteRejects()
+        onMain { requestDeleteRejects() }
         waitUntil { state.snackbarMessage == "No rejected photos here" }
         assertEquals(null, state.deletionPrompt)
     }
@@ -502,9 +512,9 @@ class LibraryViewModelTest {
     fun `focus peaking starts off and toggles`() {
         open(photo("a"))
         assertFalse(state.peaking)
-        viewModel.togglePeaking()
+        onMain { togglePeaking() }
         assertTrue(state.peaking)
-        viewModel.togglePeaking()
+        onMain { togglePeaking() }
         assertFalse(state.peaking)
     }
 
@@ -513,20 +523,20 @@ class LibraryViewModelTest {
         open(photo("a"))
         assertEquals(HistogramMode.RGB_LUMA, state.viewing.histogramMode)
         try {
-            viewModel.cycleHistogramMode()
+            onMain { cycleHistogramMode() }
             waitUntil { state.viewing.histogramMode == HistogramMode.RGB }
-            viewModel.cycleHistogramMode()
+            onMain { cycleHistogramMode() }
             waitUntil { state.viewing.histogramMode == HistogramMode.LUMA }
-            viewModel.cycleHistogramMode()
+            onMain { cycleHistogramMode() }
             waitUntil { state.viewing.histogramMode == HistogramMode.RGB_LUMA }
-            viewModel.toggleHistogramLog()
+            onMain { toggleHistogramLog() }
             waitUntil { state.viewing.histogramLog }
-            viewModel.toggleHistogramOverlay()
+            onMain { toggleHistogramOverlay() }
             waitUntil { state.viewing.histogramOverlay }
         } finally {
             // Saved settings outlive this test.
-            viewModel.toggleHistogramLog()
-            viewModel.toggleHistogramOverlay()
+            onMain { toggleHistogramLog() }
+            onMain { toggleHistogramOverlay() }
             waitUntil { !state.viewing.histogramLog && !state.viewing.histogramOverlay }
         }
     }
@@ -534,15 +544,15 @@ class LibraryViewModelTest {
     @Test
     fun `full window opens on the selected photo and leaves the view underneath alone`() {
         open(photo("a"), photo("b"))
-        viewModel.setViewMode(DamViewMode.GRID)
+        onMain { setViewMode(DamViewMode.GRID) }
         val shown = checkNotNull(state.selectedPhotoId)
 
-        viewModel.enterFullWindow()
+        onMain { enterFullWindow() }
 
         assertTrue(state.fullWindow)
         assertEquals(shown, state.selectedPhotoId)
         assertEquals(DamViewMode.GRID, state.viewMode)
-        viewModel.exitFullWindow()
+        onMain { exitFullWindow() }
         assertFalse(state.fullWindow)
         assertEquals(DamViewMode.GRID, state.viewMode)
     }
@@ -550,12 +560,12 @@ class LibraryViewModelTest {
     @Test
     fun `full window from compare shows the selected photo and returns to compare`() {
         open(photo("a"), photo("b"))
-        viewModel.toggleCompareMode()
+        onMain { toggleCompareMode() }
         val shown = checkNotNull(state.selectedPhotoId)
 
-        viewModel.enterFullWindow()
+        onMain { enterFullWindow() }
         assertEquals(shown, state.currentPhoto?.id)
-        viewModel.toggleFullWindow()
+        onMain { toggleFullWindow() }
 
         assertFalse(state.fullWindow)
         assertEquals(DamViewMode.COMPARE, state.viewMode)
@@ -563,13 +573,13 @@ class LibraryViewModelTest {
 
     @Test
     fun `full window needs a photo, and esc leaves it before anything else`() {
-        viewModel.enterFullWindow()
+        onMain { enterFullWindow() }
         assertFalse(state.fullWindow)
 
         open(photo("a"), photo("b"))
-        viewModel.setViewMode(DamViewMode.LOUPE)
-        viewModel.enterFullWindow()
-        viewModel.stepBack()
+        onMain { setViewMode(DamViewMode.LOUPE) }
+        onMain { enterFullWindow() }
+        onMain { stepBack() }
 
         assertFalse(state.fullWindow)
         assertEquals(DamViewMode.LOUPE, state.viewMode)
@@ -578,11 +588,11 @@ class LibraryViewModelTest {
     @Test
     fun `culling keys edit the shown photo in full window, and advance when asked`() {
         open(photo("fw1"), photo("fw2"))
-        viewModel.enterFullWindow()
+        onMain { enterFullWindow() }
         val first = checkNotNull(state.selectedPhotoId)
         val second = state.filteredPhotos.first { it.id != first }.id
 
-        viewModel.apply(CullEdit.Rating(4))
+        onMain { apply(CullEdit.Rating(4)) }
         waitUntil { rating(first) == 4 }
         assertEquals(first, state.selectedPhotoId)
 
@@ -593,20 +603,20 @@ class LibraryViewModelTest {
     /** What the loupe does once the shown photo is up, then time passing and the UI's wake-up. */
     private fun showFor(ms: Long) {
         val shown = checkNotNull(state.slideshow?.currentId)
-        viewModel.onSlideshowPhotoShown(shown)
+        onMain { onSlideshowPhotoShown(shown) }
         clockMs += ms
-        viewModel.slideshowTick()
+        onMain { slideshowTick() }
     }
 
     @Test
     fun `a slideshow plays the view from the current photo, in full window`() {
         open(photo("a"), photo("b"), photo("c"))
-        viewModel.setViewMode(DamViewMode.GRID)
+        onMain { setViewMode(DamViewMode.GRID) }
         val ids = photoIds()
-        viewModel.selectPhotoIndex(1)
+        onMain { selectPhotoIndex(1) }
         waitUntil { state.selectedPhotoId == ids[1] }
 
-        viewModel.startSlideshow()
+        onMain { startSlideshow() }
 
         val show = checkNotNull(state.slideshow)
         assertEquals(ids, show.playlist)
@@ -621,7 +631,7 @@ class LibraryViewModelTest {
         val ids = photoIds()
         select(ids[0], ids[2])
 
-        viewModel.startSlideshow()
+        onMain { startSlideshow() }
 
         assertEquals(listOf(ids[0], ids[2]), state.slideshow?.playlist)
         assertTrue(state.selectedPhotoIds.isEmpty())
@@ -630,14 +640,14 @@ class LibraryViewModelTest {
 
     @Test
     fun `nothing to play gives a message and no show`() {
-        viewModel.startSlideshow()
+        onMain { startSlideshow() }
         assertEquals(null, state.slideshow)
         assertFalse(state.fullWindow)
 
         open(photo("a"))
-        viewModel.updateFilter { it.copy(searchQuery = "no such file") }
+        onMain { updateFilter { it.copy(searchQuery = "no such file") } }
         waitUntil { state.filteredPhotos.isEmpty() }
-        viewModel.startSlideshow()
+        onMain { startSlideshow() }
         waitUntil { state.snackbarMessage == "No photos to play" }
         assertEquals(null, state.slideshow)
     }
@@ -646,20 +656,20 @@ class LibraryViewModelTest {
     fun `the clock moves on after the interval counted from when the photo is shown`() {
         open(photo("a"), photo("b"), photo("c"))
         val ids = photoIds()
-        viewModel.startSlideshow()
-        assertEquals(null, viewModel.slideshowMsUntilAdvance())
+        onMain { startSlideshow() }
+        assertEquals(null, onMain { slideshowMsUntilAdvance() })
 
         clockMs = 20_000 // a slow load
-        viewModel.slideshowTick()
+        onMain { slideshowTick() }
         assertEquals(ids[0], state.slideshow?.currentId)
 
-        viewModel.onSlideshowPhotoShown(ids[0])
-        assertEquals(5000L, viewModel.slideshowMsUntilAdvance())
+        onMain { onSlideshowPhotoShown(ids[0]) }
+        assertEquals(5000L, onMain { slideshowMsUntilAdvance() })
         clockMs += 4999
-        viewModel.slideshowTick()
+        onMain { slideshowTick() }
         assertEquals(ids[0], state.slideshow?.currentId)
         clockMs += 1
-        viewModel.slideshowTick()
+        onMain { slideshowTick() }
 
         assertEquals(ids[1], state.slideshow?.currentId)
         assertEquals(ids[1], state.selectedPhotoId)
@@ -669,29 +679,29 @@ class LibraryViewModelTest {
     fun `pausing holds the show, and resuming gives the photo a full interval`() {
         open(photo("a"), photo("b"))
         val ids = photoIds()
-        viewModel.startSlideshow()
-        viewModel.onSlideshowPhotoShown(ids[0])
+        onMain { startSlideshow() }
+        onMain { onSlideshowPhotoShown(ids[0]) }
 
-        viewModel.toggleSlideshowPause()
+        onMain { toggleSlideshowPause() }
         assertTrue(checkNotNull(state.slideshow).isPaused)
         clockMs += 60_000
-        viewModel.slideshowTick()
+        onMain { slideshowTick() }
         assertEquals(ids[0], state.slideshow?.currentId)
 
-        viewModel.toggleSlideshowPause()
-        assertEquals(5000L, viewModel.slideshowMsUntilAdvance())
+        onMain { toggleSlideshowPause() }
+        assertEquals(5000L, onMain { slideshowMsUntilAdvance() })
     }
 
     @Test
     fun `leaving the app and zooming both pause`() {
         open(photo("a"), photo("b"))
-        viewModel.startSlideshow()
-        viewModel.onAppStop()
+        onMain { startSlideshow() }
+        onMain { onAppStop() }
         assertTrue(checkNotNull(state.slideshow).isPaused)
 
-        viewModel.toggleSlideshowPause()
+        onMain { toggleSlideshowPause() }
         assertFalse(checkNotNull(state.slideshow).isPaused)
-        viewModel.toggleZoom()
+        onMain { toggleZoom() }
         assertTrue(checkNotNull(state.slideshow).isPaused)
     }
 
@@ -699,36 +709,36 @@ class LibraryViewModelTest {
     fun `culling edits the shown photo and never advances`() {
         open(photo("a"), photo("b"))
         val ids = photoIds()
-        viewModel.setAutoAdvance(true)
+        onMain { setAutoAdvance(true) }
         waitUntil { state.autoAdvance }
-        viewModel.startSlideshow()
-        viewModel.onSlideshowPhotoShown(ids[0])
+        onMain { startSlideshow() }
+        onMain { onSlideshowPhotoShown(ids[0]) }
 
-        viewModel.apply(CullEdit.Rating(3), advance = true)
+        onMain { apply(CullEdit.Rating(3), advance = true) }
         waitUntil { rating(ids[0]) == 3 }
 
         assertEquals(ids[0], state.slideshow?.currentId)
         assertEquals(ids[0], state.selectedPhotoId)
         showFor(5000)
         assertEquals(ids[1], state.slideshow?.currentId)
-        viewModel.setAutoAdvance(false)
+        onMain { setAutoAdvance(false) }
     }
 
     @Test
     fun `arrows step and restart the interval, and jumping is ignored`() {
         open(photo("a"), photo("b"), photo("c"))
         val ids = photoIds()
-        viewModel.startSlideshow()
-        viewModel.onSlideshowPhotoShown(ids[0])
+        onMain { startSlideshow() }
+        onMain { onSlideshowPhotoShown(ids[0]) }
         clockMs += 3000
 
-        viewModel.nextPhoto()
+        onMain { nextPhoto() }
         assertEquals(ids[1], state.slideshow?.currentId)
-        assertEquals(null, viewModel.slideshowMsUntilAdvance())
-        viewModel.previousPhoto()
+        assertEquals(null, onMain { slideshowMsUntilAdvance() })
+        onMain { previousPhoto() }
         assertEquals(ids[0], state.slideshow?.currentId)
 
-        viewModel.lastPhoto()
+        onMain { lastPhoto() }
         assertEquals(ids[0], state.slideshow?.currentId)
     }
 
@@ -736,13 +746,13 @@ class LibraryViewModelTest {
     fun `ending the show returns to the view it started from with the last photo selected`() {
         open(photo("a"), photo("b"), photo("c"))
         val ids = photoIds()
-        viewModel.setViewMode(DamViewMode.LOUPE)
-        viewModel.startSlideshow()
-        viewModel.onSlideshowPhotoShown(ids[0])
+        onMain { setViewMode(DamViewMode.LOUPE) }
+        onMain { startSlideshow() }
+        onMain { onSlideshowPhotoShown(ids[0]) }
         showFor(5000)
         assertEquals(ids[1], state.slideshow?.currentId)
 
-        viewModel.stepBack()
+        onMain { stepBack() }
 
         assertEquals(null, state.slideshow)
         assertFalse(state.fullWindow)
@@ -755,29 +765,27 @@ class LibraryViewModelTest {
         open(photo("a"), photo("b"))
         val ids = photoIds()
         // Saved settings reach the state a moment later, and outlive this test.
-        viewModel.setSlideshowLoop(false)
+        onMain { setSlideshowLoop(false) }
         try {
             waitUntil { !state.viewing.slideshowLoop }
-            viewModel.startSlideshow()
-            viewModel.onSlideshowPhotoShown(ids[0])
+            onMain { startSlideshow() }
+            onMain { onSlideshowPhotoShown(ids[0]) }
             showFor(5000)
-            viewModel.onSlideshowPhotoShown(ids[1])
+            onMain { onSlideshowPhotoShown(ids[1]) }
             clockMs += 5000
-            viewModel.slideshowTick()
+            onMain { slideshowTick() }
 
             val show = checkNotNull(state.slideshow)
             assertTrue(show.hasEnded)
             assertTrue(show.isPaused)
             assertEquals(ids[1], show.currentId)
         } finally {
-            viewModel.setSlideshowLoop(true)
+            onMain { setSlideshowLoop(true) }
             waitUntil { state.viewing.slideshowLoop }
         }
     }
 
     private companion object {
-        var idBase = 0L
-        const val ID_STEP = 100L
         const val TIMEOUT_MS = 10_000L
         const val BASE_DATE = 1_700_000_000_000L
     }

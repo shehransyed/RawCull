@@ -38,9 +38,9 @@ data class ImportPrefs(
     val lastPresetId: Long? = null,
 )
 
-/** Small key-value app settings, backed by DataStore. */
-class SettingsRepository(context: Context) {
-    private val dataStore = context.applicationContext.settingsDataStore
+/** Small key-value app settings, backed by DataStore. Tests pass their own [dataStore]. */
+class SettingsRepository(private val dataStore: DataStore<Preferences>) {
+    constructor(context: Context) : this(context.applicationContext.settingsDataStore)
 
     val xmpPrefs: Flow<XmpPrefs> = dataStore.data.map {
         XmpPrefs(rejectAsNegativeRating = it[KEY_REJECT_AS_NEGATIVE_RATING] ?: true)
