@@ -69,8 +69,13 @@ class SafPreviewFiles(context: Context) : PreviewFiles {
     private val resolver = context.applicationContext.contentResolver
 
     override fun open(uri: String): OpenPreviewFile {
-        val descriptor = resolver.openFileDescriptor(Uri.parse(uri), "r")
-            ?: throw FileNotFoundException("No descriptor for $uri")
+        // Some providers (ExternalStorageProvider) throw IllegalArgumentException for a file that was
+        // deleted behind the app's back; that's "gone", like any other missing file.
+        val descriptor = try {
+            resolver.openFileDescriptor(Uri.parse(uri), "r")
+        } catch (e: IllegalArgumentException) {
+            throw FileNotFoundException("$uri is gone: ${e.message}")
+        } ?: throw FileNotFoundException("No descriptor for $uri")
         val stream = FileInputStream(descriptor.fileDescriptor)
         val channel = stream.channel
         if (descriptor.statSize >= 0 && canSeek(stream)) {
