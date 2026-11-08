@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.SdCard
 import androidx.compose.material3.Button
@@ -175,7 +176,7 @@ fun LibraryScreen(
     }
     LifecycleStartEffect(Unit) {
         viewModel.onAppStart()
-        onStopOrDispose { }
+        onStopOrDispose { viewModel.onAppStop() }
     }
     StorageChangeEffect(onChanged = viewModel::refreshSources)
     LaunchedEffect(uiState.snackbarMessage) {
@@ -201,9 +202,9 @@ fun LibraryScreen(
     val viewingPhoto = uiState.activeLocation != null && uiState.viewMode != DamViewMode.GRID
     val immersive = viewingPhoto && (layout.usesBottomBar || layout.isHeightCompact)
     // R6 D2: full window hides the shell's navigation at every width. It needs a photo to show.
-    val fullWindow = uiState.fullWindow && uiState.activeLocation != null && uiState.currentPhoto != null
-    LaunchedEffect(uiState.fullWindow, uiState.isRestoring, uiState.currentPhoto == null) {
-        if (uiState.fullWindow && !uiState.isRestoring && uiState.currentPhoto == null) viewModel.exitFullWindow()
+    val fullWindow = uiState.fullWindow && uiState.activeLocation != null && uiState.shownPhoto != null
+    LaunchedEffect(uiState.fullWindow, uiState.isRestoring, uiState.shownPhoto == null) {
+        if (uiState.fullWindow && !uiState.isRestoring && uiState.shownPhoto == null) viewModel.exitFullWindow()
     }
     LaunchedEffect(fullWindow) { if (fullWindow) keyFocus.requestFocus() }
     LaunchedEffect(immersive || fullWindow) { onImmersiveChange(immersive || fullWindow) }
@@ -289,7 +290,7 @@ fun LibraryScreen(
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val capsLock = event.isCapsLockOn
                 viewModel.onCapsLock(capsLock)
-                val action = event.toLibraryAction(capsLock, textFieldFocused) ?: return@onPreviewKeyEvent false
+                val action = event.toLibraryAction(capsLock, textFieldFocused, slideshowActive = uiState.slideshow != null) ?: return@onPreviewKeyEvent false
                 onLibraryKey(action, viewModel, keyActions)
                 true
             }
@@ -474,6 +475,7 @@ private fun LibraryContent(
                     onToggleSyncErrors = viewModel::toggleSyncErrorFilter,
                     onShowShortcuts = onShowShortcuts,
                     onFullWindow = viewModel::enterFullWindow,
+                    onSlideshow = viewModel::startSlideshow,
                     onDeleteRejects = { viewModel.requestDeleteRejects() },
                     onRescan = viewModel::rescan,
                     onRetryLocation = viewModel::retryLocation,
@@ -609,6 +611,9 @@ private fun LibraryMainView(
                         }
                     }
                     Row(modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp)) {
+                        IconButton(onClick = viewModel::startSlideshow, modifier = Modifier.testTag("loupe_slideshow_button")) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Slideshow", tint = Color.White)
+                        }
                         IconButton(
                             onClick = viewModel::enterFullWindow,
                             modifier = Modifier.testTag("loupe_full_window_button"),
@@ -752,6 +757,8 @@ private fun onLibraryKey(action: LibraryKeyAction, viewModel: LibraryViewModel, 
         LibraryKeyAction.TogglePanes -> screen.onTogglePanes()
         LibraryKeyAction.ToggleChrome -> screen.onToggleChrome()
         LibraryKeyAction.ToggleFullWindow -> viewModel.toggleFullWindow()
+        LibraryKeyAction.ToggleSlideshow -> viewModel.toggleSlideshow()
+        LibraryKeyAction.SlideshowPause -> viewModel.toggleSlideshowPause()
         LibraryKeyAction.Undo -> viewModel.undo()
         LibraryKeyAction.Redo -> viewModel.redo()
         LibraryKeyAction.SelectAll -> viewModel.selectAll()

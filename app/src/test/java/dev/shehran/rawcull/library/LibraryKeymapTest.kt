@@ -20,6 +20,7 @@ import dev.shehran.rawcull.library.LibraryKey.Digit9
 import dev.shehran.rawcull.library.LibraryKey.Down
 import dev.shehran.rawcull.library.LibraryKey.E
 import dev.shehran.rawcull.library.LibraryKey.End
+import dev.shehran.rawcull.library.LibraryKey.Enter
 import dev.shehran.rawcull.library.LibraryKey.Escape
 import dev.shehran.rawcull.library.LibraryKey.F
 import dev.shehran.rawcull.library.LibraryKey.G
@@ -177,6 +178,18 @@ class LibraryKeymapTest {
             assertNull(LibraryKeymap.actionFor(key, ctrl = true, textFieldFocused = true))
         }
         assertEquals(LibraryKeyAction.Escape, LibraryKeymap.actionFor(Escape, textFieldFocused = true))
+    }
+
+    @Test
+    fun `ctrl enter starts or ends a slideshow, and space pauses only while one is on`() {
+        assertEquals(LibraryKeyAction.ToggleSlideshow, press(Enter, ctrl = true))
+        assertNull(press(Enter))
+        assertEquals(LibraryKeyAction.ToggleZoom, LibraryKeymap.actionFor(Space))
+        assertEquals(LibraryKeyAction.SlideshowPause, LibraryKeymap.actionFor(Space, slideshowActive = true))
+        // Everything else keeps its meaning in a show: arrows step, Esc leaves, Z still zooms.
+        assertEquals(LibraryKeyAction.Next, LibraryKeymap.actionFor(Right, slideshowActive = true))
+        assertEquals(LibraryKeyAction.Escape, LibraryKeymap.actionFor(Escape, slideshowActive = true))
+        assertEquals(LibraryKeyAction.ToggleZoom, LibraryKeymap.actionFor(Z, slideshowActive = true))
     }
 
     @Test

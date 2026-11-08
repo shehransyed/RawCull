@@ -26,6 +26,7 @@ import dev.shehran.rawcull.data.xmp.XMP_TOOLKIT
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
 import dev.shehran.rawcull.library.CullChange
 import dev.shehran.rawcull.library.CullEdit
+import dev.shehran.rawcull.library.SlideshowClock
 import dev.shehran.rawcull.library.LibraryScope
 import dev.shehran.rawcull.util.xmp.XmpPrefs
 import kotlinx.coroutines.CoroutineScope
@@ -128,6 +129,9 @@ class LibraryViewModelTest {
 
     private val state get() = viewModel.uiState.value
 
+    /** The slideshow's virtual time. */
+    private var clockMs = 0L
+
     private fun photo(id: String, rating: Int = 0, status: CullStatus = CullStatus.UNFLAGGED, dir: String = "") = PhotoAsset(
         id = id,
         rootUri = "tree",
@@ -181,6 +185,7 @@ class LibraryViewModelTest {
             deletions = gateway,
             previews = FakePreviewRepository(),
             startupFinished = { awaitCancellation() }, // Restoring a session isn't what's tested here
+            slideshowClock = SlideshowClock { clockMs },
             log = {},
         )
     }
@@ -545,6 +550,193 @@ class LibraryViewModelTest {
         waitUntil { rating(first) == 4 }
         assertEquals(first, state.selectedPhotoId)
 
+    }
+
+    private fun photoIds() = state.filteredPhotos.map { it.id }
+
+    /** What the loupe does once the shown photo is up, then time passing and the UI's wake-up. */
+    private fun showFor(ms: Long) {
+        val shown = checkNotNull(state.slideshow?.currentId)
+        viewModel.onSlideshowPhotoShown(shown)
+        clockMs += ms
+        viewModel.slideshowTick()
+    }
+
+    @Test
+    fun `a slideshow plays the view from the current photo, in full window`() {
+        open(photo("a"), photo("b"), photo("c"))
+        viewModel.setViewMode(DamViewMode.GRID)
+        val ids = photoIds()
+        viewModel.selectPhotoIndex(1)
+        waitUntil { state.selectedPhotoId == ids[1] }
+
+        viewModel.startSlideshow()
+
+        val show = checkNotNull(state.slideshow)
+        assertEquals(ids, show.playlist)
+        assertEquals(ids[1], show.currentId)
+        assertTrue(state.fullWindow)
+        assertEquals(DamViewMode.GRID, state.viewMode)
+    }
+
+    @Test
+    fun `two or more selected photos are the playlist, and the selection is spent`() {
+        open(photo("a"), photo("b"), photo("c"))
+        val ids = photoIds()
+        select(ids[0], ids[2])
+
+        viewModel.startSlideshow()
+
+        assertEquals(listOf(ids[0], ids[2]), state.slideshow?.playlist)
+        assertTrue(state.selectedPhotoIds.isEmpty())
+        assertEquals(ids[0], state.selectedPhotoId)
+    }
+
+    @Test
+    fun `nothing to play gives a message and no show`() {
+        viewModel.startSlideshow()
+        assertEquals(null, state.slideshow)
+        assertFalse(state.fullWindow)
+
+        open(photo("a"))
+        viewModel.updateFilter { it.copy(searchQuery = "no such file") }
+        waitUntil { state.filteredPhotos.isEmpty() }
+        viewModel.startSlideshow()
+        waitUntil { state.snackbarMessage == "No photos to play" }
+        assertEquals(null, state.slideshow)
+    }
+
+    @Test
+    fun `the clock moves on after the interval counted from when the photo is shown`() {
+        open(photo("a"), photo("b"), photo("c"))
+        val ids = photoIds()
+        viewModel.startSlideshow()
+        assertEquals(null, viewModel.slideshowMsUntilAdvance())
+
+        clockMs = 20_000 // a slow load
+        viewModel.slideshowTick()
+        assertEquals(ids[0], state.slideshow?.currentId)
+
+        viewModel.onSlideshowPhotoShown(ids[0])
+        assertEquals(5000L, viewModel.slideshowMsUntilAdvance())
+        clockMs += 4999
+        viewModel.slideshowTick()
+        assertEquals(ids[0], state.slideshow?.currentId)
+        clockMs += 1
+        viewModel.slideshowTick()
+
+        assertEquals(ids[1], state.slideshow?.currentId)
+        assertEquals(ids[1], state.selectedPhotoId)
+    }
+
+    @Test
+    fun `pausing holds the show, and resuming gives the photo a full interval`() {
+        open(photo("a"), photo("b"))
+        val ids = photoIds()
+        viewModel.startSlideshow()
+        viewModel.onSlideshowPhotoShown(ids[0])
+
+        viewModel.toggleSlideshowPause()
+        assertTrue(checkNotNull(state.slideshow).isPaused)
+        clockMs += 60_000
+        viewModel.slideshowTick()
+        assertEquals(ids[0], state.slideshow?.currentId)
+
+        viewModel.toggleSlideshowPause()
+        assertEquals(5000L, viewModel.slideshowMsUntilAdvance())
+    }
+
+    @Test
+    fun `leaving the app and zooming both pause`() {
+        open(photo("a"), photo("b"))
+        viewModel.startSlideshow()
+        viewModel.onAppStop()
+        assertTrue(checkNotNull(state.slideshow).isPaused)
+
+        viewModel.toggleSlideshowPause()
+        assertFalse(checkNotNull(state.slideshow).isPaused)
+        viewModel.toggleZoom()
+        assertTrue(checkNotNull(state.slideshow).isPaused)
+    }
+
+    @Test
+    fun `culling edits the shown photo and never advances`() {
+        open(photo("a"), photo("b"))
+        val ids = photoIds()
+        viewModel.setAutoAdvance(true)
+        waitUntil { state.autoAdvance }
+        viewModel.startSlideshow()
+        viewModel.onSlideshowPhotoShown(ids[0])
+
+        viewModel.apply(CullEdit.Rating(3), advance = true)
+        waitUntil { rating(ids[0]) == 3 }
+
+        assertEquals(ids[0], state.slideshow?.currentId)
+        assertEquals(ids[0], state.selectedPhotoId)
+        showFor(5000)
+        assertEquals(ids[1], state.slideshow?.currentId)
+        viewModel.setAutoAdvance(false)
+    }
+
+    @Test
+    fun `arrows step and restart the interval, and jumping is ignored`() {
+        open(photo("a"), photo("b"), photo("c"))
+        val ids = photoIds()
+        viewModel.startSlideshow()
+        viewModel.onSlideshowPhotoShown(ids[0])
+        clockMs += 3000
+
+        viewModel.nextPhoto()
+        assertEquals(ids[1], state.slideshow?.currentId)
+        assertEquals(null, viewModel.slideshowMsUntilAdvance())
+        viewModel.previousPhoto()
+        assertEquals(ids[0], state.slideshow?.currentId)
+
+        viewModel.lastPhoto()
+        assertEquals(ids[0], state.slideshow?.currentId)
+    }
+
+    @Test
+    fun `ending the show returns to the view it started from with the last photo selected`() {
+        open(photo("a"), photo("b"), photo("c"))
+        val ids = photoIds()
+        viewModel.setViewMode(DamViewMode.LOUPE)
+        viewModel.startSlideshow()
+        viewModel.onSlideshowPhotoShown(ids[0])
+        showFor(5000)
+        assertEquals(ids[1], state.slideshow?.currentId)
+
+        viewModel.stepBack()
+
+        assertEquals(null, state.slideshow)
+        assertFalse(state.fullWindow)
+        assertEquals(DamViewMode.LOUPE, state.viewMode)
+        assertEquals(ids[1], state.selectedPhotoId)
+    }
+
+    @Test
+    fun `with loop off the show stops paused on the last photo`() {
+        open(photo("a"), photo("b"))
+        val ids = photoIds()
+        // Saved settings reach the state a moment later, and outlive this test.
+        viewModel.setSlideshowLoop(false)
+        try {
+            waitUntil { !state.viewing.slideshowLoop }
+            viewModel.startSlideshow()
+            viewModel.onSlideshowPhotoShown(ids[0])
+            showFor(5000)
+            viewModel.onSlideshowPhotoShown(ids[1])
+            clockMs += 5000
+            viewModel.slideshowTick()
+
+            val show = checkNotNull(state.slideshow)
+            assertTrue(show.hasEnded)
+            assertTrue(show.isPaused)
+            assertEquals(ids[1], show.currentId)
+        } finally {
+            viewModel.setSlideshowLoop(true)
+            waitUntil { state.viewing.slideshowLoop }
+        }
     }
 
     private companion object {

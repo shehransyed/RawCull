@@ -70,12 +70,14 @@ private val KEYS: Map<Key, LibraryKey> = mapOf(
     Key.MoveEnd to LibraryKey.End,
     Key.Tab to LibraryKey.Tab,
     Key.Spacebar to LibraryKey.Space,
+    Key.Enter to LibraryKey.Enter,
+    Key.NumPadEnter to LibraryKey.Enter,
     Key.Backspace to LibraryKey.Backspace,
     Key.Escape to LibraryKey.Escape,
 )
 
 /** What this key press means here, or null if it means nothing. */
-fun KeyEvent.toLibraryAction(capsLock: Boolean, textFieldFocused: Boolean): LibraryKeyAction? {
+fun KeyEvent.toLibraryAction(capsLock: Boolean, textFieldFocused: Boolean, slideshowActive: Boolean = false): LibraryKeyAction? {
     val mapped = KEYS[key] ?: return null
     return LibraryKeymap.actionFor(
         key = mapped,
@@ -85,6 +87,7 @@ fun KeyEvent.toLibraryAction(capsLock: Boolean, textFieldFocused: Boolean): Libr
         meta = isMetaPressed,
         capsLock = capsLock,
         textFieldFocused = textFieldFocused,
+        slideshowActive = slideshowActive,
     )
 }
 

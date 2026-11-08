@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.DropdownMenu
@@ -73,6 +74,7 @@ class LibraryTopBarActions(
     val onToggleSyncErrors: () -> Unit,
     val onShowShortcuts: () -> Unit,
     val onFullWindow: () -> Unit,
+    val onSlideshow: () -> Unit,
     val onDeleteRejects: () -> Unit,
     val onRescan: () -> Unit,
     val onRetryLocation: () -> Unit,
@@ -278,6 +280,13 @@ private fun OverflowMenu(uiState: LibraryUiState, actions: LibraryTopBarActions)
                 leadingIcon = { Icon(Icons.Default.Fullscreen, contentDescription = null) },
                 onClick = { choose(actions.onFullWindow) },
                 modifier = Modifier.testTag("full_window_menu_item"),
+            )
+            DropdownMenuItem(
+                text = { Text("Slideshow") },
+                enabled = uiState.filteredPhotos.isNotEmpty(),
+                leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+                onClick = { choose(actions.onSlideshow) },
+                modifier = Modifier.testTag("slideshow_menu_item"),
             )
             DropdownMenuItem(
                 text = { Text("Keyboard shortcuts") },

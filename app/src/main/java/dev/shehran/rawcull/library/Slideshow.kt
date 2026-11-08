@@ -57,6 +57,7 @@ class Slideshow(
         get() = ids.getOrNull(index)?.takeIf { !hasEnded || isAvailable(it) }
 
     val currentIndex: Int get() = index
+    val playlistIds: List<String> get() = ids
     val size: Int get() = ids.size
 
     val isPlaying: Boolean get() = !isPaused && !hasEnded

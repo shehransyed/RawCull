@@ -36,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,6 +76,9 @@ fun ZoomableLoupeView(
     swipeToFlag: Boolean = false,
     onSwipe: ((LoupeSwipe) -> Unit)? = null,
     onTap: (() -> Unit)? = null,
+    onShown: ((String) -> Unit)? = null,
+    onUserZoom: (() -> Unit)? = null,
+    refitRequest: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     val haptics = LocalHapticFeedback.current
@@ -91,18 +95,42 @@ fun ZoomableLoupeView(
         }
     }
 
+    // A new photo counts as shown once its fit preview (or its "No preview" state) is up.
+    val currentOnShown by rememberUpdatedState(onShown)
+    LaunchedEffect(content, photo?.id) {
+        val id = photo?.id
+        if (id != null && (content.image != null || content.unavailable != null)) currentOnShown?.invoke(id)
+    }
+    // The slideshow resumes at fit, whatever a pinch left behind.
+    var handledRefit by remember { mutableIntStateOf(refitRequest) }
+    LaunchedEffect(refitRequest) {
+        if (refitRequest != handledRefit) {
+            handledRefit = refitRequest
+            zoom.reset()
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(8.dp))
             .background(LoupeBackground)
             .pointerInput(photo?.id) {
-                detectTapGestures(onTap = onTap?.let { tap -> { _: Offset -> tap() } }, onDoubleTap = { tapOffset -> zoom.toggle(tapOffset) })
+                detectTapGestures(
+                    onTap = onTap?.let { tap -> { _: Offset -> tap() } },
+                    onDoubleTap = { tapOffset ->
+                        onUserZoom?.invoke()
+                        zoom.toggle(tapOffset)
+                    },
+                )
             }
             .loupeGestures(
                 key = photo?.id,
                 isZoomed = { !zoom.isAtFit },
-                onTransform = { pan, zoomBy, centroid, _ -> zoom.transform(pan, zoomBy, centroid) },
+                onTransform = { pan, zoomBy, centroid, _ ->
+                    if (zoomBy != 1f) onUserZoom?.invoke()
+                    zoom.transform(pan, zoomBy, centroid)
+                },
                 state = swipe,
                 swipeToFlag = swipeToFlag,
                 onSwipe = onSwipe?.let { handler ->

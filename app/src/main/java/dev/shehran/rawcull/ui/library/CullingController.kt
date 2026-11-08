@@ -43,7 +43,7 @@ internal class CullingController(
         val targets = if (isBatch) {
             state.photos.filter { it.id in state.selectedPhotoIds }
         } else {
-            listOfNotNull(state.currentPhoto)
+            listOfNotNull(state.shownPhoto)
         }
         if (targets.isEmpty()) return
 
@@ -55,7 +55,8 @@ internal class CullingController(
             if (isBatch) store.update { it.copy(snackbarMessage = change.summary, snackbarAction = SnackbarAction.UNDO) }
         }
         val tagging = edit is CullEdit.AddTag || edit is CullEdit.RemoveTag
-        if (!isBatch && !tagging && (advance || state.autoAdvance)) advanceFrom(targets.single(), change)
+        // In a slideshow the clock moves on, not the edit.
+        if (!isBatch && !tagging && state.slideshow == null && (advance || state.autoAdvance)) advanceFrom(targets.single(), change)
     }
 
     private fun advanceFrom(photo: PhotoAsset, change: CullChange?) {

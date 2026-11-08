@@ -6,6 +6,7 @@ import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.ImportJob
 import dev.shehran.rawcull.data.model.LibraryLocation
 import dev.shehran.rawcull.data.model.PhotoAsset
+import dev.shehran.rawcull.data.repository.ViewingPrefs
 import dev.shehran.rawcull.library.DeletionPlan
 import dev.shehran.rawcull.library.FilterCounts
 import dev.shehran.rawcull.library.FolderNode
@@ -18,6 +19,19 @@ enum class DamViewMode {
     GRID,
     COMPARE
 }
+
+/** A running slideshow, as the UI needs it (R6 D4-D6). The clock itself is in [SlideshowController]. */
+data class SlideshowUi(
+    val playlist: List<String>,
+    val currentId: String?,
+    val position: Int,
+    val isPaused: Boolean,
+    val hasEnded: Boolean,
+    /** Bumped on resume, so the loupe refits after a pinch paused the show. */
+    val refit: Int,
+    /** Bumped on every change, which restarts the UI's wait for the next photo. */
+    val version: Int,
+)
 
 enum class SnackbarAction(val label: String) {
     UNDO("Undo"),
@@ -68,6 +82,8 @@ data class LibraryUiState(
     val autoAdvance: Boolean = false,
     val swipeToFlag: Boolean = true,
     val capsLock: Boolean = false,
+    val slideshow: SlideshowUi? = null,
+    val viewing: ViewingPrefs = ViewingPrefs(),
     val fullWindow: Boolean = false, // R6 D2: the photo owns the whole window, system bars hidden
     val zoomRequest: Int = 0, // Bumped by Z and Space; the loupe on screen toggles its zoom
 ) {
@@ -82,6 +98,10 @@ data class LibraryUiState(
 
     val currentPhoto: PhotoAsset?
         get() = filteredPhotos.getOrNull(selectedIndex)
+
+    /** What culling edits and the full window shows: the slideshow's photo while one plays, else the current one. */
+    val shownPhoto: PhotoAsset?
+        get() = slideshow?.currentId?.let { id -> photos.firstOrNull { it.id == id } } ?: currentPhoto
 
     val comparePhoto: PhotoAsset?
         get() = filteredPhotos.getOrNull(compareIndex)

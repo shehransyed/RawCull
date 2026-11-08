@@ -10,7 +10,7 @@ enum class LibraryKey(val label: String) {
     Digit6("6"), Digit7("7"), Digit8("8"), Digit9("9"),
     Grave("`"), LeftBracket("["), RightBracket("]"), Backslash("\\"), Slash("/"),
     Up("↑"), Down("↓"), Left("←"), Right("→"), Home("Home"), End("End"),
-    Tab("Tab"), Space("Space"), Backspace("Backspace"), Escape("Esc"),
+    Tab("Tab"), Space("Space"), Enter("Enter"), Backspace("Backspace"), Escape("Esc"),
 }
 
 /** What a key press asks for. */
@@ -30,6 +30,8 @@ sealed interface LibraryKeyAction {
     data object TogglePanes : LibraryKeyAction
     data object ToggleChrome : LibraryKeyAction
     data object ToggleFullWindow : LibraryKeyAction
+    data object ToggleSlideshow : LibraryKeyAction
+    data object SlideshowPause : LibraryKeyAction
     data object Undo : LibraryKeyAction
     data object Redo : LibraryKeyAction
     data object SelectAll : LibraryKeyAction
@@ -113,6 +115,7 @@ object LibraryKeymap {
         add(Binding(LibraryKey.Z, LibraryKeyAction.ToggleZoom, Group.VIEWS, "Toggle fit and 1:1"))
         add(Binding(LibraryKey.Space, LibraryKeyAction.ToggleZoom, Group.VIEWS, "Toggle fit and 1:1"))
         add(Binding(LibraryKey.F, LibraryKeyAction.ToggleFullWindow, Group.VIEWS, "Full window (Esc leaves it)"))
+        add(Binding(LibraryKey.Enter, LibraryKeyAction.ToggleSlideshow, Group.VIEWS, "Slideshow: start or end", ctrl = true))
         add(Binding(LibraryKey.Tab, LibraryKeyAction.TogglePanes, Group.VIEWS, "Show or hide side panes"))
         add(Binding(LibraryKey.Tab, LibraryKeyAction.ToggleChrome, Group.VIEWS, "Show or hide all chrome", shift = true))
         add(Binding(LibraryKey.Slash, LibraryKeyAction.ShowHelp, Group.VIEWS, "Keyboard shortcuts", ctrl = true))
@@ -149,10 +152,13 @@ object LibraryKeymap {
         meta: Boolean = false,
         capsLock: Boolean = false,
         textFieldFocused: Boolean = false,
+        slideshowActive: Boolean = false,
     ): LibraryKeyAction? {
         if (textFieldFocused) return LibraryKeyAction.Escape.takeIf { key == LibraryKey.Escape }
         if (alt) return null
         val control = ctrl || meta
+        // In a slideshow Space pauses, since zooming there would stop the show anyway.
+        if (slideshowActive && key == LibraryKey.Space && !control && !shift) return LibraryKeyAction.SlideshowPause
 
         byPress[Triple(key, control, shift)]?.let { return withAdvance(it.action, capsLock) }
         // Shift on a culling key means "and advance"; it has no binding of its own.
@@ -171,13 +177,22 @@ object LibraryKeymap {
         val rows = bindings.filter { it.group == group }
             .groupBy { it.description }
             .map { (description, same) -> ShortcutRow(same.joinToString(", ") { it.keys }, description) }
-        val extras = if (group == Group.FLAGS) ADVANCE_ROWS else emptyList()
+        val extras = when (group) {
+            Group.FLAGS -> ADVANCE_ROWS
+            Group.VIEWS -> SLIDESHOW_ROWS
+            else -> emptyList()
+        }
         ShortcutGroup(group.title, rows + extras)
     }
 
     /** One entry per bound key combination, for checking the sheet against the map. */
     val boundKeys: List<String> get() = bindings.map { it.keys }
 }
+
+private val SLIDESHOW_ROWS = listOf(
+    ShortcutRow("Space (in a slideshow)", "Pause or resume"),
+    ShortcutRow("← → (in a slideshow)", "Previous or next photo, restarting its time"),
+)
 
 private val ADVANCE_ROWS = listOf(
     ShortcutRow("Shift + flag, rating or label key", "Apply and go to the next photo"),

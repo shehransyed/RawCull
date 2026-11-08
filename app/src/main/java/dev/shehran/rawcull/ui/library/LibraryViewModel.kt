@@ -2,6 +2,7 @@ package dev.shehran.rawcull.ui.library
 
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -23,6 +24,7 @@ import dev.shehran.rawcull.data.repository.SettingsRepository
 import dev.shehran.rawcull.data.scan.ScanCoordinator
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
 import dev.shehran.rawcull.library.CullEdit
+import dev.shehran.rawcull.library.SlideshowClock
 import dev.shehran.rawcull.library.GridNavigation
 import dev.shehran.rawcull.library.LibraryScope
 import dev.shehran.rawcull.library.LoupeSwipe
@@ -47,12 +49,14 @@ class LibraryViewModel(
     previews: PreviewRepository,
     startupFinished: suspend () -> Unit,
     log: (String) -> Unit = { Log.i("RawCull.Library", it) },
+    slideshowClock: SlideshowClock = SlideshowClock { SystemClock.elapsedRealtime() },
 ) : ViewModel() {
     private val store = LibraryStore(viewModelScope, log)
     private val histogram = HistogramLoader(store, previews)
     private val view = ViewController(store, settings, scanCoordinator, histogram)
     private val culling = CullingController(store, repository, view)
     private val selection = SelectionController(store, view)
+    private val slideshow = SlideshowController(store, view, selection, settings, slideshowClock)
     private val deletion = DeletionController(store, repository, writeQueue, deletions, scanCoordinator, culling, selection)
     private val location = LocationController(
         store, repository, settings, locations, jobs, scanCoordinator, startupFinished, view, culling, deletion, histogram,
@@ -71,20 +75,27 @@ class LibraryViewModel(
                 store.update { it.copy(autoAdvance = prefs.autoAdvance, swipeToFlag = prefs.swipeToFlag) }
             }
         }
+        viewModelScope.launch {
+            settings.viewingPrefs.collect { prefs -> store.update { it.copy(viewing = prefs) } }
+        }
         location.observeFolders()
     }
 
     // --- NAVIGATION ---
     fun selectPhotoIndex(index: Int) {
+        // The show decides which photo is up; jumping around would leave it showing another one.
+        if (store.value.slideshow != null) return
         store.value.filteredPhotos.getOrNull(index)?.let { view.selectPhoto(it.id) }
     }
 
     fun nextPhoto() {
+        if (store.value.slideshow != null) return slideshow.next()
         val current = store.value
         if (current.selectedIndex < current.filteredPhotos.size - 1) selectPhotoIndex(current.selectedIndex + 1)
     }
 
     fun previousPhoto() {
+        if (store.value.slideshow != null) return slideshow.previous()
         val current = store.value
         if (current.selectedIndex > 0) selectPhotoIndex(current.selectedIndex - 1)
     }
@@ -116,6 +127,8 @@ class LibraryViewModel(
     }
 
     fun toggleZoom() {
+        // Zooming is looking closely, so a show waits for it.
+        slideshow.pause()
         store.update { it.copy(zoomRequest = it.zoomRequest + 1) }
     }
 
@@ -123,7 +136,7 @@ class LibraryViewModel(
     fun stepBack() {
         val state = store.value
         when {
-            state.fullWindow -> exitFullWindow()
+            state.slideshow != null || state.fullWindow -> exitFullWindow()
             state.showTagDialog -> dismissTagDialog()
             state.syncDetailsPhotoId != null -> dismissSyncDetails()
             state.isSelecting -> clearSelection()
@@ -141,10 +154,32 @@ class LibraryViewModel(
     }
 
     fun exitFullWindow() {
+        slideshow.end()
         if (store.value.fullWindow) store.update { it.copy(fullWindow = false) }
     }
 
     fun toggleFullWindow() = if (store.value.fullWindow) exitFullWindow() else enterFullWindow()
+
+    // --- SLIDESHOW (R6 D4-D6) ---
+    fun startSlideshow() = slideshow.start()
+
+    fun toggleSlideshow() = if (store.value.slideshow != null) exitFullWindow() else startSlideshow()
+
+    fun endSlideshow() = exitFullWindow()
+
+    fun toggleSlideshowPause() = slideshow.togglePause()
+
+    fun pauseSlideshow() = slideshow.pause()
+
+    fun onSlideshowPhotoShown(id: String) = slideshow.photoShown(id)
+
+    fun slideshowMsUntilAdvance(): Long? = slideshow.msUntilAdvance()
+
+    fun slideshowTick() = slideshow.tick()
+
+    fun setSlideshowInterval(seconds: Int) = slideshow.setInterval(seconds)
+
+    fun setSlideshowLoop(on: Boolean) = slideshow.setLoop(on)
 
     fun setCompareIndex(index: Int) {
         val filtered = store.value.filteredPhotos
@@ -235,6 +270,9 @@ class LibraryViewModel(
     fun refreshSources() = location.refreshSources()
 
     /** Back in the foreground: the active folder is what's worth checking for changes (D12). */
+    /** The app left the screen: a show waits, and stays paused on return (R6 D6). */
+    fun onAppStop() = slideshow.pause()
+
     fun onAppStart() {
         location.rescanActiveFolder()
     }
