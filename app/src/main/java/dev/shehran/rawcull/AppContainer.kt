@@ -101,7 +101,9 @@ class AppContainer(context: Context) {
             legacyFolders = settingsRepository::legacyFolders,
             clearLegacyFolders = settingsRepository::clearLegacyFolders,
             locations = locationRepository,
-            volumeGrants = { settingsRepository.volumeGrants.first().values },
+            volumeGrants = {
+                settingsRepository.volumeGrants.first().values + listOfNotNull(BuildConfig.QA_KEPT_TREE.ifEmpty { null })
+            },
             unfinishedJobSources = { database.importJobDao().getUnfinishedSources() },
             persistedGrants = { SafPermissions.persistedUris(appContext) },
             release = { SafPermissions.release(appContext, Uri.parse(it)) },

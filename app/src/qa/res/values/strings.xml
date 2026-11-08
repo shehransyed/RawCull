@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RawCull QA</string>
+    <string name="qa_grant_label">QA folder grant</string>
+</resources>

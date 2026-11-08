@@ -77,6 +77,11 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { prefs -> ViewingPrefs.write(prefs, change(ViewingPrefs.from(prefs))) }
     }
 
+    /** Every setting back to its default. Only the qa build's reset between device tests calls it. */
+    suspend fun clearAll() {
+        dataStore.edit { it.clear() }
+    }
+
     suspend fun setPreviewCacheLimitMb(mb: Int) {
         dataStore.edit { it[KEY_PREVIEW_CACHE_LIMIT_MB] = mb }
     }

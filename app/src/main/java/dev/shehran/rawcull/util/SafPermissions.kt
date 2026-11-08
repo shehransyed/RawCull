@@ -14,14 +14,19 @@ object SafPermissions {
 
     /** Call on every OpenDocumentTree result; without this the grant dies with the process. */
     fun takePersistable(context: Context, uri: Uri): Boolean = try {
-        context.contentResolver.takePersistableUriPermission(uri, READ_WRITE)
+        if (!isOwn(context, uri)) context.contentResolver.takePersistableUriPermission(uri, READ_WRITE)
         true
     } catch (e: SecurityException) {
         Log.w(TAG, "Could not persist permission for $uri", e)
         false
     }
 
+    /** The app's own providers (the qa fixture trees) need no grant, and Android keeps none for them. */
+    private fun isOwn(context: Context, uri: Uri): Boolean =
+        uri.authority?.startsWith("${context.packageName}.") == true
+
     fun release(context: Context, uri: Uri) {
+        if (isOwn(context, uri)) return
         try {
             context.contentResolver.releasePersistableUriPermission(uri, READ_WRITE)
         } catch (e: SecurityException) {

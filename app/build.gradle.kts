@@ -16,6 +16,8 @@ android {
     versionName = "0.10.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    // R8 D9 b: only the qa build names a tree whose grant survives startup cleanup.
+    buildConfigField("String", "QA_KEPT_TREE", "\"\"")
   }
 
   signingConfigs {
@@ -50,7 +52,20 @@ android {
     debug {
       signingConfigs.findByName("debugConfig")?.let { signingConfig = it }
     }
+    // R8 D7: the device suite only ever installs this app, never the tester's own.
+    create("qa") {
+      initWith(getByName("debug"))
+      applicationIdSuffix = ".qa"
+      versionNameSuffix = "-qa"
+      matchingFallbacks += "debug"
+      buildConfigField(
+        "String",
+        "QA_KEPT_TREE",
+        "\"content://com.android.externalstorage.documents/tree/primary%3ADownload%2FRawCullQA\"",
+      )
+    }
   }
+  testBuildType = "qa"
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
@@ -127,7 +142,9 @@ dependencies {
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.room.testing)
   androidTestImplementation(libs.androidx.runner)
+  androidTestImplementation(libs.androidx.uiautomator)
   debugImplementation(libs.androidx.compose.ui.test.manifest)
+  "qaImplementation"(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
 }
