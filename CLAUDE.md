@@ -40,6 +40,9 @@ Usage limits matter on this project. These rules keep sessions small:
 - UI: `PhotoThumbnail` for every thumbnail, `LoupeImage` + `LoupeZoomState` for the loupe and compare (fit at the view's real size, true 100 %, one region tile). Both reach the repository through `LocalPreviewRepository`.
 - `util/RawMetadataParser` (ExifInterface via FileDescriptor), `util/xmp/` (`XmpDocument`, `XmpMapper`: pure sidecar model and mapping).
 - `data/xmp/` — `SidecarStore` (SAF and local), `XmpWriteQueue` (debounced writes; only a row's `xmpPendingFields` are written), `SidecarReconciler` (catalog vs file, export merge).
+- Collections (R7): `data/repository/CollectionRepository` (collections, sets, ordered members, rows in `collections` and `collection_items`, no FK to photos), pure `library/CollectionTree`, `LibraryScope.Collection`, and the internal `ui/library/CollectionController` behind the pane, the Add sheet, the B key and Custom order. Memberships are catalog-only and leave with deleted rejects and removed Locations.
+- Export (R7): `library/ExportPlan` (pure: order, `NNN_` names, time offsets), `data/export/ExportEngine` (copies through `DocumentIo`, never overwrites, rewrites times only in the copies), `ExportWorker` (thin foreground shell), `ExportController`.
+- GPS (R7): `library/GeoInput` parses pasted text and map links into a `GeoPoint`; `util/xmp/XmpGps` reads and writes `exif:GPS*`; `XmpField.GPS` is pending only for edited rows (a new sidecar never gets an unedited location); `CullEdit.SetLocation`/`ClearLocation` go through `apply`. Enrichment takes the sidecar's location first, else the file's EXIF (`CameraLocations`); the camera's location is never written to a sidecar, and Clear shows it again.
 
 ## Rules
 - **XMP sidecars are the source of truth; Room is a cache.** Never discard unknown content in an existing .xmp. Always merge through `XmpDocument`.
