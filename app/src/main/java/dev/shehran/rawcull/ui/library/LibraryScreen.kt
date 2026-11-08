@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.SdCard
@@ -196,15 +197,23 @@ fun LibraryScreen(
         }
     }
 
+    val keyFocus = remember { FocusRequester() }
     val viewingPhoto = uiState.activeLocation != null && uiState.viewMode != DamViewMode.GRID
     val immersive = viewingPhoto && (layout.usesBottomBar || layout.isHeightCompact)
-    LaunchedEffect(immersive) { onImmersiveChange(immersive) }
+    // R6 D2: full window hides the shell's navigation at every width. It needs a photo to show.
+    val fullWindow = uiState.fullWindow && uiState.activeLocation != null && uiState.currentPhoto != null
+    LaunchedEffect(uiState.fullWindow, uiState.isRestoring, uiState.currentPhoto == null) {
+        if (uiState.fullWindow && !uiState.isRestoring && uiState.currentPhoto == null) viewModel.exitFullWindow()
+    }
+    LaunchedEffect(fullWindow) { if (fullWindow) keyFocus.requestFocus() }
+    LaunchedEffect(immersive || fullWindow) { onImmersiveChange(immersive || fullWindow) }
     DisposableEffect(Unit) { onDispose { onImmersiveChange(false) } }
 
     // Innermost state first: each back press undoes one thing.
     BackHandler(enabled = viewingPhoto && !drawerState.isOpen) { viewModel.setViewMode(DamViewMode.GRID) }
     BackHandler(enabled = uiState.isSelecting && !drawerState.isOpen) { viewModel.clearSelection() }
     BackHandler(enabled = drawerState.isOpen) { coroutines.launch { drawerState.close() } }
+    BackHandler(enabled = fullWindow && !drawerState.isOpen) { viewModel.exitFullWindow() }
 
     val folderActions = FolderPaneActions(
         onSelectLocation = {
@@ -224,7 +233,6 @@ fun LibraryScreen(
         onToggleFolder = viewModel::toggleFolder,
     )
 
-    val keyFocus = remember { FocusRequester() }
     // Dialogs and sheets are windows of their own, so focus has to be taken back when they close.
     val filterSheetOpen = showFilterSheet && !layout.showsFilterBar
     val overlayOpen = showHelp || showInspectorSheet || filterSheetOpen || uiState.deletionPrompt != null ||
@@ -335,6 +343,10 @@ fun LibraryScreen(
                     onRelink = { uiState.activeLocation?.let { relink(it.id) } },
                 )
             }
+        }
+
+        if (fullWindow) {
+            FullWindow(uiState = uiState, viewModel = viewModel)
         }
 
         SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
@@ -461,6 +473,7 @@ private fun LibraryContent(
                     onToggleFilterBar = onToggleFilterBar,
                     onToggleSyncErrors = viewModel::toggleSyncErrorFilter,
                     onShowShortcuts = onShowShortcuts,
+                    onFullWindow = viewModel::enterFullWindow,
                     onDeleteRejects = { viewModel.requestDeleteRejects() },
                     onRescan = viewModel::rescan,
                     onRetryLocation = viewModel::retryLocation,
@@ -595,12 +608,17 @@ private fun LibraryMainView(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to grid", tint = Color.White)
                         }
                     }
-                    if (!layout.showsSideInspector) {
+                    Row(modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp)) {
                         IconButton(
-                            onClick = onOpenInspectorSheet,
-                            modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp).testTag("mobile_exif_button"),
+                            onClick = viewModel::enterFullWindow,
+                            modifier = Modifier.testTag("loupe_full_window_button"),
                         ) {
-                            Icon(Icons.Default.Info, contentDescription = "Photo details", tint = Color.White)
+                            Icon(Icons.Default.Fullscreen, contentDescription = "Full window", tint = Color.White)
+                        }
+                        if (!layout.showsSideInspector) {
+                            IconButton(onClick = onOpenInspectorSheet, modifier = Modifier.testTag("mobile_exif_button")) {
+                                Icon(Icons.Default.Info, contentDescription = "Photo details", tint = Color.White)
+                            }
                         }
                     }
                 }
@@ -733,6 +751,7 @@ private fun onLibraryKey(action: LibraryKeyAction, viewModel: LibraryViewModel, 
         LibraryKeyAction.ToggleZoom -> viewModel.toggleZoom()
         LibraryKeyAction.TogglePanes -> screen.onTogglePanes()
         LibraryKeyAction.ToggleChrome -> screen.onToggleChrome()
+        LibraryKeyAction.ToggleFullWindow -> viewModel.toggleFullWindow()
         LibraryKeyAction.Undo -> viewModel.undo()
         LibraryKeyAction.Redo -> viewModel.redo()
         LibraryKeyAction.SelectAll -> viewModel.selectAll()

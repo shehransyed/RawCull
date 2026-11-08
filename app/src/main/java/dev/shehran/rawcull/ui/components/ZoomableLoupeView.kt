@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
@@ -73,6 +74,7 @@ fun ZoomableLoupeView(
     autoAdvance: Boolean = false,
     swipeToFlag: Boolean = false,
     onSwipe: ((LoupeSwipe) -> Unit)? = null,
+    onTap: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val haptics = LocalHapticFeedback.current
@@ -95,7 +97,7 @@ fun ZoomableLoupeView(
             .clip(RoundedCornerShape(8.dp))
             .background(LoupeBackground)
             .pointerInput(photo?.id) {
-                detectTapGestures(onDoubleTap = { tapOffset -> zoom.toggle(tapOffset) })
+                detectTapGestures(onTap = onTap?.let { tap -> { _: Offset -> tap() } }, onDoubleTap = { tapOffset -> zoom.toggle(tapOffset) })
             }
             .loupeGestures(
                 key = photo?.id,

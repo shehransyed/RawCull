@@ -29,6 +29,8 @@ val StarEmpty = Color(0xFF475569)
 // Surfaces a shade away from the main ones, one per place they appear.
 val GridBackground = Color(0xFF090D13)
 val CompareBackground = Color(0xFF090D12)
+// Full window (R6): black, so the photo is all there is.
+val FullWindowBackground = Color(0xFF000000)
 val LoupeBackground = Color(0xFF080B0F)
 val BarSurface = Color(0xFF0F141A)
 val InsetSurface = Color(0xFF0F141C)

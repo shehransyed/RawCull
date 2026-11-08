@@ -68,6 +68,7 @@ data class LibraryUiState(
     val autoAdvance: Boolean = false,
     val swipeToFlag: Boolean = true,
     val capsLock: Boolean = false,
+    val fullWindow: Boolean = false, // R6 D2: the photo owns the whole window, system bars hidden
     val zoomRequest: Int = 0, // Bumped by Z and Space; the loupe on screen toggles its zoom
 ) {
     /** Derived, not stored: enrichment re-sorts the list, and the selection must follow the photo. */

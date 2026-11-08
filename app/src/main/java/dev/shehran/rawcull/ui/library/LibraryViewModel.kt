@@ -123,6 +123,7 @@ class LibraryViewModel(
     fun stepBack() {
         val state = store.value
         when {
+            state.fullWindow -> exitFullWindow()
             state.showTagDialog -> dismissTagDialog()
             state.syncDetailsPhotoId != null -> dismissSyncDetails()
             state.isSelecting -> clearSelection()
@@ -130,6 +131,20 @@ class LibraryViewModel(
             state.scope != LibraryScope.All -> setScope(LibraryScope.All)
         }
     }
+
+    /** R6 D2: the selected photo (the first one if none is) fills the window. Whatever view is underneath stays as it was. */
+    fun enterFullWindow() {
+        val state = store.value
+        if (state.fullWindow || state.activeLocation == null || state.filteredPhotos.isEmpty()) return
+        if (state.currentPhoto == null) selectPhotoIndex(0)
+        store.update { it.copy(fullWindow = true) }
+    }
+
+    fun exitFullWindow() {
+        if (store.value.fullWindow) store.update { it.copy(fullWindow = false) }
+    }
+
+    fun toggleFullWindow() = if (store.value.fullWindow) exitFullWindow() else enterFullWindow()
 
     fun setCompareIndex(index: Int) {
         val filtered = store.value.filteredPhotos

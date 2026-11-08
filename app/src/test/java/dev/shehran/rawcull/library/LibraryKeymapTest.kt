@@ -116,6 +116,8 @@ class LibraryKeymapTest {
         assertEquals(LibraryKeyAction.ToggleZoom, press(Space))
         assertEquals(LibraryKeyAction.TogglePanes, press(Tab))
         assertEquals(LibraryKeyAction.ToggleChrome, press(Tab, shift = true))
+        assertEquals(LibraryKeyAction.ToggleFullWindow, press(F))
+        assertEquals(LibraryKeyAction.FocusSearch, press(F, ctrl = true))
     }
 
     @Test
@@ -148,7 +150,7 @@ class LibraryKeymapTest {
 
     @Test
     fun `unbound combinations are left alone`() {
-        assertNull(press(F))
+        assertNull(press(F, shift = true))
         assertNull(press(L))
         assertNull(press(K))
         assertNull(press(P, ctrl = true))

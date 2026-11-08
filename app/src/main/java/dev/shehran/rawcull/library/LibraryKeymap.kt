@@ -29,6 +29,7 @@ sealed interface LibraryKeyAction {
     data object ToggleZoom : LibraryKeyAction
     data object TogglePanes : LibraryKeyAction
     data object ToggleChrome : LibraryKeyAction
+    data object ToggleFullWindow : LibraryKeyAction
     data object Undo : LibraryKeyAction
     data object Redo : LibraryKeyAction
     data object SelectAll : LibraryKeyAction
@@ -111,6 +112,7 @@ object LibraryKeymap {
         add(Binding(LibraryKey.C, LibraryKeyAction.ToggleCompare, Group.VIEWS, "Compare"))
         add(Binding(LibraryKey.Z, LibraryKeyAction.ToggleZoom, Group.VIEWS, "Toggle fit and 1:1"))
         add(Binding(LibraryKey.Space, LibraryKeyAction.ToggleZoom, Group.VIEWS, "Toggle fit and 1:1"))
+        add(Binding(LibraryKey.F, LibraryKeyAction.ToggleFullWindow, Group.VIEWS, "Full window (Esc leaves it)"))
         add(Binding(LibraryKey.Tab, LibraryKeyAction.TogglePanes, Group.VIEWS, "Show or hide side panes"))
         add(Binding(LibraryKey.Tab, LibraryKeyAction.ToggleChrome, Group.VIEWS, "Show or hide all chrome", shift = true))
         add(Binding(LibraryKey.Slash, LibraryKeyAction.ShowHelp, Group.VIEWS, "Keyboard shortcuts", ctrl = true))

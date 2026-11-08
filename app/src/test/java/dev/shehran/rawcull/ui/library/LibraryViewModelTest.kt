@@ -396,6 +396,8 @@ class LibraryViewModelTest {
         select("a")
         viewModel.apply(CullEdit.Flag(CullStatus.REJECT, toggle = false))
         waitUntil { status("a") == CullStatus.REJECT }
+        // The catalog changed first; the request reads the ViewModel's own copy.
+        waitUntil { state.rejectsCount == 1 }
         viewModel.clearSelection()
 
         requestDeletion()
@@ -486,6 +488,63 @@ class LibraryViewModelTest {
         viewModel.requestDeleteRejects()
         waitUntil { state.snackbarMessage == "No rejected photos here" }
         assertEquals(null, state.deletionPrompt)
+    }
+
+    @Test
+    fun `full window opens on the selected photo and leaves the view underneath alone`() {
+        open(photo("a"), photo("b"))
+        viewModel.setViewMode(DamViewMode.GRID)
+        val shown = checkNotNull(state.selectedPhotoId)
+
+        viewModel.enterFullWindow()
+
+        assertTrue(state.fullWindow)
+        assertEquals(shown, state.selectedPhotoId)
+        assertEquals(DamViewMode.GRID, state.viewMode)
+        viewModel.exitFullWindow()
+        assertFalse(state.fullWindow)
+        assertEquals(DamViewMode.GRID, state.viewMode)
+    }
+
+    @Test
+    fun `full window from compare shows the selected photo and returns to compare`() {
+        open(photo("a"), photo("b"))
+        viewModel.toggleCompareMode()
+        val shown = checkNotNull(state.selectedPhotoId)
+
+        viewModel.enterFullWindow()
+        assertEquals(shown, state.currentPhoto?.id)
+        viewModel.toggleFullWindow()
+
+        assertFalse(state.fullWindow)
+        assertEquals(DamViewMode.COMPARE, state.viewMode)
+    }
+
+    @Test
+    fun `full window needs a photo, and esc leaves it before anything else`() {
+        viewModel.enterFullWindow()
+        assertFalse(state.fullWindow)
+
+        open(photo("a"), photo("b"))
+        viewModel.setViewMode(DamViewMode.LOUPE)
+        viewModel.enterFullWindow()
+        viewModel.stepBack()
+
+        assertFalse(state.fullWindow)
+        assertEquals(DamViewMode.LOUPE, state.viewMode)
+    }
+
+    @Test
+    fun `culling keys edit the shown photo in full window, and advance when asked`() {
+        open(photo("fw1"), photo("fw2"))
+        viewModel.enterFullWindow()
+        val first = checkNotNull(state.selectedPhotoId)
+        val second = state.filteredPhotos.first { it.id != first }.id
+
+        viewModel.apply(CullEdit.Rating(4))
+        waitUntil { rating(first) == 4 }
+        assertEquals(first, state.selectedPhotoId)
+
     }
 
     private companion object {
