@@ -47,6 +47,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.shehran.rawcull.data.model.ColorLabel
@@ -110,8 +112,12 @@ fun ZoomableLoupeView(
         }
     }
 
+    var heightPx by remember { mutableIntStateOf(0) }
+    // A phone's loupe can be ~200 dp tall: the histogram then can't sit in the top column without covering the toolbar.
+    val shortLoupe = heightPx < with(LocalDensity.current) { SHORT_LOUPE_DP.dp.roundToPx() }
     Box(
         modifier = modifier
+            .onSizeChanged { heightPx = it.height }
             .fillMaxSize()
             .clip(RoundedCornerShape(8.dp))
             .background(LoupeBackground)
@@ -385,7 +391,12 @@ fun ZoomableLoupeView(
                 )
             }
             // Last in the column, so it sits under the pill and the label and never over the badges (D10).
-            LocalHistogramOverlay.current?.let { HistogramOverlay(it) }
+            if (!shortLoupe) LocalHistogramOverlay.current?.let { HistogramOverlay(it) }
+        }
+
+        if (shortLoupe) {
+            // Bottom-left is free here: the toolbar is at the right and the arrows are at mid-height.
+            LocalHistogramOverlay.current?.let { HistogramOverlay(it, Modifier.align(Alignment.BottomStart).padding(8.dp)) }
         }
 
         // Left Navigation Arrow
@@ -425,3 +436,6 @@ fun ZoomableLoupeView(
         }
     }
 }
+
+/** Below this loupe height the histogram overlay moves to the bottom-left corner (R6 D10). */
+private const val SHORT_LOUPE_DP = 280
