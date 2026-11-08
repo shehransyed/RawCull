@@ -18,10 +18,13 @@ import dev.shehran.rawcull.data.importer.ImportStart
 import dev.shehran.rawcull.data.local.ImportPresetDao
 import dev.shehran.rawcull.data.model.ImportPreset
 import dev.shehran.rawcull.data.model.LibraryLocation
+import dev.shehran.rawcull.data.model.PhotoCollection
+import dev.shehran.rawcull.data.repository.CollectionRepository
 import dev.shehran.rawcull.data.repository.LocationChange
 import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.SettingsRepository
 import dev.shehran.rawcull.importer.DocumentIo
+import dev.shehran.rawcull.importer.ImportCollection
 import dev.shehran.rawcull.importer.ImportCandidate
 import dev.shehran.rawcull.importer.ImportDestination
 import dev.shehran.rawcull.importer.ImportPreview
@@ -35,10 +38,15 @@ import dev.shehran.rawcull.importer.PreviewSummary
 import dev.shehran.rawcull.ui.library.LocationUi
 import dev.shehran.rawcull.util.SafPermissions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -65,7 +73,17 @@ data class ImportUiState(
     val deleteFromCardSetting: Boolean = false,
     val isStarting: Boolean = false,
     val startedJobId: Long? = null, // Read once by the shell, to open the progress screen
+    val collections: List<PhotoCollection> = emptyList(), // The destination's, for "Add to collection" (D8)
+    val collectionChoice: ImportCollection = ImportCollection.None,
 ) {
+    /** The choice as it will be used: a collection of another destination, or an empty name, counts as none. */
+    val effectiveCollection: ImportCollection
+        get() = when (val choice = collectionChoice) {
+            is ImportCollection.Existing -> choice.takeIf { c -> collections.any { it.id == c.id && !it.isSet } } ?: ImportCollection.None
+            is ImportCollection.New -> choice.takeIf { it.name.isNotBlank() } ?: ImportCollection.None
+            ImportCollection.None -> ImportCollection.None
+        }
+
     /** Only a detected card is ever emptied. */
     val deleteFromCard: Boolean get() = deleteFromCardSetting && source?.volumeUuid != null
     val candidates: List<ImportCandidate> get() = session.candidateList
@@ -102,6 +120,7 @@ data class ImportUiState(
 }
 
 /** Holds the wizard: the source, the destination and, once scanned, what to bring in. */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ImportViewModel(
     private val appContext: Context,
     private val settings: SettingsRepository,
@@ -111,6 +130,7 @@ class ImportViewModel(
     private val session: ImportSession,
     private val documents: DocumentIo,
     private val controller: ImportController,
+    private val collections: CollectionRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ImportUiState())
     val uiState: StateFlow<ImportUiState> = _uiState.asStateFlow()
@@ -136,6 +156,12 @@ class ImportViewModel(
                 knownLocations = it
                 refreshLocations()
             }
+        }
+        viewModelScope.launch {
+            _uiState.map { it.draft.locationId }
+                .distinctUntilChanged()
+                .flatMapLatest { id -> id?.let(collections::observeTree) ?: flowOf(emptyList()) }
+                .collect { rows -> _uiState.update { it.copy(collections = rows) } }
         }
         viewModelScope.launch {
             presets.observeAll().collect { list ->
@@ -165,6 +191,10 @@ class ImportViewModel(
 
     fun updateDraft(edit: (ImportPreset) -> ImportPreset) {
         _uiState.update { it.copy(draft = edit(it.draft)) }
+    }
+
+    fun chooseCollection(choice: ImportCollection) {
+        _uiState.update { it.copy(collectionChoice = choice) }
     }
 
     fun saveDraft() {
@@ -387,6 +417,7 @@ class ImportViewModel(
                     template = { date -> ImportDestination.relativeDir(draft, date) },
                     verifyMode = settings.importPrefs.first().verifyMode,
                     deleteFromCard = state.deleteFromCardSetting,
+                    collection = state.effectiveCollection,
                 ),
             )
             _uiState.update { it.copy(isStarting = false) }
@@ -430,6 +461,7 @@ class ImportViewModel(
                     session = app.container.importSession,
                     documents = app.container.documentIo,
                     controller = app.container.importController,
+                    collections = app.container.collectionRepository,
                 )
             }
         }

@@ -36,6 +36,22 @@ class CollectionRepository(
     suspend fun createCollection(locationKey: Long, name: String, parentId: Long? = null): CollectionChange =
         create(locationKey, name, parentId, isSet = false)
 
+    /**
+     * The top-level collection called [name], made if there isn't one: an import that names a new
+     * collection twice (a retry, or the next card of a shoot) lands in the same place.
+     */
+    suspend fun findOrCreate(locationKey: Long, name: String): CollectionChange = withContext(Dispatchers.IO) {
+        database.withTransaction {
+            val clean = name.trim()
+            val clash = tree(locationKey).childrenOf(null).firstOrNull { CollectionTree.nameKey(it.name) == CollectionTree.nameKey(clean) }
+            when {
+                clash == null -> createCollection(locationKey, clean)
+                clash.isSet -> taken(clean)
+                else -> CollectionChange.Done(clash.id)
+            }
+        }
+    }
+
     suspend fun createSet(locationKey: Long, name: String, parentId: Long? = null): CollectionChange =
         create(locationKey, name, parentId, isSet = true)
 

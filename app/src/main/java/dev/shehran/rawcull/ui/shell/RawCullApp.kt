@@ -172,6 +172,12 @@ private fun AppNavDisplay(
                         stacks.resetTo(TopLevelTab.IMPORT)
                         stacks.select(TopLevelTab.LIBRARY)
                     },
+                    onOpenCollection = { job ->
+                        libraryViewModel.openCollection(job)
+                        importViewModel.newImport()
+                        stacks.resetTo(TopLevelTab.IMPORT)
+                        stacks.select(TopLevelTab.LIBRARY)
+                    },
                     onNewImport = {
                         importViewModel.newImport()
                         stacks.resetTo(TopLevelTab.IMPORT)

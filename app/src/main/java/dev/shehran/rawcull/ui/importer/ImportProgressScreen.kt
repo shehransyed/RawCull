@@ -53,6 +53,7 @@ import dev.shehran.rawcull.ui.theme.TextSecondary
 fun ImportProgressScreen(
     viewModel: ImportProgressViewModel,
     onCullInLibrary: (ImportJob) -> Unit,
+    onOpenCollection: (ImportJob) -> Unit,
     onNewImport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -84,7 +85,7 @@ fun ImportProgressScreen(
                     when {
                         job.status.isActive -> Running(job, report, state, viewModel::cancel)
                         job.status.isResumable -> Stopped(job, report, viewModel::resume, viewModel::cancel)
-                        else -> Finished(job, report, viewModel::retryFailed, onCullInLibrary, onNewImport)
+                        else -> Finished(job, report, viewModel::retryFailed, onCullInLibrary, onOpenCollection, onNewImport)
                     }
                 }
             }
@@ -164,6 +165,7 @@ private fun Finished(
     report: ImportReport,
     onRetry: () -> Unit,
     onCullInLibrary: (ImportJob) -> Unit,
+    onOpenCollection: (ImportJob) -> Unit,
     onNewImport: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -199,6 +201,12 @@ private fun Finished(
                 onClick = { onCullInLibrary(job) },
                 modifier = Modifier.heightIn(min = 48.dp).testTag("cull_in_library_button"),
             ) { Text("Cull in Library") }
+        }
+        if (job.doneFiles > 0 && job.collectionId != null) {
+            OutlinedButton(
+                onClick = { onOpenCollection(job) },
+                modifier = Modifier.heightIn(min = 48.dp).testTag("open_collection_button"),
+            ) { Text("Open collection") }
         }
         OutlinedButton(onClick = onNewImport, modifier = Modifier.heightIn(min = 48.dp).testTag("new_import_button")) {
             Text("New import")

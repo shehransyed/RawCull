@@ -8,6 +8,10 @@ import dev.shehran.rawcull.data.model.ImportItemRole
 import dev.shehran.rawcull.data.model.ImportItemState
 import dev.shehran.rawcull.data.model.ImportJobStatus
 import dev.shehran.rawcull.data.model.LibraryLocation
+import dev.shehran.rawcull.data.model.PhotoCollection
+import dev.shehran.rawcull.data.repository.CollectionChange
+import dev.shehran.rawcull.data.repository.CollectionRepository
+import dev.shehran.rawcull.importer.ImportCollection
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.VerifyMode
 import dev.shehran.rawcull.importer.CandidateFile
@@ -49,6 +53,7 @@ class ImportControllerTest {
     private val scheduler = FakeScheduler()
     private lateinit var database: AppDatabase
     private lateinit var controller: ImportController
+    private lateinit var collections: CollectionRepository
     private lateinit var location: LibraryLocation
     private lateinit var cardDir: String
 
@@ -58,15 +63,17 @@ class ImportControllerTest {
             ApplicationProvider.getApplicationContext<Context>(),
             AppDatabase::class.java,
         ).allowMainThreadQueries().build()
+        collections = CollectionRepository(database)
         val engine = ImportEngine(
             database.importJobDao(),
             database.importedFileDao(),
             database.locationDao(),
             database.rawPhotoDao(),
             io,
+            collections,
             Dispatchers.Unconfined,
         )
-        controller = ImportController(database.importJobDao(), engine, io, scheduler, Dispatchers.Unconfined) { 7L }
+        controller = ImportController(database.importJobDao(), engine, io, scheduler, collections, Dispatchers.Unconfined) { 7L }
         val id = database.locationDao().insert(LibraryLocation(treeUri = tree, displayName = "Photos", addedAt = 0, lastOpenedAt = 0))
         location = database.locationDao().getById(id)!!
         cardDir = io.root("tree://card")
@@ -222,5 +229,72 @@ class ImportControllerTest {
     fun `nothing is rescheduled without an active job`() = runBlocking<Unit> {
         controller.ensureScheduled()
         assertTrue(scheduler.enqueued.isEmpty())
+    }
+
+    // --- Add on import (R7.4, D8) ---
+
+    private suspend fun topLevelCollections() =
+        collections.tree(PhotoCollection.locationKey(location)).childrenOf(null)
+
+    @Test
+    fun `a new collection name is created once and reused by the next import`() = runBlocking<Unit> {
+        val first = start(request(listOf(candidate("A.ARW"))).copy(collection = ImportCollection.New("  Trip ")))
+        val created = topLevelCollections().single()
+        assertEquals("Trip", created.name)
+        assertEquals(created.id, database.importJobDao().getJob(first.jobId)?.collectionId)
+
+        database.importJobDao().setStatus(first.jobId, ImportJobStatus.COMPLETED)
+        val second = start(request(listOf(candidate("B.ARW"))).copy(collection = ImportCollection.New("trip")))
+
+        assertEquals(1, topLevelCollections().size)
+        assertEquals(created.id, database.importJobDao().getJob(second.jobId)?.collectionId)
+    }
+
+    @Test
+    fun `an existing collection is stored on the job`() = runBlocking<Unit> {
+        val id = (collections.createCollection(PhotoCollection.locationKey(location), "Keep") as CollectionChange.Done).id
+
+        val started = start(request(listOf(candidate("A.ARW"))).copy(collection = ImportCollection.Existing(id)))
+
+        assertEquals(id, database.importJobDao().getJob(started.jobId)?.collectionId)
+    }
+
+    @Test
+    fun `a collection that is gone or is a set refuses the import before anything is queued`() = runBlocking<Unit> {
+        val set = (collections.createSet(PhotoCollection.locationKey(location), "Folder") as CollectionChange.Done).id
+
+        val missing = controller.start(request(listOf(candidate("A.ARW"))).copy(collection = ImportCollection.Existing(999)))
+        val notACollection = controller.start(request(listOf(candidate("B.ARW"))).copy(collection = ImportCollection.Existing(set)))
+
+        assertTrue(missing is ImportStart.Refused)
+        assertTrue(notACollection is ImportStart.Refused)
+        assertTrue(scheduler.enqueued.isEmpty())
+    }
+
+    @Test
+    fun `a new name that is a set at the top level is refused`() = runBlocking<Unit> {
+        collections.createSet(PhotoCollection.locationKey(location), "Trips")
+
+        val result = controller.start(request(listOf(candidate("A.ARW"))).copy(collection = ImportCollection.New("trips")))
+
+        assertTrue(result is ImportStart.Refused)
+        assertTrue(scheduler.enqueued.isEmpty())
+    }
+
+    @Test
+    fun `no collection chosen leaves the job without one and creates nothing`() = runBlocking<Unit> {
+        val started = start(request(listOf(candidate("A.ARW"))))
+
+        assertNull(database.importJobDao().getJob(started.jobId)?.collectionId)
+        assertTrue(topLevelCollections().isEmpty())
+    }
+
+    @Test
+    fun `nothing selected creates no collection`() = runBlocking<Unit> {
+        val empty = request(listOf(candidate("A.ARW")))
+            .copy(selection = ImportSelection(emptySet()), collection = ImportCollection.New("Ghost"))
+
+        assertTrue(controller.start(empty) is ImportStart.Refused)
+        assertTrue(topLevelCollections().isEmpty())
     }
 }

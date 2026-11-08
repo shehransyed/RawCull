@@ -19,6 +19,9 @@ import dev.shehran.rawcull.data.model.ImportJob
 import dev.shehran.rawcull.data.model.ImportJobItem
 import dev.shehran.rawcull.data.model.ImportJobStatus
 import dev.shehran.rawcull.data.model.LibraryLocation
+import dev.shehran.rawcull.data.model.PhotoCollection
+import dev.shehran.rawcull.data.repository.CollectionChange
+import dev.shehran.rawcull.data.repository.CollectionRepository
 import dev.shehran.rawcull.data.model.PairMode
 import dev.shehran.rawcull.data.model.VerifyMode
 import kotlinx.coroutines.Dispatchers
@@ -62,17 +65,21 @@ class ImportWorkerTest {
         }
     }
 
+    private lateinit var collections: CollectionRepository
+
     @Before
     fun setUp() = runBlocking<Unit> {
         database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
             .allowMainThreadQueries()
             .build()
+        collections = CollectionRepository(database)
         engine = ImportEngine(
             jobs = database.importJobDao(),
             importedFiles = database.importedFileDao(),
             locations = database.locationDao(),
             photos = database.rawPhotoDao(),
             io = io,
+            collections = collections,
             ioDispatcher = Dispatchers.Unconfined,
         )
         locationId = database.locationDao().insert(
@@ -114,6 +121,7 @@ class ImportWorkerTest {
         items: List<ImportJobItem>,
         verifyMode: VerifyMode = VerifyMode.FULL,
         deleteSource: Boolean = false,
+        collectionId: Long? = null,
     ): Long = database.importJobDao().insertJobWithItems(
         ImportJob(
             createdAt = 1,
@@ -125,6 +133,7 @@ class ImportWorkerTest {
             deleteSourceAfter = deleteSource,
             totalFiles = items.count { it.state != ImportItemState.SKIPPED_DUPLICATE },
             totalBytes = items.sumOf { it.sizeBytes },
+            collectionId = collectionId,
         ),
         items,
     )
@@ -659,5 +668,122 @@ class ImportWorkerTest {
 
         assertTrue(library().isEmpty())
         assertTrue(finished.isEmpty())
+    }
+
+    // --- Add on import (R7.4, D8) ---
+
+    private suspend fun newCollection(): Long =
+        (collections.createCollection(PhotoCollection.locationKey(database.locationDao().getById(locationId)!!), "Shoot") as CollectionChange.Done).id
+
+    /** The file names in the collection, in its order. */
+    private suspend fun filed(collectionId: Long): List<String> {
+        val names = database.rawPhotoDao().getByRoot(tree).associate { it.id to it.fileName }
+        return collections.memberIds(collectionId).map { names.getValue(it) }
+    }
+
+    @Test
+    fun `groups are filed in capture order`() = runBlocking<Unit> {
+        val id = newCollection()
+        val jobId = job(
+            listOf(
+                item("LATE.ARW").copy(captureDate = 3_000L),
+                item("FIRST.ARW").copy(captureDate = 1_000L),
+                item("MIDDLE.ARW").copy(captureDate = 2_000L),
+            ),
+            collectionId = id,
+        )
+
+        run(jobId)
+
+        assertEquals(listOf("FIRST.ARW", "MIDDLE.ARW", "LATE.ARW"), filed(id))
+    }
+
+    @Test
+    fun `a failed group is never filed, and neither is one with a failed companion`() = runBlocking<Unit> {
+        val id = newCollection()
+        val jobId = job(
+            listOf(
+                item("BAD.ARW").copy(captureDate = 1_000L),
+                item("PAIR.ARW").copy(captureDate = 2_000L),
+                item("PAIR.JPG", group = "PAIR", role = ImportItemRole.COMPANION).copy(captureDate = 2_000L),
+                item("GOOD.ARW").copy(captureDate = 3_000L),
+            ),
+            collectionId = id,
+        )
+        io.corruptWrites["BAD.ARW"] = 2
+        io.corruptWrites["PAIR.JPG"] = 2
+
+        val job = run(jobId)
+
+        assertEquals(ImportJobStatus.COMPLETED_WITH_ERRORS, job.status)
+        assertEquals(listOf("GOOD.ARW"), filed(id))
+    }
+
+    @Test
+    fun `retrying a failed group files it when it lands`() = runBlocking<Unit> {
+        val id = newCollection()
+        val jobId = job(listOf(item("A.ARW"), item("B.ARW")), collectionId = id)
+        io.corruptWrites["A.ARW"] = 2
+        run(jobId)
+        assertEquals(listOf("B.ARW"), filed(id))
+
+        io.corruptWrites.clear()
+        database.importJobDao().requeueFailed(jobId)
+        database.importJobDao().setStatus(jobId, ImportJobStatus.QUEUED)
+        run(jobId)
+
+        assertEquals(setOf("A.ARW", "B.ARW"), filed(id).toSet())
+        assertEquals(2, filed(id).size)
+    }
+
+    @Test
+    fun `running a finished job again does not file anything twice`() = runBlocking<Unit> {
+        val id = newCollection()
+        val jobId = job(listOf(item("A.ARW").copy(captureDate = 1L), item("B.ARW").copy(captureDate = 2L)), collectionId = id)
+        run(jobId)
+        val before = collections.memberIds(id)
+
+        database.importJobDao().setStatus(jobId, ImportJobStatus.QUEUED)
+        run(jobId)
+
+        assertEquals(before, collections.memberIds(id))
+        assertEquals(2, before.size)
+    }
+
+    @Test
+    fun `a kill after the files landed still files the group on resume`() = runBlocking<Unit> {
+        val id = newCollection()
+        val dir = io.addDir(io.addDir(io.root(tree), "2026"), "2026-11-06")
+        val finished = io.addFile(dir, "A.ARW", bytes(20))
+        val done = item("A.ARW", state = ImportItemState.DONE).copy(targetUri = finished, sizeBytes = 20L)
+        val jobId = job(listOf(done), collectionId = id)
+
+        run(jobId)
+
+        assertEquals(listOf("A.ARW"), filed(id))
+    }
+
+    @Test
+    fun `duplicates skipped by the planner are not filed and a job without a collection files nothing`() = runBlocking<Unit> {
+        val id = newCollection()
+        val skippedJob = job(listOf(item("DUP.ARW", state = ImportItemState.SKIPPED_DUPLICATE)), collectionId = id)
+        run(skippedJob)
+        assertEquals(emptyList<String>(), collections.memberIds(id))
+
+        val plainJob = job(listOf(item("PLAIN.ARW")))
+        run(plainJob)
+        assertEquals(emptyList<String>(), collections.memberIds(id))
+    }
+
+    @Test
+    fun `a collection deleted during the import does not stop it`() = runBlocking<Unit> {
+        val id = newCollection()
+        val jobId = job(listOf(item("A.ARW")), collectionId = id)
+        collections.delete(id)
+
+        val job = run(jobId)
+
+        assertEquals(ImportJobStatus.COMPLETED, job.status)
+        assertEquals(1, database.rawPhotoDao().getByRoot(tree).size)
     }
 }

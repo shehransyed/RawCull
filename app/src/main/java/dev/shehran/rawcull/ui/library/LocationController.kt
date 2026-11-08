@@ -253,6 +253,17 @@ internal class LocationController(
         }
     }
 
+    /** "Open collection" after an import that filed its photos in one (D8). */
+    fun openCollection(job: ImportJob) {
+        val collectionId = job.collectionId ?: return
+        store.scope.launch {
+            val location = locations.get(job.locationId) ?: return@launch
+            val row = collections.get(collectionId) ?: return@launch store.showMessage("That collection no longer exists.")
+            activate(location, LibraryScope.Collection(row.id))
+            store.setViewMode(DamViewMode.GRID)
+        }
+    }
+
     fun toggleFolder(path: String) {
         val location = store.value.activeLocation ?: return
         val expanded = store.value.expandedFolders.let { if (path in it) it - path else it + path }

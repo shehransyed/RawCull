@@ -283,6 +283,8 @@ class LibraryViewModel(
     /** "Cull in Library" after an import: opens that Location on what was just imported. */
     fun openImport(job: ImportJob) = location.openImport(job)
 
+    fun openCollection(job: ImportJob) = location.openCollection(job)
+
     fun toggleFolder(path: String) = location.toggleFolder(path)
 
     // --- COLLECTIONS (R7 D5, D6) ---

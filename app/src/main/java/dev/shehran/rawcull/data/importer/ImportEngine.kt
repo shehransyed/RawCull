@@ -18,6 +18,7 @@ import dev.shehran.rawcull.data.model.PairMode
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.PhotoFormat
 import dev.shehran.rawcull.data.model.VerifyMode
+import dev.shehran.rawcull.data.repository.CollectionRepository
 import dev.shehran.rawcull.importer.ConflictNamer
 import dev.shehran.rawcull.importer.CopyResult
 import dev.shehran.rawcull.importer.DocumentInfo
@@ -68,6 +69,7 @@ class ImportEngine(
     private val locations: LocationDao,
     private val photos: RawPhotoDao,
     private val io: DocumentIo,
+    private val collections: CollectionRepository,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val log: (String) -> Unit = {},
@@ -224,9 +226,20 @@ class ImportEngine(
                     }
                     if (result is ItemResult.Stop) return result.status
                 }
-                writeLibraryRow(group, hadWork)
+                val assetId = writeLibraryRow(group, hadWork)
+                // A group with a failed file isn't verified; retrying it files it when it lands (D8).
+                if (assetId != null && group.none { it.state == ImportItemState.FAILED }) fileInCollection(assetId)
             }
             return if (failedFiles.get() > 0) ImportJobStatus.COMPLETED_WITH_ERRORS else ImportJobStatus.COMPLETED
+        }
+
+        /**
+         * D8: adds a verified group to the job's collection, in the order the groups are copied
+         * (capture order). Adding is idempotent, so a resume that meets a finished group is harmless.
+         */
+        private suspend fun fileInCollection(assetId: String) {
+            val collectionId = initial.collectionId ?: return
+            collections.add(collectionId, listOf(assetId))
         }
 
         private suspend fun failRemaining(reason: String) {
@@ -539,13 +552,13 @@ class ImportEngine(
          * @param hadWork false for a group an earlier run finished. Its row only needs writing if
          * that run was killed in between, and anything else would overwrite it for nothing.
          */
-        private suspend fun writeLibraryRow(group: List<ImportJobItem>, hadWork: Boolean) {
-            val primary = group.firstOrNull { it.role == ImportItemRole.PRIMARY && it.state == ImportItemState.DONE } ?: return
-            val primaryUri = primary.targetUri ?: return
+        private suspend fun writeLibraryRow(group: List<ImportJobItem>, hadWork: Boolean): String? {
+            val primary = group.firstOrNull { it.role == ImportItemRole.PRIMARY && it.state == ImportItemState.DONE } ?: return null
+            val primaryUri = primary.targetUri ?: return null
             val stem = primary.targetName.substringBeforeLast('.')
             val id = AssetIds.of(location.treeUri, primary.targetRelativeDir, stem, primary.assetDiscriminator)
             val existing = photos.getPhotoById(id)
-            if (!hadWork && existing != null) return
+            if (!hadWork && existing != null) return id
 
             val companion = group.landed(ImportItemRole.COMPANION)
             val adobe = group.landed(ImportItemRole.ADOBE_SIDECAR)
@@ -555,7 +568,7 @@ class ImportEngine(
                 ensureDirectory(primary.targetRelativeDir)
             } catch (e: IOException) {
                 log("no row for ${primary.targetName}: $e") // The next scan picks the file up.
-                return
+                return null
             }
 
             val info = io.info(primaryUri)
@@ -618,6 +631,7 @@ class ImportEngine(
                 xmpLastSyncedMtime = sidecarTime.takeIf { sidecarState != null },
             ).fileFields()
             photos.upsertAll(listOf(row))
+            return id
         }
 
         private fun List<ImportJobItem>.landed(role: ImportItemRole): ImportJobItem? = firstOrNull {

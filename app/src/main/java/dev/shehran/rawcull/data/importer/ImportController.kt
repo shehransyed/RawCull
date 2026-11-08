@@ -6,6 +6,9 @@ import dev.shehran.rawcull.data.model.ImportJob
 import dev.shehran.rawcull.data.model.ImportJobItem
 import dev.shehran.rawcull.data.model.ImportJobStatus
 import dev.shehran.rawcull.data.model.LibraryLocation
+import dev.shehran.rawcull.data.model.PhotoCollection
+import dev.shehran.rawcull.data.repository.CollectionChange
+import dev.shehran.rawcull.data.repository.CollectionRepository
 import dev.shehran.rawcull.data.model.VerifyMode
 import dev.shehran.rawcull.importer.CandidateFile
 import dev.shehran.rawcull.importer.DocumentInfo
@@ -13,6 +16,7 @@ import dev.shehran.rawcull.importer.DocumentIo
 import dev.shehran.rawcull.importer.ExistingTarget
 import dev.shehran.rawcull.importer.ExistingTargets
 import dev.shehran.rawcull.importer.ImportCandidate
+import dev.shehran.rawcull.importer.ImportCollection
 import dev.shehran.rawcull.importer.ImportPlanner
 import dev.shehran.rawcull.importer.ImportSelection
 import dev.shehran.rawcull.importer.ImportSource
@@ -39,6 +43,7 @@ data class ImportRequest(
     val template: (Long?) -> String,
     val verifyMode: VerifyMode,
     val deleteFromCard: Boolean,
+    val collection: ImportCollection = ImportCollection.None,
 )
 
 sealed interface ImportStart {
@@ -52,6 +57,7 @@ class ImportController(
     private val engine: ImportEngine,
     private val io: DocumentIo,
     private val scheduler: ImportScheduler,
+    private val collections: CollectionRepository,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
@@ -70,6 +76,16 @@ class ImportController(
         )
         if (planned.isEmpty()) return@withContext ImportStart.Refused("Nothing is selected.")
 
+        val collectionId = when (val choice = request.collection) {
+            ImportCollection.None -> null
+            is ImportCollection.Existing ->
+                choice.id.takeIf { collections.get(it)?.isSet == false }
+                    ?: return@withContext ImportStart.Refused("That collection no longer exists.")
+            is ImportCollection.New -> when (val made = collections.findOrCreate(PhotoCollection.locationKey(request.location), choice.name)) {
+                is CollectionChange.Done -> made.id
+                is CollectionChange.Refused -> return@withContext ImportStart.Refused(made.message)
+            }
+        }
         val copied = planned.filterNot { it.skippedDuplicate }
         val job = ImportJob(
             createdAt = clock(),
@@ -83,6 +99,7 @@ class ImportController(
             totalFiles = copied.size,
             totalBytes = copied.sumOf { it.sizeBytes },
             skippedFiles = planned.count { it.skippedDuplicate && !it.role.isSidecar },
+            collectionId = collectionId,
         )
         val jobId = jobs.insertJobWithItems(job, planned.map(::toItem))
         scheduler.enqueue(jobId)

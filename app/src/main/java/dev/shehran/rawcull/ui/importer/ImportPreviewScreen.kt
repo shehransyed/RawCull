@@ -168,7 +168,7 @@ fun ImportPreviewScreen(
                     }
                 }
             }
-            SummaryBar(uiState, onStart, onBack)
+            SummaryBar(uiState, viewModel, onStart, onBack)
         }
 
         uiState.viewerCandidate?.let { candidate ->
@@ -394,7 +394,7 @@ private fun TileBadge(text: String, background: Color, color: Color) {
 }
 
 @Composable
-private fun SummaryBar(uiState: ImportUiState, onStart: () -> Unit, onBack: () -> Unit) {
+private fun SummaryBar(uiState: ImportUiState, viewModel: ImportViewModel, onStart: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val summary = uiState.summary
     val size = Formatter.formatShortFileSize(context, summary.bytes)
@@ -426,6 +426,7 @@ private fun SummaryBar(uiState: ImportUiState, onStart: () -> Unit, onBack: () -
                 modifier = Modifier.padding(horizontal = 16.dp).testTag("import_delete_notice"),
             )
         }
+        ImportCollectionRow(uiState, viewModel::chooseCollection)
         WizardActionBar(
             nextLabel = "Start import",
             nextEnabled = uiState.canStart,

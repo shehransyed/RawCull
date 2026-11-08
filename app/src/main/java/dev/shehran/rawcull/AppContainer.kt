@@ -124,6 +124,7 @@ class AppContainer(context: Context) {
         locations = database.locationDao(),
         photos = photoDao,
         io = documentIo,
+        collections = collectionRepository,
         log = { Log.i("RawCull.Import", it) },
     )
     val importController: ImportController = ImportController(
@@ -131,6 +132,7 @@ class AppContainer(context: Context) {
         engine = importEngine,
         io = documentIo,
         scheduler = WorkManagerImportScheduler(appContext),
+        collections = collectionRepository,
     )
     val deletionGateway: DeletionGateway = SafDeletionGateway(appContext)
     val scanCoordinator: ScanCoordinator =
