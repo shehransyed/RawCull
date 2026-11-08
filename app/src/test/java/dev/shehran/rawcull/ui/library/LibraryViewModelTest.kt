@@ -15,6 +15,7 @@ import dev.shehran.rawcull.data.model.FilterOptions
 import dev.shehran.rawcull.data.model.LibraryLocation
 import dev.shehran.rawcull.data.model.PhotoAsset
 import dev.shehran.rawcull.data.model.PhotoFormat
+import dev.shehran.rawcull.data.repository.HistogramMode
 import dev.shehran.rawcull.data.repository.LocationAccess
 import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.PhotoCatalog
@@ -503,6 +504,29 @@ class LibraryViewModelTest {
         assertTrue(state.peaking)
         viewModel.togglePeaking()
         assertFalse(state.peaking)
+    }
+
+    @Test
+    fun `histogram channels, scale and overlay are saved choices`() {
+        open(photo("a"))
+        assertEquals(HistogramMode.RGB_LUMA, state.viewing.histogramMode)
+        try {
+            viewModel.cycleHistogramMode()
+            waitUntil { state.viewing.histogramMode == HistogramMode.RGB }
+            viewModel.cycleHistogramMode()
+            waitUntil { state.viewing.histogramMode == HistogramMode.LUMA }
+            viewModel.cycleHistogramMode()
+            waitUntil { state.viewing.histogramMode == HistogramMode.RGB_LUMA }
+            viewModel.toggleHistogramLog()
+            waitUntil { state.viewing.histogramLog }
+            viewModel.toggleHistogramOverlay()
+            waitUntil { state.viewing.histogramOverlay }
+        } finally {
+            // Saved settings outlive this test.
+            viewModel.toggleHistogramLog()
+            viewModel.toggleHistogramOverlay()
+            waitUntil { !state.viewing.histogramLog && !state.viewing.histogramOverlay }
+        }
     }
 
     @Test

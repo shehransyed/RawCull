@@ -384,6 +384,8 @@ fun ZoomableLoupeView(
                         .testTag("zoom_preview_only"),
                 )
             }
+            // Last in the column, so it sits under the pill and the label and never over the badges (D10).
+            LocalHistogramOverlay.current?.let { HistogramOverlay(it) }
         }
 
         // Left Navigation Arrow

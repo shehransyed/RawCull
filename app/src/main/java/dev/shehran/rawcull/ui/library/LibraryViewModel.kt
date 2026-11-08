@@ -21,6 +21,7 @@ import dev.shehran.rawcull.data.preview.PreviewRepository
 import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.PhotoCatalog
 import dev.shehran.rawcull.data.repository.SettingsRepository
+import dev.shehran.rawcull.data.repository.ViewingPrefs
 import dev.shehran.rawcull.data.scan.ScanCoordinator
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
 import dev.shehran.rawcull.library.CullEdit
@@ -160,6 +161,17 @@ class LibraryViewModel(
 
     /** R6 D7: focus peaking on or off, for this session only. */
     fun togglePeaking() = store.update { it.copy(peaking = !it.peaking) }
+
+    /** R6 D9/D10: the histogram's overlay, channels and scale are saved choices. */
+    fun toggleHistogramOverlay() = updateViewing { it.copy(histogramOverlay = !it.histogramOverlay) }
+
+    fun cycleHistogramMode() = updateViewing { it.copy(histogramMode = it.histogramMode.next()) }
+
+    fun toggleHistogramLog() = updateViewing { it.copy(histogramLog = !it.histogramLog) }
+
+    private fun updateViewing(change: (ViewingPrefs) -> ViewingPrefs) {
+        viewModelScope.launch { settings.updateViewingPrefs(change) }
+    }
 
     fun toggleFullWindow() = if (store.value.fullWindow) exitFullWindow() else enterFullWindow()
 

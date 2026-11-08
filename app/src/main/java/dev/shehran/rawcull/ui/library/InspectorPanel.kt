@@ -50,6 +50,8 @@ fun InspectorPanel(
     uiState: LibraryUiState,
     culling: CullingActions?,
     onEditTags: () -> Unit,
+    onCycleHistogramMode: () -> Unit,
+    onToggleHistogramLog: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val photo = uiState.currentPhoto
@@ -72,7 +74,13 @@ fun InspectorPanel(
                 history = it.history,
             )
         }
-        HistogramView(histogram = uiState.currentHistogram)
+        HistogramView(
+            histogram = uiState.currentHistogram,
+            mode = uiState.viewing.histogramMode,
+            log = uiState.viewing.histogramLog,
+            onCycleMode = onCycleHistogramMode,
+            onToggleLog = onToggleHistogramLog,
+        )
         ExifInspectorPanel(photo = photo)
         TagsCard(tags = photo?.tags.orEmpty(), onEditTags = onEditTags)
     }

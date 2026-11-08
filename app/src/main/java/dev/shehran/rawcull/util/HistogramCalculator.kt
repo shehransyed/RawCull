@@ -4,95 +4,79 @@ import android.graphics.Bitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-data class HistogramData(
-    val redBins: FloatArray = FloatArray(256),
-    val greenBins: FloatArray = FloatArray(256),
-    val blueBins: FloatArray = FloatArray(256),
-    val lumBins: FloatArray = FloatArray(256),
-    val maxBinValue: Float = 1f,
+/** Raw per-value pixel counts (R6 D9); how they are drawn is [histogramHeights]'s business. */
+class HistogramData(
+    val red: IntArray = IntArray(BINS),
+    val green: IntArray = IntArray(BINS),
+    val blue: IntArray = IntArray(BINS),
+    val luma: IntArray = IntArray(BINS),
     val shadowClippingCount: Int = 0,
-    val highlightClippingCount: Int = 0
+    val highlightClippingCount: Int = 0,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-        other as HistogramData
-        return redBins.contentEquals(other.redBins) &&
-                greenBins.contentEquals(other.greenBins) &&
-                blueBins.contentEquals(other.blueBins) &&
-                lumBins.contentEquals(other.lumBins)
+        if (other !is HistogramData) return false
+        return red.contentEquals(other.red) && green.contentEquals(other.green) &&
+            blue.contentEquals(other.blue) && luma.contentEquals(other.luma) &&
+            shadowClippingCount == other.shadowClippingCount && highlightClippingCount == other.highlightClippingCount
     }
 
     override fun hashCode(): Int {
-        var result = redBins.contentHashCode()
-        result = 31 * result + greenBins.contentHashCode()
-        result = 31 * result + blueBins.contentHashCode()
-        result = 31 * result + lumBins.contentHashCode()
+        var result = red.contentHashCode()
+        result = 31 * result + green.contentHashCode()
+        result = 31 * result + blue.contentHashCode()
+        result = 31 * result + luma.contentHashCode()
         return result
+    }
+
+    companion object {
+        const val BINS = 256
     }
 }
 
 object HistogramCalculator {
-    suspend fun compute(bitmap: Bitmap): HistogramData = withContext(Dispatchers.Default) {
-        val width = bitmap.width
-        val height = bitmap.height
+    /** Luma at or below this counts as clipped shadows. */
+    const val SHADOW_LIMIT = 2
 
-        // Downsample for lightning-fast histogram computation if large
-        val step = if (width * height > 400 * 300) 2 else 1
+    /** Luma at or above this counts as clipped highlights. */
+    const val HIGHLIGHT_LIMIT = 253
 
-        val rBins = IntArray(256)
-        val gBins = IntArray(256)
-        val bBins = IntArray(256)
-        val lBins = IntArray(256)
-
-        var shadowsClipped = 0
-        var highlightsClipped = 0
-
-        val pixels = IntArray(width)
-
+    /**
+     * Counts every pixel of [argb] (row-major, [width] × [height]). Large images are sampled on every second
+     * pixel and row, which doesn't change the shape. Pure, so it can be tested without Android.
+     */
+    fun compute(argb: IntArray, width: Int, height: Int): HistogramData {
+        val step = if (width * height > SAMPLE_ABOVE_PIXELS) 2 else 1
+        val r = IntArray(HistogramData.BINS)
+        val g = IntArray(HistogramData.BINS)
+        val b = IntArray(HistogramData.BINS)
+        val l = IntArray(HistogramData.BINS)
+        var shadows = 0
+        var highlights = 0
         for (y in 0 until height step step) {
-            bitmap.getPixels(pixels, 0, width, 0, y, width, 1)
             for (x in 0 until width step step) {
-                val color = pixels[x]
-                val r = (color shr 16) and 0xFF
-                val g = (color shr 8) and 0xFF
-                val b = color and 0xFF
-
-                // Rec. 709 luminance formula
-                val lum = ((r * 0.2126f) + (g * 0.7152f) + (b * 0.0722f)).toInt().coerceIn(0, 255)
-
-                rBins[r]++
-                gBins[g]++
-                bBins[b]++
-                lBins[lum]++
-
-                if (lum <= 2) shadowsClipped++
-                if (lum >= 253) highlightsClipped++
+                val color = argb[y * width + x]
+                val red = (color shr 16) and 0xFF
+                val green = (color shr 8) and 0xFF
+                val blue = color and 0xFF
+                // Rec. 709 luminance.
+                val lum = ((red * 0.2126f) + (green * 0.7152f) + (blue * 0.0722f)).toInt().coerceIn(0, 255)
+                r[red]++
+                g[green]++
+                b[blue]++
+                l[lum]++
+                if (lum <= SHADOW_LIMIT) shadows++
+                if (lum >= HIGHLIGHT_LIMIT) highlights++
             }
         }
-
-        // Find max peak for normalization (ignoring extreme 0 and 255 spike if any)
-        var maxPeak = 1
-        for (i in 1..254) {
-            if (rBins[i] > maxPeak) maxPeak = rBins[i]
-            if (gBins[i] > maxPeak) maxPeak = gBins[i]
-            if (bBins[i] > maxPeak) maxPeak = bBins[i]
-            if (lBins[i] > maxPeak) maxPeak = lBins[i]
-        }
-
-        val normR = FloatArray(256) { (rBins[it].toFloat() / maxPeak).coerceAtMost(1f) }
-        val normG = FloatArray(256) { (gBins[it].toFloat() / maxPeak).coerceAtMost(1f) }
-        val normB = FloatArray(256) { (bBins[it].toFloat() / maxPeak).coerceAtMost(1f) }
-        val normL = FloatArray(256) { (lBins[it].toFloat() / maxPeak).coerceAtMost(1f) }
-
-        HistogramData(
-            redBins = normR,
-            greenBins = normG,
-            blueBins = normB,
-            lumBins = normL,
-            maxBinValue = 1f,
-            shadowClippingCount = shadowsClipped,
-            highlightClippingCount = highlightsClipped
-        )
+        return HistogramData(r, g, b, l, shadows, highlights)
     }
+
+    suspend fun compute(bitmap: Bitmap): HistogramData = withContext(Dispatchers.Default) {
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        compute(pixels, bitmap.width, bitmap.height)
+    }
+
+    private const val SAMPLE_ABOVE_PIXELS = 400 * 300
 }

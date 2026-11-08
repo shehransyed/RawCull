@@ -5,7 +5,7 @@ import dev.shehran.rawcull.data.model.CullStatus
 
 /** The keys the Library knows, so this file stays free of Android and Compose types. */
 enum class LibraryKey(val label: String) {
-    A("A"), C("C"), D("D"), E("E"), F("F"), G("G"), K("K"), L("L"), O("O"), P("P"), U("U"), X("X"), Y("Y"), Z("Z"),
+    A("A"), C("C"), D("D"), E("E"), F("F"), G("G"), H("H"), K("K"), L("L"), O("O"), P("P"), U("U"), X("X"), Y("Y"), Z("Z"),
     Digit0("0"), Digit1("1"), Digit2("2"), Digit3("3"), Digit4("4"), Digit5("5"),
     Digit6("6"), Digit7("7"), Digit8("8"), Digit9("9"),
     Grave("`"), LeftBracket("["), RightBracket("]"), Backslash("\\"), Slash("/"),
@@ -32,6 +32,7 @@ sealed interface LibraryKeyAction {
     data object ToggleFullWindow : LibraryKeyAction
     data object ToggleSlideshow : LibraryKeyAction
     data object TogglePeaking : LibraryKeyAction
+    data object ToggleHistogram : LibraryKeyAction
     data object SlideshowPause : LibraryKeyAction
     data object Undo : LibraryKeyAction
     data object Redo : LibraryKeyAction
@@ -118,6 +119,7 @@ object LibraryKeymap {
         add(Binding(LibraryKey.F, LibraryKeyAction.ToggleFullWindow, Group.VIEWS, "Full window (Esc leaves it)"))
         add(Binding(LibraryKey.Enter, LibraryKeyAction.ToggleSlideshow, Group.VIEWS, "Slideshow: start or end", ctrl = true))
         add(Binding(LibraryKey.O, LibraryKeyAction.TogglePeaking, Group.VIEWS, "Focus peaking on or off"))
+        add(Binding(LibraryKey.H, LibraryKeyAction.ToggleHistogram, Group.VIEWS, "Histogram overlay on or off"))
         add(Binding(LibraryKey.Tab, LibraryKeyAction.TogglePanes, Group.VIEWS, "Show or hide side panes"))
         add(Binding(LibraryKey.Tab, LibraryKeyAction.ToggleChrome, Group.VIEWS, "Show or hide all chrome", shift = true))
         add(Binding(LibraryKey.Slash, LibraryKeyAction.ShowHelp, Group.VIEWS, "Keyboard shortcuts", ctrl = true))

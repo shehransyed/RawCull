@@ -110,6 +110,8 @@ import dev.shehran.rawcull.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.CompositionLocalProvider
 import dev.shehran.rawcull.library.PeakingKernel
+import dev.shehran.rawcull.ui.components.HistogramOverlayState
+import dev.shehran.rawcull.ui.components.LocalHistogramOverlay
 import dev.shehran.rawcull.ui.components.LocalPeaking
 import dev.shehran.rawcull.ui.components.PeakingStyle
 import dev.shehran.rawcull.ui.theme.RawCullTheme
@@ -286,7 +288,19 @@ fun LibraryScreen(
     // R6 D7: one switch for every loupe on screen (loupe, compare, full window, slideshow).
     val peakingColor = RawCullTheme.colors.peaking(uiState.viewing.peakingColor)
     val peaking = if (uiState.peaking) PeakingStyle(peakingColor, PeakingKernel.threshold(uiState.viewing.peakingSensitivity)) else null
-    CompositionLocalProvider(LocalPeaking provides peaking) {
+    // R6 D10: the histogram overlay is for the loupe and the full window, not compare.
+    val histogramOverlay = if (uiState.viewing.histogramOverlay && (uiState.viewMode != DamViewMode.COMPARE || uiState.fullWindow)) {
+        HistogramOverlayState(
+            histogram = uiState.currentHistogram,
+            mode = uiState.viewing.histogramMode,
+            log = uiState.viewing.histogramLog,
+            onCycleMode = viewModel::cycleHistogramMode,
+            onToggleLog = viewModel::toggleHistogramLog,
+        )
+    } else {
+        null
+    }
+    CompositionLocalProvider(LocalPeaking provides peaking, LocalHistogramOverlay provides histogramOverlay) {
         Box(
             modifier = modifier
                 .fillMaxSize()
@@ -372,6 +386,8 @@ fun LibraryScreen(
                 uiState,
                 culling = null,
                 onEditTags = viewModel::openTagDialog,
+                onCycleHistogramMode = viewModel::cycleHistogramMode,
+                onToggleHistogramLog = viewModel::toggleHistogramLog,
                 modifier = Modifier.dismissOnEscape { showInspectorSheet = false },
             )
         }
@@ -524,6 +540,8 @@ private fun LibraryContent(
                         uiState = uiState,
                         culling = culling.takeIf { !layout.cullingBarAtSide },
                         onEditTags = viewModel::openTagDialog,
+                        onCycleHistogramMode = viewModel::cycleHistogramMode,
+                        onToggleHistogramLog = viewModel::toggleHistogramLog,
                     )
                 }
             }
@@ -770,6 +788,7 @@ private fun onLibraryKey(action: LibraryKeyAction, viewModel: LibraryViewModel, 
         LibraryKeyAction.ToggleFullWindow -> viewModel.toggleFullWindow()
         LibraryKeyAction.ToggleSlideshow -> viewModel.toggleSlideshow()
         LibraryKeyAction.TogglePeaking -> viewModel.togglePeaking()
+        LibraryKeyAction.ToggleHistogram -> viewModel.toggleHistogramOverlay()
         LibraryKeyAction.SlideshowPause -> viewModel.toggleSlideshowPause()
         LibraryKeyAction.Undo -> viewModel.undo()
         LibraryKeyAction.Redo -> viewModel.redo()
