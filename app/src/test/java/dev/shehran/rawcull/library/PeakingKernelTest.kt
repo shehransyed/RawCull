@@ -79,10 +79,20 @@ class PeakingKernelTest {
     }
 
     @Test
+    fun `parallel bands give the same mask`() {
+        val random = Random(5)
+        val pixels = image(97, 61) { _, _ -> random.nextInt(0, 256) }
+        val single = PeakingKernel.mask(pixels, 97, 61, PeakingKernel.THRESHOLD_MEDIUM)
+        for (bands in listOf(2, 3, 4, 8, 200)) {
+            assertTrue("$bands bands", single.contentEquals(PeakingKernel.mask(pixels, 97, 61, PeakingKernel.THRESHOLD_MEDIUM, bands = bands)))
+        }
+    }
+
+    @Test
     fun `cancelling stops the run`() {
         var rows = 0
         val result = runCatching {
-            PeakingKernel.mask(image(w, h) { _, _ -> 0 }, w, h, 0.04f) { if (++rows > 3) throw IllegalStateException("stop") }
+            PeakingKernel.mask(image(w, h) { _, _ -> 0 }, w, h, 0.04f, checkCancelled = { if (++rows > 3) throw IllegalStateException("stop") })
         }
         assertTrue(result.isFailure)
         assertEquals(4, rows)

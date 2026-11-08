@@ -194,7 +194,9 @@ fun LoupeImage(
     } else {
         null
     }
-    val peakingMask = rememberPeakingMask(peakingRequest)
+    // API 33+ on a hardware canvas: the AGSL shader, every frame; otherwise the CPU mask (D8).
+    val peakingShader = rememberPeakingShader(peaking != null)
+    val peakingMask = rememberPeakingMask(peakingRequest.takeIf { peakingShader == null })
 
     Box(
         // A zoomed image is larger than its view: in compare it would cover the other pane.
@@ -225,7 +227,11 @@ fun LoupeImage(
             ) {
                 drawLoupe(shown, shownTile, zoom)
             }
-            if (peaking != null && peakingMask != null) PeakingMaskLayer(peakingMask, peaking.color)
+            if (peaking != null && peakingShader != null) {
+                PeakingShaderLayer(shown, shownTile, zoom, peaking, peakingShader)
+            } else if (peaking != null && peakingMask != null) {
+                PeakingMaskLayer(peakingMask, peaking.color)
+            }
         } else if (thumbnail != null) {
             Image(
                 bitmap = thumbnail.asImageBitmap(),
@@ -258,6 +264,10 @@ internal data class LoupeView(
 
 internal fun LoupeZoomState.view(): LoupeView? =
     if (isKnown) LoupeView(viewWidth, viewHeight, fullWidth, fullHeight, scale, panX, panY, isAtFit) else null
+
+/** The zoom as a canvas of [width] × [height] draws it. */
+internal fun LoupeZoomState.view(width: Int, height: Int): LoupeView =
+    LoupeView(width, height, fullWidth, fullHeight, scale, panX, panY, isAtFit)
 
 /** The base preview stretched over the whole upright image, then the tile over its part of it. */
 internal fun loupeGeometry(image: PreviewImage, tile: LoupeTile?, view: LoupeView): LoupeGeometry? {
@@ -292,10 +302,7 @@ internal fun loupeGeometry(image: PreviewImage, tile: LoupeTile?, view: LoupeVie
 }
 
 private fun DrawScope.drawLoupe(image: PreviewImage, tile: LoupeTile?, zoom: LoupeZoomState) {
-    val view = LoupeView(
-        size.width.toInt(), size.height.toInt(), zoom.fullWidth, zoom.fullHeight, zoom.scale, zoom.panX, zoom.panY, zoom.isAtFit,
-    )
-    val geometry = loupeGeometry(image, tile, view) ?: return
+    val geometry = loupeGeometry(image, tile, zoom.view(size.width.toInt(), size.height.toInt())) ?: return
     drawIntoCanvas { canvas ->
         val native = canvas.nativeCanvas
         native.drawBitmap(image.bitmap, geometry.baseMatrix, bitmapPaint)

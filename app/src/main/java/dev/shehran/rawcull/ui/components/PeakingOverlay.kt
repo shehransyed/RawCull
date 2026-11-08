@@ -5,6 +5,8 @@ import android.graphics.Canvas as NativeCanvas
 import android.graphics.Paint
 import android.graphics.RectF
 import android.os.Build
+import androidx.annotation.RequiresApi
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -106,6 +108,39 @@ internal fun PeakingMaskLayer(mask: PeakingMask<*>, color: Color) {
     }
 }
 
+/**
+ * The GPU path's shader when it can run here (API 33+, a hardware-accelerated window, and the
+ * shader compiled), else null for the CPU path. Robolectric's window isn't accelerated.
+ */
+@Composable
+internal fun rememberPeakingShader(enabled: Boolean): PeakingShader? {
+    val accelerated = LocalView.current.isHardwareAccelerated
+    if (!enabled || !accelerated || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return null
+    return remember { PeakingShader.get() }
+}
+
+/** The GPU path: the shader over the base preview and the tile, redrawn with every zoom and pan. */
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+@Composable
+internal fun PeakingShaderLayer(image: PreviewImage, tile: LoupeTile?, zoom: LoupeZoomState, style: PeakingStyle, shader: PeakingShader) {
+    Canvas(modifier = Modifier.fillMaxSize().testTag("peaking_overlay")) {
+        val geometry = loupeGeometry(image, tile, zoom.view(size.width.toInt(), size.height.toInt())) ?: return@Canvas
+        val bounds = RectF(0f, 0f, size.width, size.height)
+        val tileMatrix = geometry.tileMatrix
+        val tileRect = if (tile != null && tileMatrix != null) {
+            RectF(0f, 0f, tile.bitmap.width.toFloat(), tile.bitmap.height.toFloat()).also(tileMatrix::mapRect)
+        } else {
+            null
+        }
+        val color = style.color.toArgb()
+        drawIntoCanvas { canvas ->
+            val native = canvas.nativeCanvas
+            shader.draw(native, image.bitmap, geometry.baseMatrix, bounds, color, style.threshold, exclude = tileRect)
+            if (tile != null && tileMatrix != null) shader.draw(native, tile.bitmap, tileMatrix, bounds, color, style.threshold)
+        }
+    }
+}
+
 /** Software copies of the last base preview and tile, so a zoom doesn't read a hardware bitmap back again. */
 private class SoftCopies {
     @Volatile private var base: Pair<Bitmap, Bitmap>? = null
@@ -135,6 +170,7 @@ private suspend fun computePeakingMask(request: PeakingRequest, copies: SoftCopi
             viewHeight = request.view.height,
             threshold = request.threshold,
             checkCancelled = { context.ensureActive() },
+            bands = Runtime.getRuntime().availableProcessors(),
         )
     }
 
@@ -154,6 +190,7 @@ internal fun <K> renderPeakingMask(
     viewHeight: Int,
     threshold: Float,
     checkCancelled: () -> Unit = {},
+    bands: Int = 1,
 ): PeakingMask<K>? {
     val rect = RectF(0f, 0f, base.width.toFloat(), base.height.toFloat())
     baseMatrix.mapRect(rect)
@@ -175,7 +212,7 @@ internal fun <K> renderPeakingMask(
     drawn.recycle()
     checkCancelled()
 
-    val marked = PeakingKernel.mask(pixels, width, height, threshold, checkCancelled)
+    val marked = PeakingKernel.mask(pixels, width, height, threshold, checkCancelled, bands)
     val alpha = IntArray(width * height) { if (marked[it]) MARK else 0 }
     val mask = Bitmap.createBitmap(alpha, width, height, Bitmap.Config.ARGB_8888).extractAlpha()
     // Full-size coverage of the photo's rectangle on screen, whatever scale it was computed at.
