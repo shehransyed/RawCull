@@ -33,6 +33,10 @@ import dev.shehran.rawcull.data.xmp.LocalSidecarStore
 import dev.shehran.rawcull.data.xmp.SafSidecarStore
 import dev.shehran.rawcull.data.xmp.SidecarStores
 import dev.shehran.rawcull.data.xmp.XMP_TOOLKIT
+import dev.shehran.rawcull.data.export.ExifJpegTimeWriter
+import dev.shehran.rawcull.data.export.ExportController
+import dev.shehran.rawcull.data.export.ExportEngine
+import dev.shehran.rawcull.data.export.WorkManagerExportScheduler
 import dev.shehran.rawcull.data.xmp.XmpWriteQueue
 import dev.shehran.rawcull.importer.DocumentIo
 import dev.shehran.rawcull.importer.ImportSession
@@ -54,6 +58,7 @@ import kotlinx.coroutines.flow.drop
 
 private const val LEGACY_PREVIEW_CACHE_DIR = "rawcull_preview_cache"
 private const val THUMBNAIL_DIR = "previews/v1"
+private const val EXPORT_TEMP_DIR = "export"
 private const val BYTES_PER_MB = 1024L * 1024
 private const val PREVIEW_IO_THREADS = 4
 private const val PREVIEW_DECODE_THREADS = 3
@@ -135,6 +140,14 @@ class AppContainer(context: Context) {
         collections = collectionRepository,
     )
     val deletionGateway: DeletionGateway = SafDeletionGateway(appContext)
+    val exportEngine: ExportEngine = ExportEngine(documentIo, ExifJpegTimeWriter(), File(appContext.cacheDir, EXPORT_TEMP_DIR), XMP_TOOLKIT)
+    val exportController: ExportController = ExportController(
+        context = appContext,
+        scheduler = WorkManagerExportScheduler(appContext),
+        isGrantInUse = { treeUri ->
+            treeUri in settingsRepository.volumeGrants.first().values || database.locationDao().getByTreeUri(treeUri) != null
+        },
+    )
     val scanCoordinator: ScanCoordinator =
         ScanCoordinator(appContext, database, photoDao, applicationScope, sidecarStores, xmpWriteQueue)
     private val previewDatabase: PreviewCacheDatabase = PreviewCacheDatabase.build(appContext)

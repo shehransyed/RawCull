@@ -53,6 +53,7 @@ class CollectionPaneActions(
     val onMove: (Long, Long?) -> Unit,
     val onDelete: (Long) -> Unit,
     val onSetTarget: (Long?) -> Unit,
+    val onExport: (Long) -> Unit = {},
 )
 
 /** A dialog the section opens; the pane keeps the one that is showing. */
@@ -228,6 +229,7 @@ private fun CollectionMenu(
             } else {
                 Item("Set as target", "collection_set_target_${collection.id}") { actions.onSetTarget(collection.id) }
             }
+            if (!collection.isSet) Item("Export in order…", "collection_export_${collection.id}") { actions.onExport(collection.id) }
             Item("Rename…", "collection_rename_${collection.id}") { request(CollectionDialog.Rename(collection)) }
             Item("Move…", "collection_move_${collection.id}") { request(CollectionDialog.Move(collection)) }
             Item("Delete…", "collection_delete_${collection.id}") { request(CollectionDialog.Delete(collection)) }

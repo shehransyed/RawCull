@@ -127,6 +127,7 @@ import dev.shehran.rawcull.ui.components.WarmupBar
 @Composable
 fun LibraryScreen(
     viewModel: LibraryViewModel,
+    exportViewModel: ExportViewModel,
     onImportFromCard: () -> Unit,
     onImmersiveChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -254,6 +255,7 @@ fun LibraryScreen(
             onMove = viewModel::moveCollection,
             onDelete = viewModel::deleteCollection,
             onSetTarget = viewModel::setTargetCollection,
+            onExport = { id -> uiState.collections.firstOrNull { it.id == id }?.let { exportViewModel.open(it, uiState) } },
         ),
     )
     val collectionInspector = viewModel.collectionInspectorActions()
@@ -412,6 +414,7 @@ fun LibraryScreen(
         }
     }
     if (showHelp) ShortcutHelpSheet(onDismiss = { showHelp = false })
+    ExportOverlays(exportViewModel)
     if (uiState.showAddToCollection) {
         AddToCollectionSheet(
             uiState = uiState,

@@ -121,6 +121,16 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     /** D6: where B adds to. Collections belong to one Location, so a stale id simply matches nothing. */
     val targetCollectionId: Flow<Long?> = dataStore.data.map { it[KEY_TARGET_COLLECTION_ID] }
 
+    /** R7 D11: the last ordered export's choices. */
+    val exportChoices: Flow<Pair<String?, Boolean>> = dataStore.data.map { it[KEY_EXPORT_CONTENT] to (it[KEY_EXPORT_KEEP_ORDER] ?: true) }
+
+    suspend fun setExportChoices(content: String, keepOrder: Boolean) {
+        dataStore.edit {
+            it[KEY_EXPORT_CONTENT] = content
+            it[KEY_EXPORT_KEEP_ORDER] = keepOrder
+        }
+    }
+
     suspend fun setTargetCollection(id: Long?) {
         dataStore.edit { prefs ->
             if (id == null) prefs.remove(KEY_TARGET_COLLECTION_ID) else prefs[KEY_TARGET_COLLECTION_ID] = id
@@ -235,6 +245,8 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         val KEY_ACTIVE_FOLDER = stringPreferencesKey("active_folder")
         val KEY_ACTIVE_COLLECTION_ID = longPreferencesKey("active_collection_id")
         val KEY_TARGET_COLLECTION_ID = longPreferencesKey("target_collection_id")
+        val KEY_EXPORT_CONTENT = stringPreferencesKey("export_content")
+        val KEY_EXPORT_KEEP_ORDER = booleanPreferencesKey("export_keep_order")
         val KEY_SELECTED_ASSET_ID = stringPreferencesKey("selected_asset_id")
         val KEY_VERIFY_MODE = stringPreferencesKey("verify_mode")
         val KEY_DELETE_FROM_CARD = booleanPreferencesKey("delete_from_card_after_import")

@@ -46,7 +46,10 @@ import dev.shehran.rawcull.ui.importer.ImportProgressScreen
 import dev.shehran.rawcull.ui.importer.ImportProgressViewModel
 import dev.shehran.rawcull.ui.importer.ImportSourceScreen
 import dev.shehran.rawcull.ui.importer.ImportViewModel
+import dev.shehran.rawcull.ui.library.ExportProgressRow
+import dev.shehran.rawcull.ui.library.ExportViewModel
 import dev.shehran.rawcull.ui.library.LibraryScreen
+import dev.shehran.rawcull.data.export.ExportStatus
 import dev.shehran.rawcull.ui.library.LibraryViewModel
 import dev.shehran.rawcull.ui.settings.SettingsScreen
 import dev.shehran.rawcull.ui.settings.SettingsViewModel
@@ -68,6 +71,7 @@ fun RawCullApp(
     modifier: Modifier = Modifier,
     shellViewModel: ShellViewModel = viewModel(factory = ShellViewModel.Factory),
     importViewModel: ImportViewModel = viewModel(factory = ImportViewModel.Factory),
+    exportViewModel: ExportViewModel = viewModel(factory = ExportViewModel.Factory),
 ) {
     val layout = rememberWindowLayout()
     val stacks = rememberSaveable(saver = TabStacks.Saver) { TabStacks() }
@@ -117,7 +121,7 @@ fun RawCullApp(
                 }
             },
         ) {
-            AppNavDisplay(stacks, activeJob, libraryViewModel, importViewModel, onImmersiveChange = { immersive = it })
+            AppNavDisplay(stacks, activeJob, libraryViewModel, importViewModel, exportViewModel, onImmersiveChange = { immersive = it })
         }
     }
 }
@@ -135,8 +139,10 @@ private fun AppNavDisplay(
     activeJob: ImportJob?,
     libraryViewModel: LibraryViewModel,
     importViewModel: ImportViewModel,
+    exportViewModel: ExportViewModel,
     onImmersiveChange: (Boolean) -> Unit,
 ) {
+    val exportStatus by exportViewModel.status.collectAsStateWithLifecycle()
     val container = (LocalContext.current.applicationContext as ApplicationClass).container
     val entryProvider: (AppKey) -> NavEntry<AppKey> = { key ->
         NavEntry(key) {
@@ -145,8 +151,10 @@ private fun AppNavDisplay(
                     activeJob?.let { job ->
                         ImportRunningRow(job, onClick = { stacks.push(AppKey.ImportProgress(job.id), TopLevelTab.IMPORT) })
                     }
+                    (exportStatus as? ExportStatus.Running)?.let { ExportProgressRow(it, onCancel = exportViewModel::cancel) }
                     LibraryScreen(
                         viewModel = libraryViewModel,
+                        exportViewModel = exportViewModel,
                         onImportFromCard = { stacks.select(TopLevelTab.IMPORT) },
                         onImmersiveChange = onImmersiveChange,
                         modifier = Modifier.weight(1f),

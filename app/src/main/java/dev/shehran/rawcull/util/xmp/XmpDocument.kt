@@ -33,6 +33,8 @@ object XmpProps {
     const val NS_CRS = "http://ns.adobe.com/camera-raw-settings/1.0/"
     const val NS_XMP_DM = "http://ns.adobe.com/xmp/1.0/DynamicMedia/"
     const val NS_RAWCULL = "http://ns.rawcull.dev/xmp/1.0/"
+    const val NS_EXIF = "http://ns.adobe.com/exif/1.0/"
+    const val NS_PHOTOSHOP = "http://ns.adobe.com/photoshop/1.0/"
 
     val RATING = QName(NS_XMP, "Rating", "xmp")
     val LABEL = QName(NS_XMP, "Label", "xmp")
@@ -42,6 +44,11 @@ object XmpProps {
     val RAWCULL_PICK = QName(NS_RAWCULL, "Pick", "rawcull")
     val XMP_DM_PICK = QName(NS_XMP_DM, "pick", "xmpDM")
     val CRS_PICK = QName(NS_CRS, "Pick", "crs")
+
+    /** The capture times an ordered export rewrites in its copies (R7 D10). */
+    val EXIF_DATE_TIME_ORIGINAL = QName(NS_EXIF, "DateTimeOriginal", "exif")
+    val XMP_CREATE_DATE = QName(NS_XMP, "CreateDate", "xmp")
+    val PHOTOSHOP_DATE_CREATED = QName(NS_PHOTOSHOP, "DateCreated", "photoshop")
 }
 
 class XmpParseException(message: String) : Exception(message)
@@ -76,6 +83,9 @@ class XmpDocument private constructor(
             .map { it.textContent.trim() }
             .filter { it.isNotEmpty() }
             .distinct()
+
+    /** A simple property's value, from the first Description that has it. */
+    fun valueOf(prop: QName): String? = value(prop)
 
     fun has(prop: QName): Boolean = descriptions().any { description ->
         description.hasAttributeNS(prop.namespaceURI, prop.localPart) || description.childElements(prop).isNotEmpty()
