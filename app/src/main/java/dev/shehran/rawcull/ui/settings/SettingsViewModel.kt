@@ -17,6 +17,7 @@ import dev.shehran.rawcull.data.repository.LocationChange
 import dev.shehran.rawcull.data.repository.LocationRepository
 import dev.shehran.rawcull.data.repository.RawCatalogRepository
 import dev.shehran.rawcull.data.repository.SettingsRepository
+import dev.shehran.rawcull.data.repository.ViewingPrefs
 import dev.shehran.rawcull.ui.library.LocationUi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -44,6 +45,7 @@ data class SettingsUiState(
     val previewCacheBytes: Long = 0,
     val previewCacheLimitMb: Int = SettingsRepository.DEFAULT_PREVIEW_CACHE_LIMIT_MB,
     val showPreviewTiming: Boolean = false,
+    val viewingPrefs: ViewingPrefs = ViewingPrefs(),
     val benchmark: BenchmarkUi = BenchmarkUi(),
     val message: String? = null,
 )
@@ -76,6 +78,7 @@ class SettingsViewModel(
         viewModelScope.launch { previews.observeCacheBytes().collect { bytes -> _uiState.update { it.copy(previewCacheBytes = bytes) } } }
         viewModelScope.launch { settings.previewCacheLimitMb.collect { mb -> _uiState.update { it.copy(previewCacheLimitMb = mb) } } }
         viewModelScope.launch { settings.showPreviewTiming.collect { on -> _uiState.update { it.copy(showPreviewTiming = on) } } }
+        viewModelScope.launch { settings.viewingPrefs.collect { v -> _uiState.update { it.copy(viewingPrefs = v) } } }
         viewModelScope.launch { presets.observeAll().collect { list -> _uiState.update { it.copy(presets = list) } } }
         viewModelScope.launch { settings.importPrefs.collect { prefs -> _uiState.update { it.copy(importPrefs = prefs) } } }
         viewModelScope.launch { settings.cullingPrefs.collect { prefs -> _uiState.update { it.copy(cullingPrefs = prefs) } } }
@@ -199,6 +202,10 @@ class SettingsViewModel(
 
     fun setAutoAdvance(enabled: Boolean) {
         viewModelScope.launch { settings.setAutoAdvance(enabled) }
+    }
+
+    fun updateViewing(change: (ViewingPrefs) -> ViewingPrefs) {
+        viewModelScope.launch { settings.updateViewingPrefs(change) }
     }
 
     fun setSwipeToFlag(enabled: Boolean) {

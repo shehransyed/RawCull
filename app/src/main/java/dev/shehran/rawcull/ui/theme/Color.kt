@@ -75,6 +75,12 @@ val LabelYellow = Color(0xFFF59E0B)
 val LabelBlue = Color(0xFF3B82F6)
 val LabelPurple = Color(0xFF8B5CF6)
 
+// Focus peaking highlight colours (bright, to read over any photo).
+val PeakingRed = Color(0xFFFF3B30)
+val PeakingYellow = Color(0xFFFFE600)
+val PeakingCyan = Color(0xFF00E5FF)
+val PeakingGreen = Color(0xFF39FF14)
+
 // Sync chip backgrounds.
 val SyncSavedContainer = Color(0xCC064E3B)
 val SyncSavingContainer = Color(0xCC0C4A6E)

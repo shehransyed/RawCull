@@ -188,6 +188,9 @@ fun SettingsScreen(viewModel: SettingsViewModel, modifier: Modifier = Modifier) 
                 SectionHeader("PREVIEWS")
                 PreviewSettingsSection(uiState, viewModel)
 
+                SectionHeader("VIEWING")
+                ViewingSettingsSection(uiState, viewModel)
+
                 SectionHeader("SIDECARS")
                 SwitchRow(
                     title = "Write rejects as rating −1",

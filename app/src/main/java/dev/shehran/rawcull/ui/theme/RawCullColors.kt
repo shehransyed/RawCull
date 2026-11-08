@@ -7,6 +7,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import dev.shehran.rawcull.data.model.ColorLabel
 import dev.shehran.rawcull.data.model.XmpSyncStatus
+import dev.shehran.rawcull.data.repository.PeakingColor
 
 /** A sync state's chip: its background and its text. */
 @Immutable
@@ -27,7 +28,18 @@ data class RawCullColors(
     val syncSaving: SyncColors,
     val syncError: SyncColors,
     val syncReadOnly: SyncColors,
+    val peakingRed: Color = PeakingRed,
+    val peakingYellow: Color = PeakingYellow,
+    val peakingCyan: Color = PeakingCyan,
+    val peakingGreen: Color = PeakingGreen,
 ) {
+    fun peaking(color: PeakingColor): Color = when (color) {
+        PeakingColor.RED -> peakingRed
+        PeakingColor.YELLOW -> peakingYellow
+        PeakingColor.CYAN -> peakingCyan
+        PeakingColor.GREEN -> peakingGreen
+    }
+
     fun label(label: ColorLabel): Color = when (label) {
         ColorLabel.NONE -> Color.Transparent
         ColorLabel.RED -> labelRed

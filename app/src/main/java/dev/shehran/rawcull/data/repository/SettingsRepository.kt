@@ -68,6 +68,14 @@ class SettingsRepository(context: Context) {
     /** Debug builds: timings over the loupe. */
     val showPreviewTiming: Flow<Boolean> = dataStore.data.map { it[KEY_SHOW_PREVIEW_TIMING] ?: false }
 
+    /** R6 D11: slideshow, focus peaking and histogram choices. */
+    val viewingPrefs: Flow<ViewingPrefs> = dataStore.data.map { ViewingPrefs.from(it) }
+
+    /** Changes viewing choices read-modify-write, so keys never clobber each other. */
+    suspend fun updateViewingPrefs(change: (ViewingPrefs) -> ViewingPrefs) {
+        dataStore.edit { prefs -> ViewingPrefs.write(prefs, change(ViewingPrefs.from(prefs))) }
+    }
+
     suspend fun setPreviewCacheLimitMb(mb: Int) {
         dataStore.edit { it[KEY_PREVIEW_CACHE_LIMIT_MB] = mb }
     }
