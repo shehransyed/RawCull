@@ -115,7 +115,7 @@ fun GridViewGallery(
         snapshotFlow { gridState.layoutInfo.maxSpan }.collect(onColumnsChanged)
     }
     val indexOfKey = remember(photos) { photos.withIndex().associate<IndexedValue<PhotoAsset>, Any, Int> { it.value.id to it.index } }
-    GridPrefetch(gridState, indexOfKey, photos.size, gridThumbnailPx()) { PreviewKeys.source(photos[it]) }
+    GridPrefetch(gridState, indexOfKey, photos, gridThumbnailPx()) { PreviewKeys.source(it) }
     val selecting = selectedIds.isNotEmpty()
     val selectedItem = remember(photos, sections, selectedPhotoId) {
         val index = photos.indexOfFirst { it.id == selectedPhotoId }

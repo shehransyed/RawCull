@@ -107,3 +107,4 @@ Old-API devices or emulators (O11), CI, Firebase Test Lab, screenshot diffing ag
 (Claude Code: S1–S3 add one-line deviations under *Running notes*; S4 writes the rest.)
 
 ### Running notes
+- R8.1: the crash was already in the tablet's crash buffer (09:04, 8 s after import job 1 finished): `IndexOutOfBoundsException` 15/15 in grid prefetch. `PrefetchController` builds a debounced window lazily; it captured the old count (30) but `GridPrefetch` resolved it through `rememberUpdatedState`, i.e. against the new 15-photo `LatestImport` list. Windows now keep their own list (grid and loupe). Lead (a), the entry popping itself, isn't involved; no repro by Shehran was needed.

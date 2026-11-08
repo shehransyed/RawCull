@@ -246,7 +246,7 @@ private fun PreviewGrid(uiState: ImportUiState, viewModel: ImportViewModel, modi
         rows.filterIsInstance<PreviewRow.Tile>().withIndex().associate<IndexedValue<PreviewRow.Tile>, Any, Int> { it.value.key to it.index }
     }
     val thumbnailPx = with(LocalDensity.current) { (TILE_MIN_SIZE * 2).roundToPx() }
-    GridPrefetch(gridState, indexOfKey, tiles.size, thumbnailPx) { PreviewKeys.source(tiles[it]) }
+    GridPrefetch(gridState, indexOfKey, tiles, thumbnailPx) { PreviewKeys.source(it) }
 
     if (rows.isEmpty()) {
         Box(modifier, contentAlignment = Alignment.Center) {

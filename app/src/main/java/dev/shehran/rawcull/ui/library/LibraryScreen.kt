@@ -654,11 +654,11 @@ private fun LibraryMainView(
             val currentIndex = remember(photos, uiState.selectedPhotoId) { photos.indexOfFirst { it.id == uiState.selectedPhotoId } }
             LoupePrefetch(
                 current = currentIndex,
-                count = photos.size,
+                items = photos,
                 compact = layout.width == WidthClass.COMPACT,
                 widthPx = loupeSize.width,
                 heightPx = loupeSize.height,
-            ) { PreviewKeys.source(photos[it]) }
+            ) { PreviewKeys.source(it) }
             val loupe = @Composable { loupeModifier: Modifier ->
                 Box(modifier = loupeModifier.onSizeChanged { loupeSize = it }) {
                     ZoomableLoupeView(

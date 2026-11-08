@@ -59,6 +59,8 @@ class PrefetchWindowsTest {
 class PrefetchControllerTest {
     private fun source(i: Int) = PreviewSource("content://photo/$i", PhotoFormat.ARW, null, "k$i")
 
+    private fun photos(count: Int) = List(count) { it }
+
     private fun TestScope.controller(repository: FakePreviewRepository) = PrefetchController(repository, backgroundScope)
 
     private fun List<PrefetchRequest>.indices() = map { it.source.key.removePrefix("k").toInt() }
@@ -69,7 +71,7 @@ class PrefetchControllerTest {
         val controller = controller(repository)
         runCurrent()
         for (first in 0..40 step 4) {
-            controller.grid(first, first + 11, columns = 4, count = 200, sizePx = 512, source = ::source)
+            controller.grid(first, first + 11, columns = 4, items = photos(200), sizePx = 512, source = ::source)
             advanceTimeBy(30)
         }
         assertTrue(repository.prefetches.isEmpty())
@@ -87,9 +89,9 @@ class PrefetchControllerTest {
         val repository = FakePreviewRepository()
         val controller = controller(repository)
         runCurrent()
-        controller.grid(0, 11, columns = 4, count = 200, sizePx = 256, source = ::source)
+        controller.grid(0, 11, columns = 4, items = photos(200), sizePx = 256, source = ::source)
         advanceTimeBy(PREFETCH_DEBOUNCE_MS + 1)
-        controller.grid(100, 111, columns = 4, count = 200, sizePx = 256, source = ::source)
+        controller.grid(100, 111, columns = 4, items = photos(200), sizePx = 256, source = ::source)
         advanceTimeBy(PREFETCH_DEBOUNCE_MS + 1)
 
         assertEquals(2, repository.prefetches.size)
@@ -103,7 +105,7 @@ class PrefetchControllerTest {
         val repository = FakePreviewRepository()
         val controller = controller(repository)
         runCurrent()
-        fun at(index: Int) = controller.loupe(index, count = 100, compact = true, widthPx = 1000, heightPx = 800, source = ::source)
+        fun at(index: Int) = controller.loupe(index, items = photos(100), compact = true, widthPx = 1000, heightPx = 800, source = ::source)
 
         at(10)
         advanceTimeBy(PREFETCH_DEBOUNCE_MS + 1)
@@ -132,9 +134,9 @@ class PrefetchControllerTest {
         val repository = FakePreviewRepository()
         val controller = controller(repository)
         runCurrent()
-        controller.loupe(50, count = 100, compact = false, widthPx = 10, heightPx = 10, source = ::source)
+        controller.loupe(50, items = photos(100), compact = false, widthPx = 10, heightPx = 10, source = ::source)
         advanceTimeBy(PREFETCH_DEBOUNCE_MS + 1)
-        controller.loupe(20, count = 100, compact = false, widthPx = 10, heightPx = 10, source = ::source)
+        controller.loupe(20, items = photos(100), compact = false, widthPx = 10, heightPx = 10, source = ::source)
         advanceTimeBy(PREFETCH_DEBOUNCE_MS + 1)
 
         assertEquals(listOf(19, 18, 17, 16, 15, 21), repository.prefetches.last().second.indices())
@@ -145,7 +147,7 @@ class PrefetchControllerTest {
         val repository = FakePreviewRepository()
         val controller = controller(repository)
         runCurrent()
-        controller.grid(0, 11, columns = 4, count = 200, sizePx = 256, source = ::source)
+        controller.grid(0, 11, columns = 4, items = photos(200), sizePx = 256, source = ::source)
         controller.idle()
         advanceTimeBy(PREFETCH_DEBOUNCE_MS + 1)
 
@@ -159,9 +161,29 @@ class PrefetchControllerTest {
         val controller = controller(repository)
         runCurrent()
         val asked = mutableListOf<Int>()
-        controller.grid(0, 11, columns = 4, count = 10_000, sizePx = 256) { asked += it; source(it) }
+        controller.grid(0, 11, columns = 4, items = photos(10_000), sizePx = 256) { asked += it; source(it) }
         advanceTimeBy(PREFETCH_DEBOUNCE_MS + 1)
 
         assertEquals(12, asked.size)
+    }
+
+    @Test
+    fun `a window made for a longer list is resolved against that list`() = runTest {
+        // R8.1: Cull in Library swaps 30 photos for the 15 just imported while a window for the
+        // end of the 30 is still waiting out the debounce.
+        val repository = FakePreviewRepository()
+        val controller = controller(repository)
+        runCurrent()
+        val all = photos(30)
+        val imported = photos(15).map { it + 100 }
+        controller.grid(18, 29, columns = 4, items = all, sizePx = 256, source = ::source)
+        advanceTimeBy(PREFETCH_DEBOUNCE_MS + 1)
+        controller.grid(18, 29, columns = 4, items = all, sizePx = 256, source = ::source)
+        advanceTimeBy(PREFETCH_DEBOUNCE_MS / 2)
+        controller.grid(8, 14, columns = 4, items = imported, sizePx = 256, source = ::source)
+        advanceTimeBy(PREFETCH_DEBOUNCE_MS + 1)
+
+        assertEquals((6..17).toSet(), repository.prefetches.first().second.indices().toSet())
+        assertEquals(setOf(100, 101, 102, 103, 104, 105, 106, 107), repository.prefetches.last().second.indices().toSet())
     }
 }

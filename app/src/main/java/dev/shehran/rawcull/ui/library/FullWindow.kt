@@ -113,11 +113,11 @@ fun FullWindow(
     }
     LoupePrefetch(
         current = index,
-        count = photos.size,
+        items = photos,
         compact = layout.width == WidthClass.COMPACT,
         widthPx = size.width,
         heightPx = size.height,
-    ) { PreviewKeys.source(photos[it]) }
+    ) { PreviewKeys.source(it) }
 
     Box(
         modifier = modifier

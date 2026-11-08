@@ -42,22 +42,25 @@ class PrefetchController(
         }
     }
 
-    /** The grid shows [firstVisible]..[lastVisible] of [count] photos in [columns] columns. */
-    fun grid(firstVisible: Int, lastVisible: Int, columns: Int, count: Int, sizePx: Int, source: (Int) -> PreviewSource) {
+    /**
+     * The grid shows [firstVisible]..[lastVisible] of [items] in [columns] columns. The window
+     * keeps [items] itself: it's built after the debounce, when the caller's list may be another one.
+     */
+    fun <T> grid(firstVisible: Int, lastVisible: Int, columns: Int, items: List<T>, sizePx: Int, source: (T) -> PreviewSource) {
         windows.value = Window.Requests {
-            PrefetchWindows.grid(firstVisible, lastVisible, columns, count)
-                .map { PrefetchRequest.Thumbnail(source(it), sizePx) }
+            PrefetchWindows.grid(firstVisible, lastVisible, columns, items.size)
+                .map { PrefetchRequest.Thumbnail(source(items[it]), sizePx) }
         }
     }
 
-    /** The loupe shows photo [current] of [count] at [widthPx] × [heightPx]. */
-    fun loupe(current: Int, count: Int, compact: Boolean, widthPx: Int, heightPx: Int, source: (Int) -> PreviewSource) {
+    /** The loupe shows item [current] of [items] at [widthPx] × [heightPx]. The window keeps [items], as in [grid]. */
+    fun <T> loupe(current: Int, items: List<T>, compact: Boolean, widthPx: Int, heightPx: Int, source: (T) -> PreviewSource) {
         lastLoupeIndex?.let { last -> if (current != last) direction = if (current > last) 1 else -1 }
         lastLoupeIndex = current
         val travel = direction
         windows.value = Window.Requests {
-            PrefetchWindows.loupe(current, travel, count, compact)
-                .map { PrefetchRequest.Fit(source(it), widthPx, heightPx) }
+            PrefetchWindows.loupe(current, travel, items.size, compact)
+                .map { PrefetchRequest.Fit(source(items[it]), widthPx, heightPx) }
         }
     }
 
