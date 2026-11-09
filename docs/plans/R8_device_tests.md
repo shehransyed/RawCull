@@ -122,3 +122,25 @@ Old-API devices or emulators (O11), CI, Firebase Test Lab, screenshot diffing ag
 - R8.5: import tests drive `ImportViewModel` directly (folder pick and Start are system/UI-trivial) and read Room with raw SQL; Cull in Library / Open collection are tapped on the real progress screen. Cancel/resume uses the real `ImportEngine`/`ImportController` with a `DocumentIo` that cancels on the Nth write and a no-op scheduler, so the stop point is exact. The duplicate index holds image files only (sidecars aren't hashed). Fixture dirs must be created in the test body (a field initialiser runs before `QaResetRule` wipes them).
 - R8.5: found by the real-storage test: `SafPreviewFiles.open` crashed the app (uncaught `IllegalArgumentException` from ExternalStorageProvider) when a file vanished while previews loaded; it now reports a missing file.
 - R8.6: Library tests use synthetic JPEGs (`ImportFixtures.jpegs`, a minute apart) so counts and order are exact; real samples only for the import-GPS check (skips if no sample has EXIF GPS). Keys go through `LibraryRobot.press`/`pressWith`; filters, collections, Locations, GPS apply and export go through the ViewModel, repositories and `ExportEngine`. "Unsaved edits" is simulated by setting `xmpSyncStatus = 'PENDING'` in Room. Auto-advance test waits for the setting to land before the key (it flaked once without).
+- R8.7: the dialog test only passed once Compose was pumped: effects (here the screen launching the trash dialog) run only while the test waits (`waitUntil`), never during `Thread.sleep`. Files copied in by the shell need MediaStore to index them before the plan sees them as trashable, so the test waits for them (`content query`, `relative_path`). The system dialog is answered by button label from any package but the app's (`SystemDialog`; the tablet's PermissionController shows *Allow* / *Deny*).
+- R8.7 (deviation from D14): `DeviceConfigurationOverride.ForcedSize` doesn't change `currentWindowAdaptiveInfo`, so the first layout runs showed a rail and clipped content at "360 dp". `WindowLayout.kt` got `LocalWindowSizeOverride` (null in the app), which the layout test sets next to `ForcedSize`. Sizes bigger than the tablet's display (1280×800 dp) are scaled down by `ForcedSize`; the checks work in the forced window's own dp. While the full window is open the Library stays composed under it, so that screen only checks the window's own controls.
+- R8.7: hard layout checks are *renders* and *nothing clipped*; overlaps and touch targets under 48 dp are collected and asserted by two `@KnownIssue("R9 …")` tests, so they appear in the report. Current numbers: 2 overlaps (840×600 loupe: *Toggle 100 %* over *next photo*, *next photo* over *full window*) and about 340 control instances under 48 dp across the 24 screens (top bar buttons 40 dp, rating filter stars 30 dp wide, chips 32 dp, loupe arrows 44 dp).
+- R8.7: benchmark numbers go to `device-out/bench/preview.json` as `<stage>_p50` / `_p90`. `MigrationTest` gained v5 → v8 with data; `SettingsKeysDeviceTest` writes every R3–R7 key by its on-disk name, reopens the store and reads it through `SettingsRepository`.
+
+### Implementation notes
+**Deviations:** `device-test.sh` doesn't use `connectedQaAndroidTest` (R8.4); `LocalWindowSizeOverride` seam for layout tests (R8.7); R3–R7 acceptance items weren't re-read (the plan rules say not to open other rounds' plans), so the table below is by area, not by item number.
+
+**Run times on the Xiaomi Pad 5 (API 33):** smoke 16 s; full 3m06s and 3m12s (58 passed, 2 known issues, 0 skipped, 60 tests), two runs in a row, no flaky test seen. The tester's app was untouched (same `lastUpdateTime`, both packages listed). 0.10.0 qa APK archived in `dist/qa/`.
+
+**What the device suite now covers (by area):**
+| Area | Covered by |
+|---|---|
+| Import: preview, pairing, templates, verify, duplicates, no overwrite, card delete, collection, landing, cancel/resume | `device/importer/*` (16 tests, one on real storage) |
+| Library: culling keys, undo, multi-select, filters, sidecars, Locations, collections, export, GPS, viewing keys | `device/library/*` (20 tests) |
+| Delete rejects, trash, Restore | `device/deletion/RejectDeletionTest` |
+| Window sizes (compact, medium, expanded), orientation | `device/layout/LayoutSizesTest` (4 sizes, 24 screenshots) |
+| Preview speed | `device/benchmark/PreviewBenchmarkDeviceTest` |
+| Updates: Room v5 → v8, DataStore keys | `MigrationTest`, `SettingsKeysDeviceTest`; `update-check.sh` from R9 |
+Still manual: D18.
+
+**Open questions:** the R9 layout list (overlaps, 48 dp targets) is in the report's *Known issues*; once R9 fixes them, drop the `@KnownIssue` annotations so they guard. `Download/RawCullQA` is emptied by the deletion and import smoke tests; anything you put there is lost.

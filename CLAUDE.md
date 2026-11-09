@@ -16,7 +16,7 @@ Usage limits matter on this project. These rules keep sessions small:
 - Search with Grep and Glob yourself; don't hand searches to subagents.
 - Work on the round's branch. If the Claude Code app started this session in a worktree under `.claude/worktrees/`, `git switch` to the round branch there if no other checkout has it. Otherwise commit on the worktree's own branch and, as the last step, fast-forward the round branch in the main checkout (the folder that holds `.claude/`): `git -C <main checkout> merge --ff-only <your branch>`. If that refuses, say so in your final message. Never remove worktrees or branches; `scripts/tidy-git.sh` does that between rounds.
 - New UI goes in new files. `LibraryScreen.kt` and `LibraryViewModel.kt` grow only by wiring. Keep new files under ~400 lines.
-- Emulator runs and screenshots only in a round's final task, at the sizes and count its plan gives.
+- Device tests (the tablet or an emulator) only when a task says so, and then only through `scripts/device-test.sh`; read `build/device-report.md`, nothing else from the run.
 - A session does the tasks its prompt names, then stops.
 - Implementation notes stay short: deviations, open questions, measurements. Git log already says what each commit did.
 
@@ -43,6 +43,14 @@ Usage limits matter on this project. These rules keep sessions small:
 - Collections (R7): `data/repository/CollectionRepository` (collections, sets, ordered members, rows in `collections` and `collection_items`, no FK to photos), pure `library/CollectionTree`, `LibraryScope.Collection`, and the internal `ui/library/CollectionController` behind the pane, the Add sheet, the B key and Custom order. Memberships are catalog-only and leave with deleted rejects and removed Locations.
 - Export (R7): `library/ExportPlan` (pure: order, `NNN_` names, time offsets), `data/export/ExportEngine` (copies through `DocumentIo`, never overwrites, rewrites times only in the copies), `ExportWorker` (thin foreground shell), `ExportController`.
 - GPS (R7): `library/GeoInput` parses pasted text and map links into a `GeoPoint`; `util/xmp/XmpGps` reads and writes `exif:GPS*`; `XmpField.GPS` is pending only for edited rows (a new sidecar never gets an unedited location); `CullEdit.SetLocation`/`ClearLocation` go through `apply`. Enrichment takes the sidecar's location first, else the file's EXIF (`CameraLocations`); the camera's location is never written to a sidecar, and Clear shows it again.
+
+## Device tests (R8)
+On-device suite for the Import, Library, deletion, layout, preview benchmark and migration paths. How Shehran runs it and what it covers is in `docs/testing/README.md`.
+- `bash scripts/device-test.sh [smoke|full|<class pattern>]` builds and installs the **qa** app (`dev.shehran.rawcull.qa`, "RawCull QA"; `app/src/qa/`) and its tests, runs them, and writes `build/device-report.md`. Read only that report (and `build/device-screens/` when a task asks for screenshots). Needs one device on USB (`ANDROID_SERIAL` if there are two). Never use `connectedQaAndroidTest`, and never run it from a task that doesn't say so.
+- Two storage tiers: (a) the qa-only `FixtureDocumentsProvider` serves app-private trees, reset per test by `QaReset`; (b) `Download/RawCullQA` on shared storage, granted once through DocumentsUI, for the real-provider import smoke and MediaStore trash.
+- **Never touch the tester's app** (`dev.shehran.rawcull`: don't install over it, clear it or uninstall it) **or the samples** (`/sdcard/Download/Quick Share/Sample Import` is read-only; nothing in the tester's Library either). Tests copy samples into their own trees.
+- New device tests go under `androidTest/.../device/<area>/`, use the robots and `deviceRules(...)`, and pump Compose with `waitUntil` (effects only run while the test waits; `Thread.sleep` alone never recomposes). Mark known bugs `@KnownIssue("R9 ...")`. `check.sh` compiles them but never runs them.
+- `LocalWindowSizeOverride` (in `WindowLayout.kt`) exists only for the layout tests; the app never sets it.
 
 ## Rules
 - **XMP sidecars are the source of truth; Room is a cache.** Never discard unknown content in an existing .xmp. Always merge through `XmpDocument`.
