@@ -226,6 +226,75 @@ class MigrationTest {
         }
     }
 
+    /**
+     * R8.7 (D16): a catalog from R4's schema (v5) opened by today's migration chain (5 → 6 → 7 → 8)
+     * on the device. Rows, edits and pending XMP writes survive; only the GPS-unread marker moves.
+     */
+    @Test
+    fun migrate5To8KeepsTheCatalogAndMarksUnreadGps() {
+        helper.createDatabase(DB_NAME, 5).use { db ->
+            db.insert("library_locations", SQLiteDatabase.CONFLICT_ABORT, ContentValues().apply {
+                put("id", 7L)
+                put("treeUri", "content://tree/library")
+                put("displayName", "Archive")
+                put("addedAt", 1L)
+                put("lastOpenedAt", 2L)
+            })
+            db.insert("photo_assets", SQLiteDatabase.CONFLICT_ABORT, photoV5("edited", pending = 3, rating = 4))
+            db.insert("photo_assets", SQLiteDatabase.CONFLICT_ABORT, photoV5("clean", pending = 0, rating = 2))
+        }
+
+        helper.runMigrationsAndValidate(DB_NAME, 8, true, *AppDatabase.MIGRATIONS).use { db ->
+            db.query("SELECT displayName FROM library_locations WHERE id = 7").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("Archive", it.getString(0))
+            }
+            db.query(
+                "SELECT id, cullStatus, rating, tags, xmpPendingFields, metadataLoaded, gpsInFile FROM photo_assets ORDER BY id",
+            ).use { cursor ->
+                assertEquals(2, cursor.count)
+                assertTrue(cursor.moveToFirst()) // "clean"
+                assertEquals("clean", cursor.getString(0))
+                assertEquals(2, cursor.getInt(2))
+                assertEquals(0, cursor.getInt(4))
+                assertEquals("never had its GPS read, so it's read again", 0, cursor.getInt(5))
+                assertTrue(cursor.moveToNext()) // "edited"
+                assertEquals("edited", cursor.getString(0))
+                assertEquals("PICK", cursor.getString(1))
+                assertEquals(4, cursor.getInt(2))
+                assertEquals("[\"Wedding\"]", cursor.getString(3))
+                assertEquals("pending writes are untouched", 3, cursor.getInt(4))
+                assertEquals(0, cursor.getInt(5))
+                assertEquals(0, cursor.getInt(6))
+            }
+        }
+    }
+
+    private fun photoV5(id: String, pending: Int, rating: Int) = ContentValues().apply {
+        put("id", id)
+        put("rootUri", "content://tree/library")
+        put("relativeDir", "2026/2026-11-08")
+        put("parentDocUri", "content://tree/library/dir")
+        put("fileName", "$id.ARW")
+        put("fileUri", "content://tree/library/$id")
+        put("format", "ARW")
+        put("fileSizeBytes", 25_000_000L)
+        put("fileLastModified", 5L)
+        put("dateTaken", 7L)
+        put("metadataLoaded", 1)
+        put("cullStatus", "PICK")
+        put("rating", rating)
+        put("colorLabel", "GREEN")
+        put("tags", "[\"Wedding\"]")
+        put("width", 0)
+        put("height", 0)
+        put("orientation", 0)
+        put("lastModified", 9L)
+        put("pairMode", "RAW_ONLY")
+        put("xmpSyncStatus", if (pending == 0) "SYNCED" else "PENDING")
+        put("xmpPendingFields", pending)
+    }
+
     private companion object {
         const val DB_NAME = "migration-test.db"
     }

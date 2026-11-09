@@ -3,6 +3,7 @@ package dev.shehran.rawcull.ui.shell
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 
 /** Material width classes; see the window size spec in `docs/plans/R3_shell_library_import.md`. */
 enum class WidthClass {
@@ -51,8 +52,12 @@ data class WindowLayout(val width: WidthClass, val isHeightCompact: Boolean) {
     }
 }
 
+/** Set only by the device layout tests (R8 D14): the window size, as width to height in dp, to lay out for. Null in the app. */
+val LocalWindowSizeOverride = staticCompositionLocalOf<Pair<Int, Int>?> { null }
+
 @Composable
 fun rememberWindowLayout(): WindowLayout {
+    LocalWindowSizeOverride.current?.let { (width, height) -> return remember(width, height) { WindowLayout.of(width, height) } }
     val sizeClass = currentWindowAdaptiveInfo(supportLargeAndXLargeWidth = true).windowSizeClass
     return remember(sizeClass) { WindowLayout.of(sizeClass.minWidthDp, sizeClass.minHeightDp) }
 }
