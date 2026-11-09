@@ -121,7 +121,7 @@ Before writing code, please read [CONTRIBUTING.md](CONTRIBUTING.md). Security pr
 
 ## Acknowledgements
 
-The import and culling workflow was inspired by RapidReady, a desktop culling tool (MIT licence).
+The import and culling workflow was inspired by [RapidReady](https://github.com/on370/rapidready), a desktop culling tool (MIT licence).
 
 ## License
 
