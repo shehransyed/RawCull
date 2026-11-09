@@ -13,3 +13,7 @@ local.properties
 debug.keystore
 .claude/worktrees/
 /dist/
+# Release signing: never commit keys or their passwords (docs/RELEASING.md)
+keystore.properties
+*.jks
+*.keystore

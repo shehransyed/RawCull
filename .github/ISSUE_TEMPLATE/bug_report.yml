@@ -1,0 +1,62 @@
+name: Bug report
+description: Something doesn't work as it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please don't attach photos you don't want to be public.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Import and pick the SD card
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: RawCull version
+      description: Shown in Settings, or the version of the APK you installed.
+      placeholder: "0.10.0"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version
+      placeholder: "Pixel 8, Android 16"
+    validations:
+      required: true
+  - type: input
+    id: camera
+    attributes:
+      label: Camera and file format (if relevant)
+      placeholder: "Sony A7 IV, ARW + JPEG"
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Import
+        - Library / culling
+        - Viewing (loupe, compare, full window)
+        - Collections / export
+        - XMP sidecars / other apps
+        - Deleting rejects
+        - Layout / window size
+        - Other
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, a screen recording, or whether it happens every time.

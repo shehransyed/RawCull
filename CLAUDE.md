@@ -6,6 +6,7 @@ Android photo culling + import-first DAM (tablets and phones, any orientation or
 - `bash scripts/check.sh` runs `testDebugUnitTest assembleDebug` quietly (added in R6.0; before that, `gradlew.bat testDebugUnitTest assembleDebug`). Every commit must build and pass unit tests.
 - Pure logic (grouping, merging, XMP, path building, selection) lives in Android-free classes with plain JUnit tests. Use Robolectric only where Android types are unavoidable.
 - Real RAW samples live outside the repo (`C:\Users\shehr\RawCullSamples\`); never commit one. `gradlew.bat testDebugUnitTest -PrawSamples=<dir> --tests "*RawSampleReportTest*"` reports what the parsers find in each file. The fixtures in the repo are synthetic.
+- Releases: `bash scripts/release.sh` builds the signed APK into `dist/release/` (see `docs/RELEASING.md`). The key and `keystore.properties` stay outside git. User-visible changes get a line under *Unreleased* in `CHANGELOG.md`.
 - `XmpDocumentDeviceTest` runs the XMP fixtures on Android's own XML stack. With a phone or tablet attached, set `ANDROID_SERIAL` first, because connected tests install on every device.
 
 ## Working efficiently

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
@@ -21,13 +23,18 @@ android {
   }
 
   signingConfigs {
-    // Release signing is opt-in: without KEYSTORE_PATH, release builds are simply left unsigned.
-    System.getenv("KEYSTORE_PATH")?.let { keystorePath ->
+    // Release signing is opt-in: keystore.properties (git-ignored) or KEYSTORE_PATH etc. in the
+    // environment. Without either, release builds are left unsigned. See docs/RELEASING.md.
+    val keystoreProps = Properties().apply {
+      rootProject.file("keystore.properties").takeIf { it.exists() }?.reader()?.use { load(it) }
+    }
+    fun signingValue(property: String, env: String): String? = keystoreProps.getProperty(property) ?: System.getenv(env)
+    signingValue("storeFile", "KEYSTORE_PATH")?.let { keystorePath ->
       create("release") {
-        storeFile = file(keystorePath)
-        storePassword = System.getenv("STORE_PASSWORD")
-        keyAlias = "upload"
-        keyPassword = System.getenv("KEY_PASSWORD")
+        storeFile = rootProject.file(keystorePath)
+        storePassword = signingValue("storePassword", "STORE_PASSWORD")
+        keyAlias = signingValue("keyAlias", "KEY_ALIAS") ?: "upload"
+        keyPassword = signingValue("keyPassword", "KEY_PASSWORD")
       }
     }
     // Changing the debug key breaks in-place updates on test devices.
